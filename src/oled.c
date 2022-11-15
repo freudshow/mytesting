@@ -131,14 +131,16 @@ void OLED_WR_Byte(unsigned dat, unsigned cmd)
 	}
 }
 
-void OLED_map_byte(u8 dat, int row, int col)
+void OLED_expand_byte(u8 dat, int row, int col)
 {
-	int tmp = 0;
+	u8 tmp = 0;
 	int i = 0;
+	char c = 0;
 	for (i = 0; i < PAGE_HEIGHT; i++)
 	{
-		tmp = (dat << i);
-		s_PIXEL_GRAM[row * PAGE_HEIGHT + i][col] = (tmp ? '*' : ' ');
+		tmp = dat & (1 << i);
+		c = (tmp ? '#' : ' ');
+		s_PIXEL_GRAM[row * PAGE_HEIGHT + i][col] = c;
 	}
 }
 
@@ -240,7 +242,7 @@ void OLED_Refresh()
 	{
 		for (col = 0; col < MAX_COLUMN; col++)
 		{
-			OLED_map_byte(s_OLED_GRAM[row][col], row, col);
+			OLED_expand_byte(s_OLED_GRAM[row][col], row, col);
 		}
 	}
 

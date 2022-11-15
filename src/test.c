@@ -35,7 +35,7 @@
 #include <linux/if_link.h>
 #include "list.h"
 #include "basedef.h"
-
+#include "oled.h"
 
 
 #define OFFSETOF(type, member) ((size_t)&(((type *)0)->member))
@@ -1060,7 +1060,11 @@ int main(int argc, char **argv)
 //
 //	printf("after make empty\n\n\n\n");
 //	printMenuTree(pMenuList);
-	getLocalInfo();
+//	getLocalInfo();
 //	ipmain();
+
+	OLED_Print_UTF8(0, 0, 8, "硬遥警载 NO Bug!");
+	OLED_Refresh();
+
 	return 0;
 }
