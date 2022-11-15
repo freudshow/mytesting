@@ -1,0 +1,9 @@
+*.d
+src/root/para/*
+src/.vscode/*
+src/Debug/*
+src/Release/*
+*.o
+.settings/*
+
+/Debug/
