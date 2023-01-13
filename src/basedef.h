@@ -269,6 +269,9 @@ void debugBufFormat2fp(FILE *fp, const char *file, const char *func, int line,
 void printfloat(unsigned char *pFloat);
 void inverseArray(u8 *buf, int bufSize);
 int myprintk(const char *fmt, ...);
+void add33(u8 *buf, int bufSize);
+void minus33(u8 *buf, int bufSize);
+u8 chkSum(u8 *buf, u16 bufSize);
 
 #ifdef __cplusplus
 #if __cplusplus
