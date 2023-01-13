@@ -17,42 +17,46 @@
 #include "basedef.h"
 #include "oled.h"
 #include "tcp.h"
+#include "sqlite3/sqlite3.h"
+
+int getBlob(sqlite3 *db, int unicode)
+{
+	char sql[128];
+	sqlite3_stmt *stmt;
+
+	snprintf(sql, 127, "select font from t_unicode_gbk where unicode=%d;",
+			unicode);
+
+	//读取数据
+	sqlite3_prepare_v2(db, sql, strlen(sql), &stmt, NULL);
+	int result = sqlite3_step(stmt);
+	int len = 0;
+	while (result == SQLITE_ROW)
+	{
+		const char *pReadBolbData = sqlite3_column_blob(stmt, 0);
+		len = sqlite3_column_bytes(stmt, 0);
+
+		DEBUG_BUFF_FORMAT(pReadBolbData, len, "");
+		result = sqlite3_step(stmt);
+	}
+
+	sqlite3_finalize(stmt);
+
+	return 0;
+}
 
 int main(int argc, char **argv)
 {
-    u32 delta = 5;
-    int item = 0;
-    A_LIST_OF(int) vlist;
-    INIT_LIST(vlist, int, 10, free);
+	char GetAppName[200]={'\0' } ;
+	char topic[]="EndTerminal/set/request/ccoRouter/acqFiles";
+	char *savedptr;
+	char *tmp = NULL;
 
-    int idx = 0;
-    int tempit = 0;
+	for (tmp= strtok_r(topic,"/set/request", &savedptr); tmp != NULL; tmp = strtok_r(NULL,"/set/request", &savedptr))
+	{
+		strcpy(GetAppName,tmp);
+	    printf("%s\n", GetAppName);
+	}
 
-    for (idx = 0; idx < vlist.capacity; idx++)
-    {
-        vlist.list[idx] = idx;
-        vlist.count++;
-    }
-
-    idx = 9;
-    item = 99999;
-    INSERT_ITEM_TO_LIST(vlist, idx, item, delta, int, tempit);
-
-    for (idx = 0; idx < vlist.count; idx++)
-    {
-        printf("list[%d]: %d\n", idx, vlist.list[idx]);
-    }
-
-    printf("count: %d\n", vlist.count);
-
-    DELETE_LIST_ONE(vlist, 6, tempit);
-
-    for (idx = 0; idx < vlist.count; idx++)
-    {
-        printf("list[%d]: %d\n", idx, vlist.list[idx]);
-    }
-
-    printf("count: %d\n", vlist.count);
-
-    return 0;
+	return 0;
 }
