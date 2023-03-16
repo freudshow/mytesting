@@ -33,7 +33,7 @@ void *func1(void *arg)
 
 		if(res == 0)
 		{
-			int count = 10;
+			int count = 3;
 			while(count)
 			{
 				DEBUG_TIME_LINE("res: %d", res);
@@ -47,20 +47,19 @@ void *func1(void *arg)
 		}
 
 		pthread_mutex_unlock(&s_mtx);
-		sleep(1);
+//		DEBUG_TIME_LINE("unlocked");
 	}
 }
 
 void *func2(void *arg)
 {
-	sleep(3);
 	while(1)
 	{
 		int res = pthread_mutex_lock(&s_mtx);
 
 		if(res == 0)
 		{
-			int count = 10;
+			int count = 5;
 			while(count)
 			{
 				DEBUG_TIME_LINE("res: %d", res);
@@ -74,7 +73,7 @@ void *func2(void *arg)
 		}
 
 		pthread_mutex_unlock(&s_mtx);
-		sleep(1);
+//		DEBUG_TIME_LINE("unlocked");
 	}
 }
 
