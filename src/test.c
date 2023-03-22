@@ -47,7 +47,7 @@ void *func1(void *arg)
 		}
 
 		pthread_mutex_unlock(&s_mtx);
-//		DEBUG_TIME_LINE("unlocked");
+		DEBUG_TIME_LINE("unlocked");
 	}
 }
 
@@ -73,7 +73,7 @@ void *func2(void *arg)
 		}
 
 		pthread_mutex_unlock(&s_mtx);
-//		DEBUG_TIME_LINE("unlocked");
+		DEBUG_TIME_LINE("unlocked");
 	}
 }
 

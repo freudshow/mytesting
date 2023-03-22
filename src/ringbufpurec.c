@@ -156,7 +156,7 @@ int ringBuf_readData(ringBuf_p pRing, u8 *buf, int len)
         return RING_BUF_PURE_C_PARAM_ERROR;
     }
 
-    pthread_mutex_trylock(&pRing->m);
+    pthread_mutex_lock(&pRing->m);
 
     int actualLen = RING_BUF_PURE_C_MIN(pRing->curSize, len);
     int i = 0;
@@ -190,7 +190,7 @@ int ringBuf_pushData(ringBuf_p pRing, u8 *buf, int len)
         return RING_BUF_PURE_C_PARAM_ERROR;
     }
 
-    pthread_mutex_trylock(&pRing->m);
+    pthread_mutex_lock(&pRing->m);
 
     int actualLen = RING_BUF_PURE_C_MIN(ringBuf_getIdle(pRing), len);
     int i = 0;
@@ -225,7 +225,7 @@ int ringBuf_popData(ringBuf_p pRing, u8 *buf, int len)
         return RING_BUF_PURE_C_PARAM_ERROR;
     }
 
-    pthread_mutex_trylock(&pRing->m);
+    pthread_mutex_lock(&pRing->m);
 
     int actualLen = RING_BUF_PURE_C_MIN(pRing->curSize, len);
     int i = 0;
@@ -258,7 +258,7 @@ int ringBuf_clear(ringBuf_p pRing)
         return RING_BUF_PURE_C_PARAM_ERROR;
     }
 
-    pthread_mutex_trylock(&pRing->m);
+    pthread_mutex_lock(&pRing->m);
 
     pRing->capacity = 0;
     pRing->wPos = 0;
@@ -272,6 +272,59 @@ int ringBuf_clear(ringBuf_p pRing)
     }
 
     pthread_mutex_unlock(&pRing->m);
+    pthread_mutex_destroy(&pRing->m);
 
     return RING_BUF_PURE_C_SUCCESS;
+}
+
+/******************************************************
+ * 函数功能: 扩展环形队列的容量, 并保持以前的数据不变
+ * ---------------------------------------------------
+ * @param - pRing, 环形队列指针
+ * @param - size, 扩展后的容量大小, 其值要比以前的容量大
+ * ---------------------------------------------------
+ * @return - 成功, 返回扩展后的容量大小.
+ *           失败, 返回失败代码
+ ******************************************************/
+int extendCap(ringBuf_p pRing, int size)
+{
+    if (NULL == pRing)
+    {
+        return RING_BUF_PURE_C_PARAM_ERROR;
+    }
+
+    if (size <= pRing->capacity)
+    {
+        return RING_BUF_PURE_C_PARAM_ERROR;
+    }
+
+    u8 *pbuf = (u8*) calloc(size, sizeof(u8));
+    if (pbuf == NULL)
+    {
+        return RING_BUF_PURE_C_FATAL_ERROR;
+    }
+
+    pthread_mutex_trylock(&pRing->m);
+
+    if (pRing->pbuf != NULL && pRing->capacity > 0)
+    {
+        int i = 0;
+        for (i = 0; i < pRing->curSize; i++)
+        {
+            ringBuf_popData(pRing, &pbuf[i], 1);
+        }
+
+        pRing->rPos = 0;
+        pRing->wPos = pRing->curSize;
+
+        free(pRing->pbuf);
+        pRing->pbuf = NULL;
+    }
+
+    pRing->capacity = size;
+    pRing->pbuf = pbuf;
+
+    pthread_mutex_unlock(&pRing->m);
+
+    return size;
 }
