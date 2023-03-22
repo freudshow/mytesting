@@ -32,6 +32,7 @@ int ringBuf_init(ringBuf_p pRing, int capacity)
         return RING_BUF_PURE_C_FATAL_ERROR;
     }
 
+    memset( pRing->pbuf , 0xFF, capacity);
     pRing->capacity = capacity;
 
     return RING_BUF_PURE_C_SUCCESS;
@@ -233,6 +234,7 @@ int ringBuf_popData(ringBuf_p pRing, u8 *buf, int len)
     for (i = 0; i < actualLen; i++)
     {
         buf[i] = pRing->pbuf[pRing->rPos];
+        pRing->pbuf[pRing->rPos] = 0xFF;
         RING_BUF_PURE_C_MOVE_NEXT_POS(pRing->rPos, pRing->capacity);
     }
 
@@ -286,7 +288,7 @@ int ringBuf_clear(ringBuf_p pRing)
  * @return - 成功, 返回扩展后的容量大小.
  *           失败, 返回失败代码
  ******************************************************/
-int extendCap(ringBuf_p pRing, int size)
+int ringBuf_extendCap(ringBuf_p pRing, int size)
 {
     if (NULL == pRing)
     {
@@ -304,14 +306,18 @@ int extendCap(ringBuf_p pRing, int size)
         return RING_BUF_PURE_C_FATAL_ERROR;
     }
 
+    memset(pbuf, 0xFF, size);
+
     pthread_mutex_trylock(&pRing->m);
 
     if (pRing->pbuf != NULL && pRing->capacity > 0)
     {
         int i = 0;
+
         for (i = 0; i < pRing->curSize; i++)
         {
-            ringBuf_popData(pRing, &pbuf[i], 1);
+            pbuf[i] = pRing->pbuf[pRing->rPos];
+            RING_BUF_PURE_C_MOVE_NEXT_POS(pRing->rPos, pRing->capacity);
         }
 
         pRing->rPos = 0;
@@ -328,3 +334,14 @@ int extendCap(ringBuf_p pRing, int size)
 
     return size;
 }
+
+void ringBuf_printf(ringBuf_p pRing)
+{
+    if (NULL == pRing)
+    {
+        return;
+    }
+
+    DEBUG_BUFF_FORMAT(pRing->pbuf, pRing->capacity, "capacity: %d, curSize: %d, wPos: %d, rPos: %d, pbuf:-->>", pRing->capacity, pRing->curSize, pRing->wPos, pRing->rPos);
+}
+

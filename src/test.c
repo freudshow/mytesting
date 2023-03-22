@@ -22,61 +22,61 @@
 #include "oled.h"
 #include "tcp.h"
 #include "sqlite3/sqlite3.h"
+#include "ringbufpurec.h"
 
 static pthread_mutex_t s_mtx = PTHREAD_MUTEX_INITIALIZER;
 
-void *func1(void *arg)
+void* func1(void *arg)
 {
-	while (1)
-	{
-		int res = pthread_mutex_lock(&s_mtx);
+    while (1)
+    {
+        int res = pthread_mutex_lock(&s_mtx);
 
-		if(res == 0)
-		{
-			int count = 3;
-			while(count)
-			{
-				DEBUG_TIME_LINE("res: %d", res);
-				count--;
-				sleep(1);
-			}
-		}
-		else
-		{
-			DEBUG_TIME_LINE("res: %d, errno: %d, %s", res, errno, strerror(errno));
-		}
+        if (res == 0)
+        {
+            int count = 3;
+            while (count)
+            {
+                DEBUG_TIME_LINE("res: %d", res);
+                count--;
+                sleep(1);
+            }
+        }
+        else
+        {
+            DEBUG_TIME_LINE("res: %d, errno: %d, %s", res, errno, strerror(errno));
+        }
 
-		pthread_mutex_unlock(&s_mtx);
-		DEBUG_TIME_LINE("unlocked");
-	}
+        pthread_mutex_unlock(&s_mtx);
+        DEBUG_TIME_LINE("unlocked");
+    }
 }
 
-void *func2(void *arg)
+void* func2(void *arg)
 {
-	while(1)
-	{
-		int res = pthread_mutex_lock(&s_mtx);
+    while (1)
+    {
+        int res = pthread_mutex_lock(&s_mtx);
 
-		if(res == 0)
-		{
-			int count = 5;
-			while(count)
-			{
-				DEBUG_TIME_LINE("res: %d", res);
-				count--;
-				sleep(1);
-			}
-		}
-		else
-		{
-			DEBUG_TIME_LINE("res: %d, errno: %d, %s", res, errno, strerror(errno));
-		}
+        if (res == 0)
+        {
+            int count = 5;
+            while (count)
+            {
+                DEBUG_TIME_LINE("res: %d", res);
+                count--;
+                sleep(1);
+            }
+        }
+        else
+        {
+            DEBUG_TIME_LINE("res: %d, errno: %d, %s", res, errno, strerror(errno));
+        }
 
-		pthread_mutex_unlock(&s_mtx);
-		DEBUG_TIME_LINE("unlocked");
-	}
+        pthread_mutex_unlock(&s_mtx);
+        DEBUG_TIME_LINE("unlocked");
+    }
 }
-
 
 void creatThread(void)
 {
@@ -101,12 +101,32 @@ void creatThread(void)
 
 int main(int argc, char **argv)
 {
-	creatThread();
+    ringBuf_s ring;
+    ringBuf_init(&ring, 10);
 
-	while(1)
-	{
-		sleep(1);
-	}
+    u8 buf[50] = { 0 };
+    u8 temp[512] = { 0 };
+    int i = 0;
+    for (i = 0; i < sizeof(buf); i++)
+    {
+        buf[i] = i;
+    }
 
-	return 0;
+    DEBUG_TIME_LINE("PUSH 8:");
+    ringBuf_pushData(&ring, buf, 8);
+    ringBuf_printf(&ring);
+
+    DEBUG_TIME_LINE("POP 7:");
+    ringBuf_popData(&ring, temp, 7);
+    ringBuf_printf(&ring);
+
+    DEBUG_TIME_LINE("PUSH 9:");
+    ringBuf_pushData(&ring, buf, 9);
+    ringBuf_printf(&ring);
+
+    DEBUG_TIME_LINE("EXTEND:");
+    ringBuf_extendCap(&ring, 20);
+    ringBuf_printf(&ring);
+
+    return 0;
 }

@@ -59,6 +59,7 @@ extern int ringBuf_pushData(ringBuf_p pRing, u8 *buf, int len);    //写入数�
 extern int ringBuf_popData(ringBuf_p pRing, u8 *buf, int len);    //读取数据, 且移动读指针
 extern int ringBuf_clear(ringBuf_p pRing);
 extern int ringBuf_extendCap(ringBuf_p pRing, int size);
+extern void ringBuf_printf(ringBuf_p pRing);
 
 #ifdef __cplusplus
 #if __cplusplus
