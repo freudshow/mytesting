@@ -16,6 +16,7 @@
 #include <unistd.h>
 #include <time.h>
 #include <errno.h>
+#include <regex.h>
 
 #include "list.h"
 #include "basedef.h"
@@ -99,34 +100,100 @@ void creatThread(void)
     }
 }
 
-int main(int argc, char **argv)
+int match(const char *str, const char *pattern)
 {
-    ringBuf_s ring;
-    ringBuf_init(&ring, 10);
+    regex_t re;
+    int err;
 
-    u8 buf[50] = { 0 };
-    u8 temp[512] = { 0 };
-    int i = 0;
-    for (i = 0; i < sizeof(buf); i++)
+    err = regcomp(&re, pattern, REG_EXTENDED);
+    if (err != 0)
     {
-        buf[i] = i;
+        char buf[100];
+        regerror(err, &re, buf, sizeof(buf));
+        printf("FAIL: %s\n", buf);
+        return 0;
     }
 
-    DEBUG_TIME_LINE("PUSH 8:");
-    ringBuf_pushData(&ring, buf, 8);
-    ringBuf_printf(&ring);
+    err = regexec(&re, str, 0, NULL, 0);
+    regfree(&re);
 
-    DEBUG_TIME_LINE("POP 7:");
-    ringBuf_popData(&ring, temp, 7);
-    ringBuf_printf(&ring);
+    if (err)
+        return 0;
 
-    DEBUG_TIME_LINE("PUSH 9:");
-    ringBuf_pushData(&ring, buf, 9);
-    ringBuf_printf(&ring);
+    return 1;
+}
 
-    DEBUG_TIME_LINE("EXTEND:");
-    ringBuf_extendCap(&ring, 20);
-    ringBuf_printf(&ring);
+#define CCO_PROXY_SELF_CMD          "ccoRouter"         //维护规约, 直接调用载波代理的自身功能
+#define CCO_PROXY_UPDATE_START      "childUpdateStart"  //载波升级LTU时的命令分类参数
+
+typedef struct childUpStartStruct {
+#define CHILD_UPDATE_PROTOCOL_DLT645    0
+#define CHILD_UPDATE_PROTOCOL_MODBUS    1
+    int protocol;
+    u8 logicAddr[6];
+    char addr[32];
+    char filename[512];
+    char path[512];
+    u32 fileLen;
+    u32 frameLen;
+    u8 modbusAddr;
+} childUpStart_s;
+
+int main(int argc, char **argv)
+{
+    childUpStart_s devUpdate = { 0 };
+    char cmd[] = "ccoRouter childUpdateStart 202204190321 1 ltudev.bin 1 600";
+
+    char *ptoken = NULL;
+    char *sep = " ";
+    int i = 0;
+    for (ptoken = strtok(cmd, sep), i = 0; ptoken != NULL; ptoken = strtok(NULL, sep), i++)
+    {
+        DEBUG_TIME_LINE("ptoken: %s", ptoken);
+        switch (i)
+        {
+            case 2:
+            {
+                strcpy(devUpdate.addr, ptoken);
+                DEBUG_TIME_LINE("addr: %s", devUpdate.addr);
+            }
+                break;
+            case 3:
+            {
+                char protocol[8] = { 0 };
+                strcpy(protocol, ptoken);
+                devUpdate.protocol = atoi(protocol);
+                DEBUG_TIME_LINE("protocol: %d", devUpdate.protocol);
+            }
+                break;
+            case 4:
+            {
+                strcpy(devUpdate.filename, ptoken);
+                DEBUG_TIME_LINE("filename: %s", devUpdate.filename);
+            }
+                break;
+            case 5:
+            {
+                char modbusaddr[8] = { 0 };
+                strcpy(modbusaddr, ptoken);
+                devUpdate.modbusAddr = atoi(modbusaddr);
+                DEBUG_TIME_LINE("modbusAddr: %d", devUpdate.modbusAddr);
+            }
+                break;
+            case 6:
+            {
+                char frameLen[8] = { 0 };
+                strcpy(frameLen, ptoken);
+                devUpdate.frameLen = atoi(frameLen);
+                DEBUG_TIME_LINE("frameLen: %d", devUpdate.frameLen);
+            }
+                break;
+            default:
+                break;
+        }
+    }
+
+    DEBUG_TIME_LINE("addr: %s, protocol: %d, filename: %s, modbusAddr: %d, frameLen: %d", devUpdate.addr, devUpdate.protocol, devUpdate.filename, devUpdate.modbusAddr, devUpdate.frameLen);
 
     return 0;
 }
