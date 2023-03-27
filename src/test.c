@@ -136,63 +136,18 @@ typedef struct childUpStartStruct {
     char path[512];
     u32 fileLen;
     u32 frameLen;
-    u8 modbusAddr;
+    u32 modbusAddr;
 } childUpStart_s;
 
 int main(int argc, char **argv)
 {
+    char ccoRouter[128] = { 0 };
+    char childUpdateStart[128] = { 0 };
+
     childUpStart_s devUpdate = { 0 };
-    char cmd[] = "ccoRouter childUpdateStart 202204190321 1 ltudev.bin 1 600";
-
-    char *ptoken = NULL;
-    char *sep = " ";
-    int i = 0;
-    for (ptoken = strtok(cmd, sep), i = 0; ptoken != NULL; ptoken = strtok(NULL, sep), i++)
-    {
-        DEBUG_TIME_LINE("ptoken: %s", ptoken);
-        switch (i)
-        {
-            case 2:
-            {
-                strcpy(devUpdate.addr, ptoken);
-                DEBUG_TIME_LINE("addr: %s", devUpdate.addr);
-            }
-                break;
-            case 3:
-            {
-                char protocol[8] = { 0 };
-                strcpy(protocol, ptoken);
-                devUpdate.protocol = atoi(protocol);
-                DEBUG_TIME_LINE("protocol: %d", devUpdate.protocol);
-            }
-                break;
-            case 4:
-            {
-                strcpy(devUpdate.filename, ptoken);
-                DEBUG_TIME_LINE("filename: %s", devUpdate.filename);
-            }
-                break;
-            case 5:
-            {
-                char modbusaddr[8] = { 0 };
-                strcpy(modbusaddr, ptoken);
-                devUpdate.modbusAddr = atoi(modbusaddr);
-                DEBUG_TIME_LINE("modbusAddr: %d", devUpdate.modbusAddr);
-            }
-                break;
-            case 6:
-            {
-                char frameLen[8] = { 0 };
-                strcpy(frameLen, ptoken);
-                devUpdate.frameLen = atoi(frameLen);
-                DEBUG_TIME_LINE("frameLen: %d", devUpdate.frameLen);
-            }
-                break;
-            default:
-                break;
-        }
-    }
-
+    char cmd[] = " ccoRouter childUpdateStart 202204190321 1 ltudev.bin 9 600";
+    int count = sscanf(cmd, "%s%s%s%d%s%d%d", ccoRouter, childUpdateStart, devUpdate.addr, &devUpdate.protocol, devUpdate.filename, &devUpdate.modbusAddr, &devUpdate.frameLen);
+    DEBUG_TIME_LINE("count: %d, ccoRouter: ---%s---, childUpdateStart: ---%s---", count, ccoRouter, childUpdateStart);
     DEBUG_TIME_LINE("addr: %s, protocol: %d, filename: %s, modbusAddr: %d, frameLen: %d", devUpdate.addr, devUpdate.protocol, devUpdate.filename, devUpdate.modbusAddr, devUpdate.frameLen);
 
     return 0;
