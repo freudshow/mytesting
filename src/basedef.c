@@ -27,10 +27,7 @@ void get_local_time(char *buf, u32 bufLen)
 
     gettimeofday(&systime, NULL);
     localtime_r(&systime.tv_sec, &timeinfo);
-    snprintf(buf, bufLen, "%04d-%02d-%02d %02d:%02d:%02d.%03ld",
-            (timeinfo.tm_year + 1900), timeinfo.tm_mon + 1, timeinfo.tm_mday,
-            timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec,
-            systime.tv_usec / 1000);
+    snprintf(buf, bufLen, "%04d-%02d-%02d %02d:%02d:%02d.%03ld", (timeinfo.tm_year + 1900), timeinfo.tm_mon + 1, timeinfo.tm_mday, timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec, systime.tv_usec / 1000);
 }
 
 /**************************************************
@@ -73,8 +70,7 @@ void getBufString(char *buf, int len, char *out)
  *      1. 日期: 2020年7月19日
  创建函数
  **************************************************/
-void debugBufFormat2fp(FILE *fp, const char *file, const char *func, int line,
-        char *buf, int len, const char *fmt, ...)
+void debugBufFormat2fp(FILE *fp, const char *file, const char *func, int line, char *buf, int len, const char *fmt, ...)
 {
     va_list ap;
     char bufTime[25] = { 0 };
@@ -144,7 +140,6 @@ void inverseArray(u8 *buf, int bufSize)
     }
 }
 
-
 /**************************************************
  * 功能描述: 计算一个缓冲区的crc16值
  * ------------------------------------------------
@@ -174,7 +169,8 @@ u16 calcCRC16(u8 *buf, u32 len)
             {
                 crc >>= 1;
                 crc ^= POLY;
-            } else
+            }
+            else
                 crc >>= 1;
         }
     }
@@ -250,7 +246,8 @@ int StrtoBcd(const char *p, unsigned char *pbcd, INT32 len)
     if (*p == '-')
     {
         pstr = p + 1;
-    } else
+    }
+    else
     {
         pstr = p;
     }
@@ -259,8 +256,7 @@ int StrtoBcd(const char *p, unsigned char *pbcd, INT32 len)
 
     for (i = 0; i < sLen; i++)
     {
-        if ((pstr[i] < '0') || ((pstr[i] > '9') && (pstr[i] < 'A'))
-                || ((pstr[i] > 'F') && (pstr[i] < 'a')) || (pstr[i] > 'f'))
+        if ((pstr[i] < '0') || ((pstr[i] > '9') && (pstr[i] < 'A')) || ((pstr[i] > 'F') && (pstr[i] < 'a')) || (pstr[i] > 'f'))
         {
             sLen = i;
             break;
@@ -275,13 +271,16 @@ int StrtoBcd(const char *p, unsigned char *pbcd, INT32 len)
         if ((pstr[i] >= '0') && (pstr[i] <= '9'))
         {
             tmpValue = pstr[i] - '0';
-        } else if ((pstr[i] >= 'A') && (pstr[i] <= 'F'))
+        }
+        else if ((pstr[i] >= 'A') && (pstr[i] <= 'F'))
         {
             tmpValue = pstr[i] - 'A' + 0x0A;
-        } else if ((pstr[i] >= 'a') && (pstr[i] <= 'f'))
+        }
+        else if ((pstr[i] >= 'a') && (pstr[i] <= 'f'))
         {
             tmpValue = pstr[i] - 'a' + 0x0A;
-        } else
+        }
+        else
         {
             tmpValue = 0;
         }
@@ -289,7 +288,8 @@ int StrtoBcd(const char *p, unsigned char *pbcd, INT32 len)
         if ((j % 2) == 0)
         {
             pbcd[m] = tmpValue;
-        } else
+        }
+        else
         {
             pbcd[m++] |= (tmpValue << 4);
         }
@@ -373,7 +373,8 @@ s8 bcd2int32s(u8 *bcd, u8 len, u8 order, u8 signOnHigh, s32 *dint)
         }
 
         *dint *= sign;
-    } else if (order == 0)
+    }
+    else if (order == 0)
     {
         if (signOnHigh == 1)
         {
@@ -388,7 +389,8 @@ s8 bcd2int32s(u8 *bcd, u8 len, u8 order, u8 signOnHigh, s32 *dint)
         }
 
         *dint *= sign;
-    } else
+    }
+    else
         return -3;
 
     return 0;
@@ -422,8 +424,7 @@ s8 bcd2float(u8 *bcd, u8 len, u8 order, u8 signOnHigh, u8 declen, float *dfloat)
     return 0;
 }
 
-s8 bcd2floatBlock(u8 *bcd, u8 lenPerItem, u8 itemCount, u8 order, u8 signOnHigh,
-        u8 declen, float *dfloat)
+s8 bcd2floatBlock(u8 *bcd, u8 lenPerItem, u8 itemCount, u8 order, u8 signOnHigh, u8 declen, float *dfloat)
 {
     if (dfloat == NULL)
     {
@@ -435,8 +436,7 @@ s8 bcd2floatBlock(u8 *bcd, u8 lenPerItem, u8 itemCount, u8 order, u8 signOnHigh,
 
     for (i = 0; i < itemCount; i++)
     {
-        res = bcd2float(bcd + lenPerItem * i, lenPerItem, order, signOnHigh,
-                declen, dfloat + i);
+        res = bcd2float(bcd + lenPerItem * i, lenPerItem, order, signOnHigh, declen, dfloat + i);
         if (res < 0)
         {
             return -1;
@@ -480,7 +480,8 @@ void s32toBcd(s32 intval, u8 *bcd, u8 bcdlen, u8 signOnHigh)
         if (i % 2)
         {
             bcd[i / 2] |= ((reminder << 4) & 0xF0);
-        } else
+        }
+        else
         {
             bcd[i / 2] = reminder & 0x0F;
         }
@@ -589,10 +590,10 @@ static const char base64_code[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrs
  * ---------------------------------------------------
  * @param c[in] - 一个base64编码
  * ---------------------------------------------------
- * @return 查找失败 - 返回 -1;
+ * @return 查找失败 - 返回 65;
  *         查找成功 - 返回0~64;
  ******************************************************/
-static int idx_of_base64(char c)
+static u8 idx_of_base64(char c)
 {
     if (c <= 'Z' && c >= 'A')
         return (c - 'A');
@@ -607,7 +608,7 @@ static int idx_of_base64(char c)
     if (c == '=')
         return 64;
 
-    return -1;
+    return 65;
 }
 
 /******************************************************
@@ -637,16 +638,13 @@ int decode_base64(char *enStr, u32 enSize, u8 *deBuf)
         b[1] = idx_of_base64(enStr[i + 1]);
         b[2] = idx_of_base64(enStr[i + 2]);
         b[3] = idx_of_base64(enStr[i + 3]);
-        if (b[0] >= 0 && b[1] >= 0)
+        *pBuf++ = (b[0] << 2 | b[1] >> 4);
+        if (b[2] < 64)
         {
-            *pBuf++ = (b[0] << 2 | b[1] >> 4);
-            if (b[2] >= 0)
+            *pBuf++ = ((b[1] << 4) | (b[2] >> 2));
+            if (b[3] < 64)
             {
-                *pBuf++ = ((b[1] << 4) | (b[2] >> 2));
-                if (b[3] >= 0)
-                {
-                    *pBuf++ = ((b[2] << 6) | b[3]);
-                }
+                *pBuf++ = ((b[2] << 6) | b[3]);
             }
         }
     }

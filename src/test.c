@@ -166,13 +166,7 @@ findOneFrame(u8 *buf, u16 bufLen, u16 *start, u16 *frameLen)
 
 int main(int argc, char **argv)
 {
-//    u8 buf[] = { 0x04, 0x00, 0x5F, 0x00, 0x00, 0x68, 0x2D, 0x00, 0x43, 0x04, 0x00, 0x5F, 0x00, 0x00, 0x00, 0x66, 0x55, 0x44, 0x33, 0x22, 0x11, 0x99, 0x99, 0x99, 0x99, 0x99, 0x99, 0x05, 0x04, 0x00, 0x00, 0x10, 0x68, 0x20, 0x03, 0x19, 0x04, 0x22, 0x20, 0x68, 0x11, 0x04, 0x33, 0x34, 0x34, 0x35, 0x37, 0x16, 0x3E, 0x16 };
-    u8 buf[] = { 0x04 };
-    char str[8192] = { 0 };
-    int len = encode_base64(buf, sizeof(buf), str);
-    DEBUG_TIME_LINE("str: %s, len: %d", str, len);
-
-    char enstr[] = "aC0AQwQAXwAAAGZVRDMiEZmZmZmZmQUEAAAQaCADGQQiIGgRBDM0NDU3Fj4W";
+    char enstr[] = "qv//DgESAQAgAxkEIiD/AKr//4oDAQYAAHsNCiAgIkRldlNlbGZEYXRhY2xhc3NSb290IjogWw0KICAgIHsNCiAgICAgICJsaW5rTm8iOiAwLA0KICAgICAgImRldk5vIjogMCwNCiAgICAgICJSZWdObyI6IDAsDQogICAgICAidHlwZSI6IDAsDQogICAgICAiTmFtZSI6ICLorqHph4/oiq/niYfnmoTohInlhrLovpPlhaXkv6Hlj7cx77yI5aSH55So77yJIiwNCiAgICAgICJVbml0IjogbnVsbCwNCiAgICAgICJSYXRpbyI6IDAsDQogICAgICAiVHlwZVByb3BlcnR564K8ibFmscB0AAC8/kk=";
     u8 debuf[8192] = { 0 };
     int buflen = decode_base64(enstr, strlen(enstr), debuf);
     DEBUG_BUFF_FORMAT(debuf, buflen, "buf-{%d}: ", buflen);
