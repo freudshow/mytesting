@@ -578,3 +578,164 @@ void minus33(u8 *buf, int bufSize)
     for (i = 0; i < bufSize; i++)
         buf[i] -= 0x33;
 }
+
+/******************************************************
+ * base64映射表
+ ******************************************************/
+static const char base64_code[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=";
+
+/******************************************************
+ * 函数功能: 获取一个base64编码中的字符在base64映射表中的索引值
+ * ---------------------------------------------------
+ * @param c[in] - 一个base64编码
+ * ---------------------------------------------------
+ * @return 查找失败 - 返回 -1;
+ *         查找成功 - 返回0~64;
+ ******************************************************/
+static int idx_of_base64(char c)
+{
+    if (c <= 'Z' && c >= 'A')
+        return (c - 'A');
+    if (c <= 'z' && c >= 'a')
+        return (c - 'a' + 26); //a偏移了26个字母
+    if (c <= '9' && c >= '0')
+        return (c - '0' + 52); //0偏移了52个字母
+    if (c == '+')
+        return 62;
+    if (c == '/')
+        return 63;
+    if (c == '=')
+        return 64;
+
+    return -1;
+}
+
+/******************************************************
+ * 函数功能: 将base64编码过的字符串, 解码为相应的二进制串
+ * ---------------------------------------------------
+ * @param enStr[in] - base64编码过的字符串
+ * @param enSize[in] - base64编码过的字符串
+ * @param deStr[out] - 解码出的二进制串
+ * ---------------------------------------------------
+ * @return 解码失败 - 返回 -1;
+ *         解码成功 - 返回 二进制串长度;
+ ******************************************************/
+int decode_base64(char *enStr, u32 enSize, u8 *deBuf)
+{
+    //base64编码过的字串必须为4的整数倍
+    if (enSize < 4 || (enSize % 4) != 0)
+    {
+        return -1;
+    }
+
+    u8 b[4];
+    int i;
+    u8 *pBuf = deBuf;
+    for (i = 0; i < enSize; i += 4)
+    {
+        b[0] = idx_of_base64(enStr[i]);
+        b[1] = idx_of_base64(enStr[i + 1]);
+        b[2] = idx_of_base64(enStr[i + 2]);
+        b[3] = idx_of_base64(enStr[i + 3]);
+        if (b[0] >= 0 && b[1] >= 0)
+        {
+            *pBuf++ = (b[0] << 2 | b[1] >> 4);
+            if (b[2] >= 0)
+            {
+                *pBuf++ = ((b[1] << 4) | (b[2] >> 2));
+                if (b[3] >= 0)
+                {
+                    *pBuf++ = ((b[2] << 6) | b[3]);
+                }
+            }
+        }
+    }
+
+    return (int) (pBuf - deBuf);
+}
+
+/******************************************************
+ * 函数功能: 计数base64编码当中符号'='出现的次数
+ * ---------------------------------------------------
+ * @param enStr[in] - base64编码过的字符串
+ * @param enSize[in] - base64编码过的字符串
+ * ---------------------------------------------------
+ * @return 失败 - 返回 -1;
+ *         成功 - 返回'='出现的次数;
+ ******************************************************/
+int cnt_of_pad(char *enStr, u32 enSize)
+{
+    if (enStr == NULL || enSize == 0)
+    {
+        return -1;
+    }
+
+    int cnt = 0;
+    int i;
+    for (i = 0; i < 2; i++)
+    {
+        if (enStr[enSize - 1 - i] == '=')
+            cnt++;
+    }
+
+    return cnt;
+}
+
+/******************************************************
+ * 函数功能: 将二进制串, 编码为base64字符串
+ * ---------------------------------------------------
+ * @param buf[in] - 二进制串
+ * @param len[in] - 二进制串长度
+ * @param enStr[out] - 编码后的字符串
+ * ---------------------------------------------------
+ * @return 失败 - 返回 -1;
+ *         成功 - 返回编码后字符串的长度, 包括'\0';
+ ******************************************************/
+int encode_base64(u8 *buf, u32 len, char *enStr)
+{
+    if (buf == NULL || len == 0 || enStr == NULL)
+    {
+        return -1;
+    }
+
+    int idx;
+    int i = 0;
+    char *pStr = enStr;
+
+    for (i = 0; i < len; i += 3)
+    {
+        idx = (buf[i] & 0xFC) >> 2;
+        *pStr++ = base64_code[idx];
+
+        idx = ((buf[i] & 0x03) << 4);
+        if (i + 1 < len)
+        {
+            idx |= ((buf[i + 1] & 0xF0) >> 4);
+            *pStr++ = base64_code[idx];
+            idx = ((buf[i + 1] & 0x0F) << 2);
+            if (i + 2 < len)
+            {
+                idx |= ((buf[i + 2] & 0xC0) >> 6);
+                *pStr++ = base64_code[idx];
+                idx = (buf[i + 2] & 0x3F);
+                *pStr++ = base64_code[idx];
+            }
+            else
+            {
+                *pStr++ = base64_code[idx];
+                *pStr++ = '=';
+            }
+        }
+        else
+        {
+            *pStr++ = base64_code[idx];
+            *pStr++ = '=';
+            *pStr++ = '=';
+        }
+    }
+
+    *pStr++ = '\0';
+
+    return (int) (pStr - enStr);
+}
+

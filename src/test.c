@@ -100,55 +100,82 @@ void creatThread(void)
     }
 }
 
-int match(const char *str, const char *pattern)
+findOneFrame(u8 *buf, u16 bufLen, u16 *start, u16 *frameLen)
 {
-    regex_t re;
-    int err;
+    u16 idx = 0;
+    u16 consumed = 0;
+    u16 startPos = 0;
+    u8 *p = buf;
 
-    err = regcomp(&re, pattern, REG_EXTENDED);
-    if (err != 0)
+    //找第一个 0x68
+    while ((idx < bufLen) && (buf[idx] != 0x68))
     {
-        char buf[100];
-        regerror(err, &re, buf, sizeof(buf));
-        printf("FAIL: %s\n", buf);
+        idx++;
+    }
+
+    if (idx == bufLen)
+    {
+        return -1;
+    }
+
+    startPos = idx;
+    p += idx;
+
+    if (start != NULL)
+    {
+        *start = startPos;
+    }
+
+    consumed += idx;
+    u16 len = 0;
+
+    if (bufLen - consumed < 5)
+    {
         return 0;
     }
 
-    err = regexec(&re, str, 0, NULL, 0);
-    regfree(&re);
-
-    if (err)
+    if (bufLen - consumed < sizeof(len))
+    {
         return 0;
+    }
 
-    return 1;
+    memcpy(&len, &p[1], sizeof(len));
+    if (consumed + len > bufLen)
+    {
+        return 0;
+    }
+
+    if (p[len - 1] != 0x16)
+    {
+        return 0;
+    }
+
+    u8 cs = chkSum(&p[3], len - 5);
+    if (cs != p[len - 2])
+    {
+        return 0;
+    }
+
+    if (frameLen != NULL)
+    {
+        *frameLen = len;
+    }
+
+    return (startPos + len);
 }
-
-#define CCO_PROXY_SELF_CMD          "ccoRouter"         //维护规约, 直接调用载波代理的自身功能
-#define CCO_PROXY_UPDATE_START      "childUpdateStart"  //载波升级LTU时的命令分类参数
-
-typedef struct childUpStartStruct {
-#define CHILD_UPDATE_PROTOCOL_DLT645    0
-#define CHILD_UPDATE_PROTOCOL_MODBUS    1
-    int protocol;
-    u8 logicAddr[6];
-    char addr[32];
-    char filename[512];
-    char path[512];
-    u32 fileLen;
-    u32 frameLen;
-    u32 modbusAddr;
-} childUpStart_s;
 
 int main(int argc, char **argv)
 {
-    char ccoRouter[128] = { 0 };
-    char childUpdateStart[128] = { 0 };
+//    u8 buf[] = { 0x04, 0x00, 0x5F, 0x00, 0x00, 0x68, 0x2D, 0x00, 0x43, 0x04, 0x00, 0x5F, 0x00, 0x00, 0x00, 0x66, 0x55, 0x44, 0x33, 0x22, 0x11, 0x99, 0x99, 0x99, 0x99, 0x99, 0x99, 0x05, 0x04, 0x00, 0x00, 0x10, 0x68, 0x20, 0x03, 0x19, 0x04, 0x22, 0x20, 0x68, 0x11, 0x04, 0x33, 0x34, 0x34, 0x35, 0x37, 0x16, 0x3E, 0x16 };
+    u8 buf[] = { 0x04 };
+    char str[8192] = { 0 };
+    int len = encode_base64(buf, sizeof(buf), str);
+    DEBUG_TIME_LINE("str: %s, len: %d", str, len);
 
-    childUpStart_s devUpdate = { 0 };
-    char cmd[] = " ccoRouter childUpdateStart 202204190321 1 ltudev.bin 9 600";
-    int count = sscanf(cmd, "%s%s%s%d%s%d%d", ccoRouter, childUpdateStart, devUpdate.addr, &devUpdate.protocol, devUpdate.filename, &devUpdate.modbusAddr, &devUpdate.frameLen);
-    DEBUG_TIME_LINE("count: %d, ccoRouter: ---%s---, childUpdateStart: ---%s---", count, ccoRouter, childUpdateStart);
-    DEBUG_TIME_LINE("addr: %s, protocol: %d, filename: %s, modbusAddr: %d, frameLen: %d", devUpdate.addr, devUpdate.protocol, devUpdate.filename, devUpdate.modbusAddr, devUpdate.frameLen);
+    char enstr[] = "aC0AQwQAXwAAAGZVRDMiEZmZmZmZmQUEAAAQaCADGQQiIGgRBDM0NDU3Fj4W";
+    u8 debuf[8192] = { 0 };
+    int buflen = decode_base64(enstr, strlen(enstr), debuf);
+    DEBUG_BUFF_FORMAT(debuf, buflen, "buf-{%d}: ", buflen);
 
     return 0;
 }

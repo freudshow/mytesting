@@ -272,6 +272,8 @@ int myprintk(const char *fmt, ...);
 void add33(u8 *buf, int bufSize);
 void minus33(u8 *buf, int bufSize);
 u8 chkSum(u8 *buf, u16 bufSize);
+int decode_base64(char *enStr, u32 enSize, u8 *deBuf);
+int encode_base64(u8 *buf, u32 len, char *enStr);
 
 #ifdef __cplusplus
 #if __cplusplus
