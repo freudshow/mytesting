@@ -100,7 +100,7 @@ void creatThread(void)
     }
 }
 
-findOneFrame(u8 *buf, u16 bufLen, u16 *start, u16 *frameLen)
+int findOneFrame(u8 *buf, u16 bufLen, u16 *start, u16 *frameLen)
 {
     u16 idx = 0;
     u16 consumed = 0;
@@ -164,12 +164,121 @@ findOneFrame(u8 *buf, u16 bufLen, u16 *start, u16 *frameLen)
     return (startPos + len);
 }
 
+int readFrame(char *str, u32 maxLen, u8 *buf)
+{
+    int state = 0; //0, 初始状态; 1, 空格状态; 2, 字节高状态; 3, 字节低状态; 4, 错误状态.
+    u8 high = 0;
+    u8 low = 0;
+    u32 destLen = 0; //已扫描过的字节个数
+    char *p = str;
+
+    if (buf == NULL || str == NULL)
+    {
+        return -1;
+    }
+
+    while (*p != '\0')
+    {
+        if (!(isHex(*p) || isDelim(*p)))
+        {
+            state = 4;
+            goto final;
+        }
+
+        switch (state)
+        {
+            case 0: //init state
+                if (isDelim(*p))
+                {
+                    state = 1;
+                }
+                else if (isHex(*p))
+                {
+                    high = ASCII_TO_HEX(*p);
+                    state = 2;
+                }
+
+                break;
+            case 1: //space state
+                if (isHex(*p))
+                {
+                    high = ASCII_TO_HEX(*p);
+                    state = 2;
+                }
+
+                break;
+            case 2: //high state
+                if (isDelim(*p))
+                {
+                    state = 4;
+                    goto final;
+                }
+
+                if (destLen < maxLen && isHex(*p))
+                {
+                    low = ASCII_TO_HEX(*p);
+
+                    buf[destLen++] = (high << 4 | low);
+                    high = low = 0;
+                    state = 3;
+                }
+                else
+                {
+                    DEBUG_TIME_LINE("buf over flow");
+                    goto final;
+                }
+
+                break;
+            case 3: //low state
+                if (isHex(*p))
+                {
+                    high = ASCII_TO_HEX(*p);
+                    state = 2;
+                }
+                else if (isDelim(*p))
+                {
+                    state = 1;
+                }
+                break;
+            default:
+                goto final;
+        }
+
+        p++;
+    }
+
+final:
+    //高位状态和非法状态均为不可接收状态
+    if (state == 4 || state == 2)
+    {
+        DEBUG_TIME_LINE("存在非法字符, 或字符串格式非法\n");
+        if (destLen > 0)
+        {
+            memset(buf, 0, destLen);
+            destLen = 0;
+        }
+
+        return -1;
+    }
+
+    return destLen;
+}
+
 int main(int argc, char **argv)
 {
-    char enstr[] = "qv//DgESAQAgAxkEIiD/AKr//4oDAQYAAHsNCiAgIkRldlNlbGZEYXRhY2xhc3NSb290IjogWw0KICAgIHsNCiAgICAgICJsaW5rTm8iOiAwLA0KICAgICAgImRldk5vIjogMCwNCiAgICAgICJSZWdObyI6IDAsDQogICAgICAidHlwZSI6IDAsDQogICAgICAiTmFtZSI6ICLorqHph4/oiq/niYfnmoTohInlhrLovpPlhaXkv6Hlj7cx77yI5aSH55So77yJIiwNCiAgICAgICJVbml0IjogbnVsbCwNCiAgICAgICJSYXRpbyI6IDAsDQogICAgICAiVHlwZVByb3BlcnR564K8ibFmscB0AAC8/kk=";
+    char nospace[] = "00000000000000000002";
+    char space[] = "39 20 60 10 22 11";
+    char mix[] = "0B04 0CE4\r\t\n 00 16 32 09";
+    char continuestr[] = "E4\r\t\n 00 16 32 09";
     u8 debuf[8192] = { 0 };
-    int buflen = decode_base64(enstr, strlen(enstr), debuf);
-    DEBUG_BUFF_FORMAT(debuf, buflen, "buf-{%d}: ", buflen);
 
+    int len = readFrame(nospace, sizeof(debuf), debuf);
+    DEBUG_BUFF_FORMAT(debuf, len, "debuf: ");
+    len = readFrame(space, sizeof(debuf), debuf);
+    DEBUG_BUFF_FORMAT(debuf, len, "debuf: ");
+    len = readFrame(mix, sizeof(debuf), debuf);
+    DEBUG_BUFF_FORMAT(debuf, len, "debuf: ");
+    len = readFrame(continuestr, sizeof(debuf), debuf);
+    DEBUG_BUFF_FORMAT(debuf, len, "debuf: ");
     return 0;
 }

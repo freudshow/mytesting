@@ -173,6 +173,15 @@ typedef struct dlt645LoadDataBlock
 
 #define POLY                0xA001  //CRC16校验中的生成多项式
 #define MODBUS_PROTOCOL     0
+#define ASCII_TO_HEX(c)             ((c >='0' && c <='9') ? (c-'0'): (\
+                                            (c>='A'&&c<='F') ? (c-'A'+10): (\
+                                                    (c>='a'&&c<='f')?(c-'a'+10):0\
+                                                )\
+                                            )\
+                                        )
+#define isDigit(c) ((unsigned) ((c)-'0') < 10)
+#define isHex(c) (((unsigned) ((c)-'0') < 10) || ((unsigned) ((c)-'A') < 6) || ((unsigned) ((c)-'a') < 6) )
+#define isDelim(c) (c == ' ' || c == '\n' || c == '\t' || c == '\r')
 
 /**
  * 声明一个列表
