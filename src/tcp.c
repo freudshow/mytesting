@@ -18,8 +18,6 @@
 #include <sys/ioctl.h>
 #include <string.h>
 
-
-
 int SetNonBlocking(int sockfd)
 {
     int flag = fcntl(sockfd, F_GETFL, 0);
@@ -67,8 +65,7 @@ int tcpclient(void)
     memset(tSocketServerAddr.sin_zero, 0, 8);
 
 //  errno = 0;
-    int iRet = connect(sd, (const struct sockaddr*) &tSocketServerAddr,
-            sizeof(struct sockaddr));
+    int iRet = connect(sd, (const struct sockaddr*) &tSocketServerAddr, sizeof(struct sockaddr));
     if (iRet == -1)
     {
         if (errno != EINPROGRESS)
@@ -80,63 +77,57 @@ int tcpclient(void)
         }
     }
 
-    if (iRet == 0)
+    if (iRet != 0)
     {
-        goto done;
+        struct timeval timeout;
+        timeout.tv_sec = 5;
+        timeout.tv_usec = 0;
+
+        fd_set wset;
+        FD_SET(sd, &wset);
+
+        if ((res = select(sd + 1, NULL, &wset, NULL, &timeout)) <= 0)  // TIMEOUT
+        {
+            close(sd);
+            errno = ETIMEDOUT;
+            return (-1);
+        }
+
+        if (!FD_ISSET(sd, &wset))
+        {
+            printf("no events on sockfd found\n");
+            close(sd);
+            return -1;
+        }
+
+        int error = 0;
+        socklen_t length = sizeof(error);
+        // 调用 getsockopt 来获取并清除 sockfd 上的错误
+        if (getsockopt(sd, SOL_SOCKET, SO_ERROR, &error, &length) < 0)
+        {
+            printf("get socket option failedn");
+            close(sd);
+            return -1;
+        }
+
+        // 错误号不为 0 表示连接出错
+        if (error != 0)
+        {
+            printf("connection failed after select with the error: %sn", strerror(error));
+            close(sd);
+            return -1;
+        }
     }
 
-    struct timeval timeout;
-    timeout.tv_sec = 5;
-    timeout.tv_usec = 0;
-
-    fd_set wset;
-    FD_SET(sd, &wset);
-
-    if ((res = select(sd + 1, NULL, &wset, NULL, &timeout)) <= 0)  // TIMEOUT
-    {
-        close(sd);
-        errno = ETIMEDOUT;
-        return (-1);
-    }
-
-    if (!FD_ISSET(sd, &wset))
-    {
-        printf("no events on sockfd found\n");
-        close(sd);
-        return -1;
-    }
-
-    int error = 0;
-    socklen_t length = sizeof(error);
-    // 调用 getsockopt 来获取并清除 sockfd 上的错误
-    if (getsockopt(sd, SOL_SOCKET, SO_ERROR, &error, &length) < 0)
-    {
-        printf("get socket option failedn");
-        close(sd);
-        return -1;
-    }
-
-    // 错误号不为 0 表示连接出错
-    if (error != 0)
-    {
-        printf("connection failed after select with the error: %sn",
-                strerror(error));
-        close(sd);
-        return -1;
-    }
-
-    done:
     /////////////// 网络断线重连机制 设定/////////////////////////
     int keepIdle = 10;
     int keepInterval = 5;
     int keepcount = 2;
     int keepAlive = 1;
 
-    setsockopt(sd, SOL_SOCKET, SO_KEEPALIVE, (void*) &keepAlive,
-            sizeof(keepAlive));
+    setsockopt(sd, SOL_SOCKET, SO_KEEPALIVE, (void*) &keepAlive, sizeof(keepAlive));
     setsockopt(sd, 6, TCP_KEEPIDLE, (void*) &keepIdle, sizeof(keepIdle));
-    setsockopt(sd, 6, TCP_KEEPINTVL, (void*) &keepInterval,
-            sizeof(keepInterval));
+    setsockopt(sd, 6, TCP_KEEPINTVL, (void*) &keepInterval, sizeof(keepInterval));
     setsockopt(sd, 6, TCP_KEEPCNT, (void*) &keepcount, sizeof(keepcount));
 
     u8 buf[4096];
@@ -176,7 +167,6 @@ int testtcpclientmain(void)
     return EXIT_SUCCESS;
 }
 
-
 int getLocalInfo(void)
 {
     int fd;
@@ -189,7 +179,8 @@ int getLocalInfo(void)
     char broadAddr[32] = { 0 };
     char subnetMask[32] = { 0 };
 
-    if ((fd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
+    if ((fd = socket(AF_INET, SOCK_DGRAM, 0)) < 0)
+    {
         perror("socket");
 
         close(fd);
@@ -198,84 +189,90 @@ int getLocalInfo(void)
 
     ifc.ifc_len = sizeof(buf);
     ifc.ifc_buf = (caddr_t) buf;
-    if (!ioctl(fd, SIOCGIFCONF, (char*) &ifc)) {
+    if (!ioctl(fd, SIOCGIFCONF, (char*) &ifc))
+    {
         interfaceNum = ifc.ifc_len / sizeof(struct ifreq);
         printf("interface num = %d\n", interfaceNum);
-        while (interfaceNum-- > 0) {
+        while (interfaceNum-- > 0)
+        {
             printf("\ndevice name: %s\n", buf[interfaceNum].ifr_name);
 
             //ignore the interface that not up or not runing
             ifrcopy = buf[interfaceNum];
-            if (ioctl(fd, SIOCGIFFLAGS, &ifrcopy)) {
+            if (ioctl(fd, SIOCGIFFLAGS, &ifrcopy))
+            {
                 printf("ioctl: %s [%s:%d]\n", strerror(errno), __FILE__,
-                        __LINE__);
+                __LINE__);
 
                 close(fd);
                 return -1;
             }
 
             //get the mac of this interface
-            if (!ioctl(fd, SIOCGIFHWADDR, (char*) (&buf[interfaceNum]))) {
+            if (!ioctl(fd, SIOCGIFHWADDR, (char*) (&buf[interfaceNum])))
+            {
                 memset(mac, 0, sizeof(mac));
-                snprintf(mac, sizeof(mac), "%02x%02x%02x%02x%02x%02x",
-                        (unsigned char) buf[interfaceNum].ifr_hwaddr.sa_data[0],
-                        (unsigned char) buf[interfaceNum].ifr_hwaddr.sa_data[1],
-                        (unsigned char) buf[interfaceNum].ifr_hwaddr.sa_data[2],
+                snprintf(mac, sizeof(mac), "%02x%02x%02x%02x%02x%02x", (unsigned char) buf[interfaceNum].ifr_hwaddr.sa_data[0], (unsigned char) buf[interfaceNum].ifr_hwaddr.sa_data[1], (unsigned char) buf[interfaceNum].ifr_hwaddr.sa_data[2],
 
-                        (unsigned char) buf[interfaceNum].ifr_hwaddr.sa_data[3],
-                        (unsigned char) buf[interfaceNum].ifr_hwaddr.sa_data[4],
-                        (unsigned char) buf[interfaceNum].ifr_hwaddr.sa_data[5]);
+                (unsigned char) buf[interfaceNum].ifr_hwaddr.sa_data[3], (unsigned char) buf[interfaceNum].ifr_hwaddr.sa_data[4], (unsigned char) buf[interfaceNum].ifr_hwaddr.sa_data[5]);
                 printf("device mac: %s\n", mac);
-            } else {
+            }
+            else
+            {
                 printf("ioctl: %s [%s:%d]\n", strerror(errno), __FILE__,
-                        __LINE__);
+                __LINE__);
                 close(fd);
                 return -1;
             }
 
             //get the IP of this interface
 
-            if (!ioctl(fd, SIOCGIFADDR, (char*) &buf[interfaceNum])) {
-                snprintf(ip, sizeof(ip), "%s",
-                        (char*) inet_ntoa(
-                                ((struct sockaddr_in*) &(buf[interfaceNum].ifr_addr))->sin_addr));
+            if (!ioctl(fd, SIOCGIFADDR, (char*) &buf[interfaceNum]))
+            {
+                snprintf(ip, sizeof(ip), "%s", (char*) inet_ntoa(((struct sockaddr_in*) &(buf[interfaceNum].ifr_addr))->sin_addr));
                 printf("device ip: %s\n", ip);
-            } else {
+            }
+            else
+            {
                 printf("ioctl: %s [%s:%d]\n", strerror(errno), __FILE__,
-                        __LINE__);
+                __LINE__);
                 close(fd);
                 return -1;
             }
 
             //get the broad address of this interface
 
-            if (!ioctl(fd, SIOCGIFBRDADDR, &buf[interfaceNum])) {
-                snprintf(broadAddr, sizeof(broadAddr), "%s",
-                        (char*) inet_ntoa(
-                                ((struct sockaddr_in*) &(buf[interfaceNum].ifr_broadaddr))->sin_addr));
+            if (!ioctl(fd, SIOCGIFBRDADDR, &buf[interfaceNum]))
+            {
+                snprintf(broadAddr, sizeof(broadAddr), "%s", (char*) inet_ntoa(((struct sockaddr_in*) &(buf[interfaceNum].ifr_broadaddr))->sin_addr));
                 printf("device broadAddr: %s\n", broadAddr);
-            } else {
+            }
+            else
+            {
                 printf("ioctl: %s [%s:%d]\n", strerror(errno), __FILE__,
-                        __LINE__);
+                __LINE__);
                 close(fd);
                 return -1;
             }
 
             //get the subnet mask of this interface
-            if (!ioctl(fd, SIOCGIFNETMASK, &buf[interfaceNum])) {
-                snprintf(subnetMask, sizeof(subnetMask), "%s",
-                        (char*) inet_ntoa(
-                                ((struct sockaddr_in*) &(buf[interfaceNum].ifr_netmask))->sin_addr));
+            if (!ioctl(fd, SIOCGIFNETMASK, &buf[interfaceNum]))
+            {
+                snprintf(subnetMask, sizeof(subnetMask), "%s", (char*) inet_ntoa(((struct sockaddr_in*) &(buf[interfaceNum].ifr_netmask))->sin_addr));
                 printf("device subnetMask: %s\n", subnetMask);
-            } else {
+            }
+            else
+            {
                 printf("ioctl: %s [%s:%d]\n", strerror(errno), __FILE__,
-                        __LINE__);
+                __LINE__);
                 close(fd);
                 return -1;
 
             }
         }
-    } else {
+    }
+    else
+    {
         printf("ioctl: %s [%s:%d]\n", strerror(errno), __FILE__, __LINE__);
         close(fd);
         return -1;
@@ -343,7 +340,6 @@ int testip(void)
 
     return 0;
 }
-
 
 int ipmain(void)
 {
