@@ -266,19 +266,11 @@ final:
 
 int main(int argc, char **argv)
 {
-    char nospace[] = "00000000000000000002";
-    char space[] = "39 20 60 10 22 11";
-    char mix[] = "0B04 0CE4\r\t\n 00 16 32 09";
-    char continuestr[] = "E4\r\t\n 00 16 32 09";
-    u8 debuf[8192] = { 0 };
-
-    int len = readFrame(nospace, sizeof(debuf), debuf);
-    DEBUG_BUFF_FORMAT(debuf, len, "debuf: ");
-    len = readFrame(space, sizeof(debuf), debuf);
-    DEBUG_BUFF_FORMAT(debuf, len, "debuf: ");
-    len = readFrame(mix, sizeof(debuf), debuf);
-    DEBUG_BUFF_FORMAT(debuf, len, "debuf: ");
-    len = readFrame(continuestr, sizeof(debuf), debuf);
-    DEBUG_BUFF_FORMAT(debuf, len, "debuf: ");
+    char cmd[] = "ls etac 2>&1";
+    FILE *fp=popen(cmd, "r");
+    char line[2048] = {0x00};
+    fread(line, 1,2048, fp);
+    pclose(fp);
+    DEBUG_TIME_LINE("result: %s", line);
     return 0;
 }
