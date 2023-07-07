@@ -25,6 +25,30 @@
 #include "sqlite3/sqlite3.h"
 #include "ringbufpurec.h"
 
+#define MIN_FRAME_LEN       5
+#define MAX_FRAME_LEN       255
+
+#define HEAD_LEN_0x10       1  // 固定帧头长度
+#define HEAD_LEN_0x68       4  // 变化帧头长度
+#define TAIL_LEN            2  // 帧尾长度
+
+#define START_CODE_0x10     0x10  // 固定帧头
+#define START_CODE_0x68     0x68  // 变化帧头
+#define END_CODE            0x16  // 帧尾
+
+typedef struct {
+    u8 byStartCode;
+    u8 byAsduInfo[254];
+}ST_IEC101Frame_0x10;
+
+typedef struct {
+    u8 byStartCode;
+    u8 byApduLen;
+    u8 byApduLen2;
+    u8 byStartCode2;
+    u8 byAsduInfo[MAX_FRAME_LEN-HEAD_LEN_0x68];
+}ST_IEC101Frame_0x68;
+
 static pthread_mutex_t s_mtx = PTHREAD_MUTEX_INITIALIZER;
 
 void* func1(void *arg)
@@ -264,13 +288,116 @@ final:
     return destLen;
 }
 
+
+int SearchFrameFor101(u8* frmData,int dataLen,int linkLen,int* frmNullStart)
+{
+    int i = 0;
+    u8 isFindStart = 0,frmLen = 0;
+    u8 byEndCode = 0; //byFrmSum = 0;
+    //查找帧头
+    for (i = 0; i < dataLen; i++)
+    {
+        if ((frmData[i] != START_CODE_0x10) && (frmData[i] != START_CODE_0x68))
+        {
+            *frmNullStart = i + 1;
+        }
+        else
+        {
+            isFindStart = 1;
+            break;
+        }
+    }
+
+    if(isFindStart == 0)
+        return 0;
+
+    //帧长度判断
+    if(frmData[i] == START_CODE_0x10) //固定帧长度
+    {
+
+        ST_IEC101Frame_0x10 *m_pRecvFrame_0x10 = (ST_IEC101Frame_0x10 *)(frmData + i);
+
+        //根据链路地址长度确定帧长度
+        frmLen = 4 + linkLen;
+//        if (linkLen == 1)
+//        {
+//            frmLen = 5;
+//        }
+//        else
+//        {
+//            frmLen = 6;
+//        }
+
+        if (dataLen < (frmLen + *frmNullStart))//帧没有收全
+        {
+            return 0;
+        }
+
+//        byFrmSum  = m_pRecvFrame_0x10->byAsduInfo[frmLen - HEAD_LEN_0x10 - TAIL_LEN + 0];
+        byEndCode = m_pRecvFrame_0x10->byAsduInfo[frmLen - HEAD_LEN_0x10 - TAIL_LEN + 1];
+
+        if (byEndCode != END_CODE)
+        {
+            *frmNullStart += 1;
+            return -1;
+        }
+
+//        byCalSum = CalSumByte((m_pRecvFrame_0x10->byAsduInfo), (wFrameLen - HEAD_LEN_0x10 - TAIL_LEN));
+
+//        if (byFrmSum != byCalSum)
+//        {
+//            printf("\n\033[31m %s-%d : Error ! byFrmSum = %02X, byCalSum = %02X !\033[0m\n", __FUNCTION__, __LINE__, byFrmSum, byCalSum);
+
+//            m_RecvBuf.wReadPtr += 1;
+//            return (SF_FALSE);
+//        }
+
+        return (frmLen);
+
+    }
+    else  if(frmData[i] == START_CODE_0x68) //可变帧帧长度
+    {
+        ST_IEC101Frame_0x68 *m_pRecvFrame_0x68 = (ST_IEC101Frame_0x68 *)(frmData + i);
+
+        if (m_pRecvFrame_0x68->byStartCode2 != START_CODE_0x68)
+        {
+            *frmNullStart += 1;
+            return -1;//出现坏帧
+        }
+
+        if (m_pRecvFrame_0x68->byApduLen != m_pRecvFrame_0x68->byApduLen2)
+        {
+           *frmNullStart += 1;
+           return -1;
+        }
+
+        frmLen = m_pRecvFrame_0x68->byApduLen + HEAD_LEN_0x68 + TAIL_LEN;
+
+        if (dataLen < (frmLen + *frmNullStart))//帧没有收全
+        {
+            return 0;
+        }
+
+
+       byEndCode = m_pRecvFrame_0x68->byAsduInfo[frmLen - 4 - 2 + 1];
+
+       if (byEndCode != 0x16)//结束符
+       {
+           *frmNullStart += 1;
+           return -1;
+       }
+
+        return (frmLen);
+
+    }
+
+    return 0;
+}
+
 int main(int argc, char **argv)
 {
-    char cmd[] = "ls etac 2>&1";
-    FILE *fp=popen(cmd, "r");
-    char line[2048] = {0x00};
-    fread(line, 1,2048, fp);
-    pclose(fp);
-    DEBUG_TIME_LINE("result: %s", line);
+    u8 frame[] = {0x10 ,0x8B ,0x01 ,0x00 ,0x8C ,0x16};
+    int unvalidLen = 0;
+    int oneFrameLen = SearchFrameFor101(frame, sizeof(frame), 2, &unvalidLen);
     return 0;
 }
