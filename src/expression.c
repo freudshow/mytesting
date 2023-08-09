@@ -169,7 +169,7 @@ int evaluate(char *postfix)
 
 #define E9361_D0_MAX(a, b, c)       ((a) > (b)) ? (((a) > (c)) ? (a) : (c)) : (((b) > (c)) ? (b) : (c))
 
-int main(int argc, char **argv)
+int expmain(int argc, char **argv)
 {
     char infix[25] = "1*(2+3)", postfix[25];
     convert(infix, postfix);
