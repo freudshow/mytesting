@@ -3,11 +3,15 @@
 #include <string.h>
 #include <unistd.h>
 #include <time.h>
+#include <sys/time.h>
 #include "sqlite3.h"
 #include "basedef.h"
 
+#define SQLITE_IN_MEMORY_MODE   ":memory:"
 #define CURVE_DB_NAME   "curve.db"
 #define ATTACH_DB_NAME  "curve"
+#define DEFAULT_MEMORY_NAME "main"
+#define CURVE_TABLE_NAME    "realdata"
 
 typedef unsigned char boolean; /* bool value, 0-false, 1-true       */
 typedef unsigned char u8; /* Unsigned  8 bit quantity          */
@@ -28,14 +32,11 @@ void get_time_stamp(char *buf, u32 bufLen)
 
     gettimeofday(&systime, NULL);
     localtime_r(&systime.tv_sec, &timeinfo);
-    snprintf(buf, bufLen, "%04d-%02d-%02d %02d:%02d:%02d %03ld", (timeinfo.tm_year + 1900),
-            timeinfo.tm_mon + 1, timeinfo.tm_mday, timeinfo.tm_hour,
-            timeinfo.tm_min, timeinfo.tm_sec, systime.tv_usec/1000);
+    snprintf(buf, bufLen, "%04d-%02d-%02d %02d:%02d:%02d %03ld", (timeinfo.tm_year + 1900), timeinfo.tm_mon + 1, timeinfo.tm_mday, timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec, systime.tv_usec / 1000);
 }
 
 int sqlite_db_create(char *dbname, sqlite3 **db)
 {
-
     if (sqlite3_open(dbname, db))
     {
         DEBUG_TIME_LINE("Can't open database_file\n");
@@ -47,23 +48,27 @@ int sqlite_db_create(char *dbname, sqlite3 **db)
     return 0;
 }
 
-int limitDbSize(sqlite3 *db)
+/**
+ * ---------------------------------------------
+ * The max_page_count setting is a runtime
+ * option that doesn't persist across
+ * connections to a database
+ * , so once the dbhandler is closed,
+ * the parameter is set to default.
+ * ---------------------------------------------
+ * @param db
+ * @param alias
+ * ---------------------------------------------
+ * @return
+ */
+int limitDbSize(sqlite3 *db, char *alias)
 {
     char *errmsg;
+    char sql[128] = { 0 };
     /* 限值数据库大小5M，默认每页4096，最大页数20*/
 
-    if (sqlite3_exec(db, "PRAGMA page_size = 4096;", NULL, NULL, &errmsg))
-    {
-        DEBUG_TIME_LINE("limit file size error\n");
-        return -1;
-    }
-    else
-    {
-        DEBUG_TIME_LINE("limit file size success\n");
-    }
-
-
-    if (sqlite3_exec(db, "PRAGMA max_page_count = 1500;", NULL, NULL, &errmsg))
+    snprintf(sql, sizeof(sql) - 1, "PRAGMA %s.max_page_count = 50;", alias);
+    if (sqlite3_exec(db, sql, NULL, NULL, &errmsg))
     {
         DEBUG_TIME_LINE("limit file size error\n");
         return -1;
@@ -76,18 +81,18 @@ int limitDbSize(sqlite3 *db)
     return 0;
 }
 
-int sqlite_table_create(char *tablename, sqlite3 *dbhandle)
+int sqlite_table_create(char *tablename, sqlite3 *dbhandle, char *alias)
 {
     char sql[328];
     char *errmsg;
 
     memset(sql, '\0', sizeof(sql));
-    snprintf(sql, sizeof(sql) - 1, "CREATE TABLE if not exists realdata (\
+    snprintf(sql, sizeof(sql) - 1, "CREATE TABLE if not exists %s.%s (\
                             RtdbNo INT,\
                             Name   STRING,\
                             Value  FLOAT,\
                             Time   TEXT\
-                        );");
+                        );", alias, tablename);
 
     if (sqlite3_exec(dbhandle, sql, NULL, NULL, &errmsg))
     {
@@ -132,7 +137,7 @@ int sqlite_table_AttachDb(sqlite3 *db, char *filename, char *attachname)
  输出参数：无
  返回值： 0成功，-1失败
  ------------------------------------------------------------------------*/
-int sqlite_table_load_data_from_file(sqlite3 *db_memory, sqlite3 *db_file, char *filedbAttechedName)
+int sqlite_table_load_data_from_file(sqlite3 *db, char *memoryAlias, char *filedbAlias)
 {
     int i = 0;
     int rc = 0;
@@ -144,8 +149,8 @@ int sqlite_table_load_data_from_file(sqlite3 *db_memory, sqlite3 *db_file, char 
     int nrow, ncolumn;
     char **db_result;
 
-    snprintf(sql, sizeof(sql) - 1, "SELECT name FROM sqlite_master WHERE type='table'");
-    ret = sqlite3_get_table(db_file, sql, &db_result, &nrow, &ncolumn, &s);
+    snprintf(sql, sizeof(sql) - 1, "SELECT name FROM %s.sqlite_master WHERE type='table'", filedbAlias);
+    ret = sqlite3_get_table(db, sql, &db_result, &nrow, &ncolumn, &s);
     if (ret)
     {
         DEBUG_TIME_LINE("select error\n");
@@ -155,13 +160,13 @@ int sqlite_table_load_data_from_file(sqlite3 *db_memory, sqlite3 *db_file, char 
     DEBUG_TIME_LINE("table count : %d\r\n", nrow);
     for (i = 0; i < nrow; i++)
     {
-        snprintf(sqlcmd, sizeof(sqlcmd), "create table %s as select * from %s.%s", db_result[1 + i], filedbAttechedName, db_result[1 + i]);
+        snprintf(sqlcmd, sizeof(sqlcmd), "create table %s.%s as select * from %s.%s", memoryAlias, db_result[1 + i], filedbAlias, db_result[1 + i]);
         DEBUG_TIME_LINE("read table from file :%s\r\n", db_result[1 + i]);
-        rc = sqlite3_exec(db_memory, sqlcmd, NULL, NULL, &errMsg);
+        rc = sqlite3_exec(db, sqlcmd, NULL, NULL, &errMsg);
         if (SQLITE_OK != rc)
         {
             DEBUG_TIME_LINE("create table<%s> error: %s", db_result[1 + i], errMsg);
-            sqlite3_close(db_memory);
+            sqlite3_close(db);
             return -1;
         }
     }
@@ -176,7 +181,7 @@ int sqlite_table_load_data_from_file(sqlite3 *db_memory, sqlite3 *db_file, char 
  输出参数：无
  返回值： 0成功，-1失败
  ------------------------------------------------------------------------*/
-int sqlite_table_Flush(sqlite3 *db, char *filedbAttechedName)
+int sqlite_table_Flush(sqlite3 *db, char *memoryAlias, char *filedbAlias)
 {
     int i = 0;
     int rc = 0;
@@ -186,7 +191,7 @@ int sqlite_table_Flush(sqlite3 *db, char *filedbAttechedName)
     int nrow, ncolumn;
     char **db_result;
 
-    snprintf(sqlcmd, sizeof(sqlcmd) - 1, "SELECT name FROM sqlite_master WHERE type='table'");
+    snprintf(sqlcmd, sizeof(sqlcmd) - 1, "SELECT name FROM %s.sqlite_master WHERE type='table'", memoryAlias);
     ret = sqlite3_get_table(db, sqlcmd, &db_result, &nrow, &ncolumn, &errMsg);
     if (ret)
     {
@@ -198,7 +203,7 @@ int sqlite_table_Flush(sqlite3 *db, char *filedbAttechedName)
 
     for (i = 0; i < nrow; i++)
     {
-        snprintf(sqlcmd, sizeof(sqlcmd), "INSERT OR REPLACE INTO %s.%s SELECT * FROM %s;", filedbAttechedName, db_result[1 + i], db_result[1 + i]);
+        snprintf(sqlcmd, sizeof(sqlcmd), "INSERT OR REPLACE INTO %s.%s SELECT * FROM %s.%s;", filedbAlias, db_result[1 + i], memoryAlias, db_result[1 + i]);
         DEBUG_TIME_LINE("flush table:%s\r\n", db_result[1 + i]);
         rc = sqlite3_exec(db, sqlcmd, NULL, NULL, &errMsg);
         if (SQLITE_OK != rc)
@@ -208,21 +213,103 @@ int sqlite_table_Flush(sqlite3 *db, char *filedbAttechedName)
         }
     }
 
+    sqlite3_free_table(&db_result);
+
     return 0;
 }
 
-int insertData(sqlite3 *db)
+int delData(sqlite3 *db)
+{
+    char sql[128] = { 0 };
+
+    snprintf(sql, sizeof(sql) - 1, "PRAGMA page_count;");
+
+
+
+    return 0;
+}
+
+int insertData(sqlite3 *db, char *alias)
 {
     char sql[128] = { 0 };
     char time[64] = { 0 };
     char *errMsg;
 
     get_time_stamp(time, sizeof(time));
-    snprintf(sql, sizeof(sql) - 1, "insert into realdata values (1, 'A_voltage', 220.1, '%s')", time);
-    if (SQLITE_OK != sqlite3_exec(db, sql, NULL, NULL, &errMsg))
+    snprintf(sql, sizeof(sql) - 1, "insert into %s.realdata values (1, 'A_voltage', 220.1, '%s')", alias, time);
+    int res = sqlite3_exec(db, sql, NULL, NULL, &errMsg);
+    if (SQLITE_OK != res)
     {
-        sqlite3_close(db);
+        DEBUG_TIME_LINE("res: %d, error: %s", res, errMsg);
+        if(res == SQLITE_FULL)
+        {
+            delData(db);
+        }
+
         return -1;
+    }
+
+    return 0;
+}
+
+int loadOrSaveDb(sqlite3 *pInMemory, const char *zFilename, int isSave)
+{
+    int rc = -1; /* Function return code */
+    sqlite3 *pFile; /* Database connection opened on zFilename */
+    sqlite3_backup *pBackup; /* Backup object used to copy data */
+    sqlite3 *pTo; /* Database to copy to (pFile or pInMemory) */
+    sqlite3 *pFrom; /* Database to copy from (pFile or pInMemory) */
+
+    /* Open the database file identified by zFilename. Exit early if this fails
+     ** for any reason. */
+    rc = sqlite3_open(zFilename, &pFile);
+    if (rc == SQLITE_OK)
+    {
+
+        /* If this is a 'load' operation (isSave==0), then data is copied
+         ** from the database file just opened to database pInMemory.
+         ** Otherwise, if this is a 'save' operation (isSave==1), then data
+         ** is copied from pInMemory to pFile.  Set the variables pFrom and
+         ** pTo accordingly. */
+        pFrom = (isSave ? pInMemory : pFile);
+        pTo = (isSave ? pFile : pInMemory);
+
+        /* Set up the backup procedure to copy from the "main" database of
+         ** connection pFile to the main database of connection pInMemory.
+         ** If something goes wrong, pBackup will be set to NULL and an error
+         ** code and message left in connection pTo.
+         **
+         ** If the backup object is successfully created, call backup_step()
+         ** to copy data from pFile to pInMemory. Then call backup_finish()
+         ** to release resources associated with the pBackup object.  If an
+         ** error occurred, then an error code and message will be left in
+         ** connection pTo. If no error occurred, then the error code belonging
+         ** to pTo is set to SQLITE_OK.
+         */
+        pBackup = sqlite3_backup_init(pTo, "main", pFrom, "main");
+        if (pBackup)
+        {
+            (void) sqlite3_backup_step(pBackup, -1);
+            (void) sqlite3_backup_finish(pBackup);
+        }
+
+        rc = sqlite3_errcode(pTo);
+        DEBUG_TIME_LINE("rc: %d", rc);
+    }
+
+    /* Close the database connection opened on database file zFilename
+     ** and return the result of this function. */
+    (void) sqlite3_close(pFile);
+    return rc;
+}
+
+int fileExist(char *filename)
+{
+    struct stat st;
+
+    if (stat(filename, &st) == 0)
+    {
+        return 1;
     }
 
     return 0;
@@ -230,53 +317,41 @@ int insertData(sqlite3 *db)
 
 int main(int argc, char *argv[])
 {
-    sqlite3 *filedb; //db in hard-drive
-    sqlite3 *memdb; //db in memory
-
-    int iTime = 0;
+    sqlite3 *memdb;
 
     /* 创建实时数据库（内存库和文件库） */
-    if (sqlite_db_create(":memory:", &memdb) < 0)
+    if (sqlite_db_create(SQLITE_IN_MEMORY_MODE, &memdb) < 0)
     {
-        return -1;
-    }
-
-    if (sqlite_db_create(CURVE_DB_NAME, &filedb) < 0)
-    {
-        sqlite3_close(memdb);
-        return -1;
-    }
-
-    if (sqlite_table_create(CURVE_DB_NAME, filedb) < 0)
-    {
-        sqlite3_close(memdb);
-        sqlite3_close(filedb);
-        return -1;
-    }
-
-    limitDbSize(filedb);
-
-    /* 将内存实时库和文件实时库绑定 */
-    if (sqlite_table_AttachDb(memdb, CURVE_DB_NAME, ATTACH_DB_NAME) < 0)
-    {
-        sqlite3_close(memdb);
-        sqlite3_close(filedb);
         return -1;
     }
 
     /* 从文件实时库中表复制到内存库中 */
-    sqlite_table_load_data_from_file(memdb, filedb, ATTACH_DB_NAME);
+    if (fileExist(CURVE_DB_NAME))
+    {
+        loadOrSaveDb(memdb, CURVE_DB_NAME, 0);
+    }
 
+    limitDbSize(memdb, DEFAULT_MEMORY_NAME);
+
+    if (sqlite_table_create(CURVE_TABLE_NAME, memdb, DEFAULT_MEMORY_NAME) < 0)
+    {
+        sqlite3_close(memdb);
+        return -1;
+    }
+
+    u32 rows = 0;
+    int iTime = 0;
     while (1)
     {
-        insertData(memdb);
+        insertData(memdb, DEFAULT_MEMORY_NAME);
         usleep(10000);
         iTime++;
+        rows++;
 
         /* 定时将内存实时库数据复制到文件实时库中 */
         if (iTime >= 600)
         {
-            sqlite_table_Flush(memdb, ATTACH_DB_NAME);
+            loadOrSaveDb(memdb, CURVE_DB_NAME, 1);
             iTime = 0;
         }
     }
