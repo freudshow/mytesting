@@ -32,7 +32,7 @@ void get_time_stamp(char *buf, u32 bufLen)
 
     gettimeofday(&systime, NULL);
     localtime_r(&systime.tv_sec, &timeinfo);
-    snprintf(buf, bufLen, "%04d-%02d-%02d %02d:%02d:%02d %03ld", (timeinfo.tm_year + 1900), timeinfo.tm_mon + 1, timeinfo.tm_mday, timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec, systime.tv_usec / 1000);
+    snprintf(buf, bufLen, "%04d-%02d-%02d %02d:%02d:%02d.%03ld", (timeinfo.tm_year + 1900), timeinfo.tm_mon + 1, timeinfo.tm_mday, timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec, systime.tv_usec / 1000);
 }
 
 int sqlite_db_create(char *dbname, sqlite3 **db)
