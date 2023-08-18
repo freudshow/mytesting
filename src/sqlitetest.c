@@ -221,8 +221,19 @@ int sqlite_table_Flush(sqlite3 *db, char *memoryAlias, char *filedbAlias)
 int delData(sqlite3 *db)
 {
     char sql[128] = { 0 };
+    char *errMsg;
 
-    snprintf(sql, sizeof(sql) - 1, "PRAGMA page_count;");
+    snprintf(sql, sizeof(sql) - 1, "delete from realdata where rowid < (select max(rowid)/2  from realdata);vacuum;");
+    int res = sqlite3_exec(db, sql, NULL, NULL, &errMsg);
+    if (SQLITE_OK != res)
+    {
+        DEBUG_TIME_LINE("res: %d, error: %s", res, errMsg);
+        return -1;
+    }
+    else
+    {
+        DEBUG_TIME_LINE("delete successfully");
+    }
 
     return 0;
 }
