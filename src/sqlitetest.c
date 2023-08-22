@@ -388,7 +388,7 @@ int fileExist(char *filename)
     return 0;
 }
 
-int main(int argc, char *argv[])
+int sql3main(int argc, char *argv[])
 {
     sqlite3 *memdb;
 
