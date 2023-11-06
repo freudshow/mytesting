@@ -38,6 +38,8 @@ int precedence(char symbol)
             return 1;
             break;
     }
+
+    return 0;
 }
 
 //check whether the symbol is operator?
