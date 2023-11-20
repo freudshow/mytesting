@@ -49,5 +49,6 @@ int main(int argc, char **argv)
             }";
 
     json_t *root = json_loads(content, 0, NULL);
+    json_decref(root);
     return 0;
 }
