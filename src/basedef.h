@@ -24,6 +24,9 @@ typedef signed long long s64; /* Unsigned 64 bit quantity          */
 typedef float fp32; /* Single precision floating point   */
 typedef double fp64; /* Double precision floating point   */
 
+#define LOG_SIZE    (2*1024*1024)                       //日志文件最大长度
+#define LOG_COUNT   5                                  //日志文件最大个数
+
 #pragma pack(push)
 #pragma pack(1)
 
@@ -283,6 +286,7 @@ void minus33(u8 *buf, int bufSize);
 u8 chkSum(u8 *buf, u16 bufSize);
 int decode_base64(char *enStr, u32 enSize, u8 *deBuf);
 int encode_base64(u8 *buf, u32 len, char *enStr);
+int logLimit(const char *fname, int logsize, int logCount);
 
 #ifdef __cplusplus
 #if __cplusplus

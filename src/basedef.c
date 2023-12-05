@@ -6,6 +6,8 @@
 #include <sys/time.h>
 #include <stdarg.h>
 #include <string.h>
+#include <error.h>
+#include <errno.h>
 
 /**************************************************
  * 功能描述: 获得当前时间字符串
@@ -31,28 +33,160 @@ void get_local_time(char *buf, u32 bufLen)
 }
 
 /**************************************************
- * 功能描述: 将字节数组, 以16进制格式, 打印到字符串out中, 以空格
- * 分开每个字节
+ * 功能描述: 获得当前日志目录下, 日志后缀数值最大的号码. 例如, 日志目录
+ * 为 /var/logs/, 日志文件名的前缀是"1376log.", 假如当前时刻目录
+ * "/var/logs/"下有文件"1376log.1", "1376log.2",
+ *  "1376log.3", 3个文件, 那么此函数返回整数3
  * ------------------------------------------------
- * 输入参数: buf [in]: 字节数组
- * 输入参数: len [in]: 字节数组长度
- * 输出参数: out, 输出的字符串
+ * 输入参数: fname [in]: 日志文件存放的目录名
+ * 输出参数: 无
  * ------------------------------------------------
- * 返回值: 无
+ * 返回值: 成功, 返回日志文件后缀数的最大值; 失败, 返回 -1
  * ------------------------------------------------
  * 修改日志:
  *      1. 日期: 2020年7月19日
  创建函数
  **************************************************/
-void getBufString(char *buf, int len, char *out)
+int getMaxFileNo(const char *fname)
 {
-    int i = 0;
-    char s[5] = { 0 };
-    for (i = 0; i < len; i++)
-    {
-        sprintf(s, "%02X ", (unsigned char) buf[i]);
-        strcat(out, s);
+    int ret = 0;
+    char cmd[100] = { 0 }; //调用shell命令
+    char result[128] = { 0 };
+    FILE *fstream = NULL;
+
+    sprintf(cmd, "ls -r %s*|cut -c %d-99", fname, (int) strlen(fname) + 2); //最大两位数
+
+    if (NULL == (fstream = popen(cmd, "r"))) { //打开管道
+        fprintf(stdout, "execute command failed: %s", strerror(errno));
+        return -1;
     }
+
+    if (0 != fread(result, sizeof(char), sizeof(result), fstream)) { //读取执行结果
+        int i = 0;
+        while (result[i] != '\n') //读取第一个数字, 'ls -r' 命令默认降序排列
+            i++;
+
+        result[i] = 0; //字符串结束符
+        ret = atoi(&result[0]);
+    } else {
+        ret = -1;
+    }
+
+    pclose(fstream);
+
+    return ret;
+}
+
+/**************************************************
+ * 功能描述: 检查当前时刻, 日志目录下的日志文件是否达到设定的最大文件数,
+ * 如果已经达到了最大文件数, 则删除后缀值最大的文件, 且将其前序文件的后
+ * 缀值依次增1. 例如, 当前设定的最大日志文件数为3, 且当前日志文件目录
+ * 下的日志文件数已达到3个: log.0, log.1, log.2, 那么就将文件
+ * "log.2"删掉, 依次将log.0, log.1的文件名修改为log.1,
+ * log.2, 以保持日志记录的时间顺序
+ * ------------------------------------------------
+ * 输入参数: fname [in]: 日志文件名的前缀
+ * 输入参数: logCount [in]: 设定的日志文件的最大数
+ * 输出参数: 无
+ * ------------------------------------------------
+ * 返回值: 成功, 返回0; 失败, 返回 -1
+ * ------------------------------------------------
+ * 修改日志:
+ *      1. 日期: 2020年7月19日
+ 创建函数
+ **************************************************/
+int mvFiles(const char *fname, int logCount)
+{
+    if ((access(fname, F_OK)) != 0) {
+        return -1;
+    }
+
+    char name[100] = { 0 };
+    int max = getMaxFileNo(fname);
+    int i = 0;
+
+    if (max < 0)
+        return -1;
+
+    if ((max + 1) == logCount) {
+        sprintf(name, "%s.%d", fname, max);
+        max -= 1;
+        unlink(name);
+        sync();
+    }
+
+    char cmd[200] = { 0 };
+    for (i = max; i > 0; i--) {
+        sprintf(cmd, "mv %s.%d %s.%d", fname, i, fname, i + 1);
+
+        if (system(cmd) == -1) {
+            printf("mvFiles err \r\n");
+            return -1;
+        }
+    }
+
+    if (logCount > 1) {
+        sprintf(cmd, "mv %s %s.%d", fname, fname, i + 1);
+
+        if (system(cmd) == -1) {
+            printf("mvFiles err \r\n");
+            return -1;
+        }
+    }
+
+    return 0;
+}
+
+/**************************************************
+ * 功能描述: 检查当前时刻, 日志目录下的日志文件是否达到设定的最大文件数,
+ * 如果已经达到了最大文件数, 则删除后缀值最大的文件, 且将其前序文件的后
+ * 缀值依次增1. 例如, 当前设定的最大日志文件数为3, 且当前日志文件目录
+ * 下的日志文件数已达到3个: log.0, log.1, log.2, 那么就将文件
+ * "log.2"删掉, 依次将log.0, log.1的文件名修改为log.1,
+ * log.2, 以保持日志记录的时间顺序
+ * ------------------------------------------------
+ * 输入参数: fname [in]: 文件名, 绝对路径
+ * 输入参数: logsize [in]: 日志文件的最大长度
+ * 输入参数: logCount [in]: 日志文件的最大个数
+ * 输出参数: 无
+ * ------------------------------------------------
+ * 返回值: 成功, 返回0; 失败, 返回 -1
+ * ------------------------------------------------
+ * 修改日志:
+ *      1. 日期: 2020年7月19日
+ 创建函数
+ **************************************************/
+int logLimit(const char *fname, int logsize, int logCount)
+{
+    char cmd[128] = { 0 };
+    struct stat fileInfo = { 0 };
+    int ret = 0;
+
+    int res = stat(fname, &fileInfo);
+    if (res == -1) {
+        sprintf(cmd, "rm -f %s", fname);
+
+        if (system(cmd) == -1) {
+            printf("mvFiles err \r\n");
+            return -1;
+        }
+        return -1;
+    }
+
+    /**
+     * 检查当前日志文件名的最大值(以logCount为参照)
+     * 比如, logCount = 10, 如果当前文件名有'.9'
+     * 结尾的, 那么就将'fname.9'删掉, 依次将'fname.8'复制
+     * 为'fname9', 'fname.7'复制为'fname.8'...'fname'
+     * 复制为'fname.1'; 如果当前文件没有达到最大值,
+     * 则依次复制当前最大值的文件名, 往后累加一个.
+     * 所以, 最关键的是获取当前最大的文件名.
+     */
+    if (fileInfo.st_size > logsize) {
+        ret = mvFiles(fname, logCount);
+    }
+
+    return ret;
 }
 
 /**************************************************
@@ -85,14 +219,13 @@ void debugBufFormat2fp(FILE *fp, const char *file, const char *func, int line, c
 
         if (buf != NULL && len > 0)
         {
-            char *s = (char*) calloc(1, 3 * (len + 1)); //多开3个字符的余量
-            if (s != NULL)
+            int i = 0;
+            for (i = 0; i < len; i++)
             {
-                getBufString(buf, len, s);
-                fprintf(fp, "%s", s);
-                free(s);
+                fprintf(fp, "%02X ", (u8) buf[i]);
             }
         }
+
         fprintf(fp, "\n");
         fflush(fp);
         if (fp != stdout && fp != stderr)

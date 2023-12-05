@@ -1,6 +1,9 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <jansson.h>
+#include <unistd.h>
+
+#include "basedef.h"
 
 int main(int argc, char **argv)
 {
@@ -50,5 +53,6 @@ int main(int argc, char **argv)
 
     json_t *root = json_loads(content, 0, NULL);
     json_decref(root);
+
     return 0;
 }
