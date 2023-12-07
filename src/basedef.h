@@ -128,6 +128,8 @@ typedef struct dlt645LoadDataBlock
     const typeof(((type *)0)->member) * __mptr = (ptr);   \
     (type *)((char *)__mptr - OFFSETOF(type, member)); })
 
+#define NELEM(array)    (sizeof(array)/sizeof(array[0]))//求一个数组的元素个数
+
 #define FILE_LINE       __FILE__,__FUNCTION__,__LINE__
 //格式化打印日志, 带报文输出
 #define DEBUG_BUFFFMT_TO_FILE(fname, buf, bufSize, format, ...) do {\
@@ -191,9 +193,9 @@ typedef struct dlt645LoadDataBlock
  */
 #define A_LIST_OF(type)                     \
     struct {                                \
-        unsigned int  capacity; /*当前列表的最大容量*/       \
-        unsigned int  count;    /*当前列表的元素个数*/       \
-        unsigned int  idx;     /*当前元素索引*/       \
+        u32  capacity; /*当前列表的最大容量*/       \
+        u32  count;    /*当前列表的元素个数*/       \
+        u32  idx;     /*当前元素索引*/       \
         type *list;    /*列表*/               \
         void (*free)(void *);/*释放列表*/     \
     }
@@ -216,15 +218,17 @@ typedef struct dlt645LoadDataBlock
 /**
  * 列表扩容
  */
-#define EXTEND_LIST(vlist, type, delta)   \
+#define EXTEND_LIST(vlist, type, delta, res)   \
     do {\
-        type *p = (type*)malloc((vlist.capacity + delta)*sizeof(type));\
-        if(p != NULL) {\
-            memcpy(p, vlist.list, vlist.count*sizeof(type));\
-            vlist.free(vlist.list);\
-            vlist.list = p;\
-            vlist.capacity += delta;\
+        type *p = (type*)calloc((vlist.capacity + delta), sizeof(type));\
+        if(p == NULL) {\
+            res = -1;\
+            break;\
         }\
+        memcpy(p, vlist.list, vlist.count*sizeof(type));\
+        vlist.free(vlist.list);\
+        vlist.list = p;\
+        vlist.capacity += delta;\
     }while(0)
 
 /**
@@ -235,24 +239,43 @@ typedef struct dlt645LoadDataBlock
  * delta - 如果插入时需要扩容, 则扩容的大小
  * type - 元素类型
  * tempit - 临时的循环变量, 是为了避免变量名冲突
+ * res - 返回值
  */
-#define INSERT_ITEM_TO_LIST(vlist, idx, item, delta, type, tempit)   \
+#define INSERT_ITEM_TO_LIST(vlist, idx, pItem, delta, type, tempit, res)   \
         do {\
-                if (idx < 0 || idx >= vlist.count)\
+                if (vlist.list == NULL || vlist.capacity == 0)\
                 {\
+                    res = -1;\
                     break;\
                 }\
-                if ((vlist.count + 1) > vlist.capacity)\
+                if (idx == 0 && vlist.count == 0)\
                 {\
-                    EXTEND_LIST(vlist, type, delta);\
+                    res = 0;\
+                    memcpy(&vlist.list[idx], pItem, sizeof(type));\
+                    vlist.count++;\
+                    break;\
+                }\
+                if (idx < 0 || idx > vlist.count)\
+                {\
+                    res = -1;\
+                    break;\
+                }\
+                if (vlist.count == vlist.capacity)\
+                {\
+                    EXTEND_LIST(vlist, type, delta, res);\
+                }\
+                if (res == -1)\
+                {\
+                    break;\
                 }\
                 for (tempit = vlist.count; tempit > ((idx) + 1); tempit--)\
                 {\
                     vlist.list[tempit] = vlist.list[tempit - 1];\
                     printf("--tempit: %d--\n", tempit);\
                 }\
-                vlist.list[tempit] = item;\
+                memcpy(&vlist.list[idx], pItem, sizeof(type));\
                 vlist.count++;\
+                res = 0;\
             } while (0)
 
 /**
