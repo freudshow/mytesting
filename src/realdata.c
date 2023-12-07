@@ -31,6 +31,7 @@ typedef struct dataListStruct {
     int linkNo;                     //链路号
     int type;                       //遥测遥信类型
     dataItemList_s dataItemList;    //实时库列表
+    int (*free)(dataList_s *pList);
     int (*append)(dataList_s *pList, dataItem_s *pDataItem, u32 idx);
     int (*getItemByRealNo)(dataList_s *pList, int realNo, dataItem_s *pDataItem);
     int (*getFirst)(dataList_s *pList, dataItem_s *pDataItem);
@@ -263,21 +264,23 @@ static int initDataList(dataList_s *pList, u32 size, int devNo, int linkNo, int 
     return 0;
 }
 
-static void freeOneType(oneType_s *pList)
+static void freeOneDataList(oneType_s *pOneType)
 {
-    if (pList == NULL)
+    if (pOneType == NULL || pOneType->divDataList.list == NULL || pOneType->divDataList.capacity == 0)
     {
         return;
     }
 
-    if (pList->divDataList.list != NULL)
-    {
-        int i = 0;
-        for (i = 0; i < pList->divDataList.capacity; i++)
-        {
-            pList->divDataList.free(&pList->divDataList.list[i].dataItemList.list);
-        }
-    }
+    int i = 0;
+    for(i = 0; pOneType->divDataList.capacity; i++)
+	{
+    	pOneType->divDataList.list[i].dataItemList.free(pOneType->divDataList.list[i].dataItemList.list);
+	}
+
+	free(pOneType->divDataList.list);
+	pOneType->divDataList.list = NULL;
+	pOneType->divDataList.capacity = 0;
+	pOneType->divDataList.count = 0;
 }
 
 static int initOneType(oneType_s *pOneType, u32 size, int devNo, int linkNo, int type)
@@ -287,13 +290,15 @@ static int initOneType(oneType_s *pOneType, u32 size, int devNo, int linkNo, int
         return -1;
     }
 
-    INIT_LIST(pOneType->divDataList, dataList_s, size, freeOneType);
+    INIT_LIST(pOneType->divDataList, dataList_s, size, NULL);
 
     int i = 0;
     for (i = 0; i < pOneType->divDataList.capacity; i++)
     {
         initDataList(& pOneType->divDataList.list[i], size, devNo, linkNo, type);
     }
+
+    pOneType->free = freeOneDataList;
 
     return 0;
 }
