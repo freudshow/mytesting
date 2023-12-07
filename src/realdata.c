@@ -50,7 +50,7 @@ typedef struct oneTypeListStruct {
     int linkNo;                     //链路号
     int type;                       //遥测遥信类型
     divDataItemList_s divDataList;  //不连续的实时库列表
-    int (*append)(oneType_s *pList, dataItem_s *pDataItem, u32 idx);
+    int (*append)(oneType_s *pList, dataItem_s *pDataItem);
     int (*getItemByRealNo)(oneType_s *pList, int realNo, dataItem_s *pDataItem);
     int (*getFirst)(oneType_s *pList, dataItem_s *pDataItem);
     int (*getLast)(oneType_s *pList, dataItem_s *pDataItem);
@@ -281,6 +281,11 @@ static void freeOneDataList(oneType_s *pOneType)
 	pOneType->divDataList.list = NULL;
 	pOneType->divDataList.capacity = 0;
 	pOneType->divDataList.count = 0;
+}
+
+static int appendDataItemToOneType()
+{
+
 }
 
 static int initOneType(oneType_s *pOneType, u32 size, int devNo, int linkNo, int type)
