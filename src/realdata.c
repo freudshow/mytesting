@@ -20,7 +20,6 @@ typedef struct dataItemStruct {
 } dataItem_s;
 
 typedef A_LIST_OF(dataItem_s) dataItemList_s;
-struct dataListStruct;
 typedef struct dataListStruct dataList_s;
 
 /**
@@ -32,17 +31,15 @@ typedef struct dataListStruct {
     int linkNo;                     //链路号
     int type;                       //遥测遥信类型
     dataItemList_s dataItemList;    //实时库列表
-    int (*init)(dataList_s *pList, u32 size, int devNo, int linkNo, int type);
     int (*append)(dataList_s *pList, dataItem_s *pDataItem, u32 idx);
     int (*getItemByRealNo)(dataList_s *pList, int realNo, dataItem_s *pDataItem);
     int (*getFirst)(dataList_s *pList, dataItem_s *pDataItem);
     int (*getLast)(dataList_s *pList, dataItem_s *pDataItem);
-    int (*remove)(dataList_s *pList, u32 idx);
-    int (*modify)(dataItem_s *pDataItem, u32 idx);
     void (*print)(dataList_s *pList, u32 depth);
 } dataList_s;
 
 typedef A_LIST_OF(dataList_s) divDataItemList_s;
+typedef struct oneTypeListStruct oneType_s;
 
 /**
  * 一个遥测遥信类型
@@ -52,9 +49,16 @@ typedef struct oneTypeListStruct {
     int linkNo;                     //链路号
     int type;                       //遥测遥信类型
     divDataItemList_s divDataList;  //不连续的实时库列表
+    int (*append)(oneType_s *pList, dataItem_s *pDataItem, u32 idx);
+    int (*getItemByRealNo)(oneType_s *pList, int realNo, dataItem_s *pDataItem);
+    int (*getFirst)(oneType_s *pList, dataItem_s *pDataItem);
+    int (*getLast)(oneType_s *pList, dataItem_s *pDataItem);
+    void (*print)(oneType_s *pList, u32 depth);
+    void (*free)(oneType_s *pList);
 } oneType_s;
 
 typedef A_LIST_OF(oneType_s) typeList_s;
+typedef struct oneLinkStruct oneLink_s;
 
 /**
  * 一个链路
@@ -101,7 +105,7 @@ static int appendDataItem(dataList_s *pList, dataItem_s *pDataItem, u32 idx)
 
     if (pList->dataItemList.count == pList->dataItemList.capacity)
     {
-        dataItem_s *p = (dataItem_s*) calloc((pList->dataItemList.capacity + 5), sizeof(dataItem_s));
+        dataItem_s *p = (dataItem_s*) calloc((pList->dataItemList.capacity + REAL_DATA_LIST_DELTA_SIZE), sizeof(dataItem_s));
         if (p == NULL)
         {
             return -1;
@@ -110,7 +114,7 @@ static int appendDataItem(dataList_s *pList, dataItem_s *pDataItem, u32 idx)
         memcpy(p, pList->dataItemList.list, pList->dataItemList.count * sizeof(dataItem_s));
         pList->dataItemList.free(pList->dataItemList.list);
         pList->dataItemList.list = p;
-        pList->dataItemList.capacity += 5;
+        pList->dataItemList.capacity += REAL_DATA_LIST_DELTA_SIZE;
     }
 
     if (idx == pList->dataItemList.count)
@@ -147,7 +151,6 @@ static int getItemByRealNo(dataList_s *pList, int realNo, dataItem_s *pDataItem)
             return 0;
         }
     }
-
 
     pDataItem->realNo = -1;
     pDataItem->value = -1;
@@ -260,9 +263,44 @@ static int initDataList(dataList_s *pList, u32 size, int devNo, int linkNo, int 
     return 0;
 }
 
-static int initOneType(devList_s *pList)
+static void freeOneType(oneType_s *pList)
 {
     if (pList == NULL)
+    {
+        return;
+    }
+
+    if (pList->divDataList.list != NULL)
+    {
+        int i = 0;
+        for (i = 0; i < pList->divDataList.capacity; i++)
+        {
+            pList->divDataList.free(&pList->divDataList.list[i].dataItemList.list);
+        }
+    }
+}
+
+static int initOneType(oneType_s *pOneType, u32 size, int devNo, int linkNo, int type)
+{
+    if (pOneType == NULL)
+    {
+        return -1;
+    }
+
+    INIT_LIST(pOneType->divDataList, dataList_s, size, freeOneType);
+
+    int i = 0;
+    for (i = 0; i < pOneType->divDataList.capacity; i++)
+    {
+        initDataList(& pOneType->divDataList.list[i], size, devNo, linkNo, type);
+    }
+
+    return 0;
+}
+
+static int initOneLink(oneLink_s *pOneLink)
+{
+    if (pOneLink == NULL)
     {
         return -1;
     }
@@ -270,19 +308,9 @@ static int initOneType(devList_s *pList)
     return 0;
 }
 
-static int initOneLink(devList_s *pList)
+static int initOneDev(oneDevice_s *pOneDevice)
 {
-    if (pList == NULL)
-    {
-        return -1;
-    }
-
-    return 0;
-}
-
-static int initOneDev(devList_s *pList)
-{
-    if (pList == NULL)
+    if (pOneDevice == NULL)
     {
         return -1;
     }
