@@ -396,6 +396,79 @@ static int initOneType(oneType_s *pOneType, u32 size, int devNo, int linkNo, int
     return 0;
 }
 
+static void freeOneDev(oneDevice_s *pOneType)
+{
+    assert(pOneType != NULL && pOneType->typeList.list != NULL && pOneType->typeList.capacity > 0);
+
+    int i = 0;
+    for (i = 0; i < pOneType->typeList.capacity; i++)
+    {
+        pOneType->typeList.list[i].free(&pOneType->typeList.list[i]);
+    }
+
+    free(pOneType->typeList.list);
+    pOneType->typeList.list = NULL;
+    pOneType->typeList.count = 0;
+    pOneType->typeList.capacity = 0;
+
+    pOneType->free = NULL;
+    pOneType->append = NULL;
+    pOneType->print = NULL;
+
+    pOneType->devNo = -1;
+}
+
+static int addDataItemToOneDev(oneDevice_s *pOneDev, dataItem_s *pItem)
+{
+    assert(pOneDev != NULL && pItem != NULL);
+
+    return pOneDev->append(&pOneDev->typeList.list[pItem->type], pItem);
+}
+
+static void printOneDev(oneDevice_s *pOneDev, u32 depth)
+{
+    int i = 0;
+    char depthstr[REAL_DATA_MAX_DEPTH + 1] = { 0 };
+    for (i = 0; i < depth; i++)
+    {
+        strncat(depthstr, "\t", sizeof(depthstr) - 1);
+    }
+
+    printf("%s----------OneDev------------\n", depthstr);
+    if (pOneDev == NULL)
+    {
+        printf("%spOneDev is NULL\n", depthstr);
+    }
+
+    printf("%sdevNo: %d\n", depthstr, pOneDev->devNo);
+    printf("%scount: %d\n", depthstr, pOneDev->typeList.count);
+    printf("%scapacity: %d\n", depthstr, pOneDev->typeList.capacity);
+
+    for (i = 0; i < pOneDev->typeList.count; i++)
+    {
+        pOneDev->typeList.list[i].print(&pOneDev->typeList.list[i], depth + 1);
+    }
+}
+
+static int initOneDev(oneDevice_s *pOneType, u32 size, int devNo, int type)
+{
+    assert(pOneType != NULL && size > 0);
+
+    INIT_LIST(pOneType->typeList, oneType_s, size, NULL);
+
+    int i = 0;
+    for (i = 0; i < pOneType->typeList.capacity; i++)
+    {
+        initOneType(&pOneType->typeList.list[i], size, devNo, -1, type);
+    }
+
+    pOneType->free = freeOneDev;
+    pOneType->append = addDataItemToOneDev;
+    pOneType->print = printOneDev;
+
+    return 0;
+}
+
 void testInitDataList(void)
 {
     dataItem_s list_continue[] = {
