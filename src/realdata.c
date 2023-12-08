@@ -28,7 +28,6 @@ typedef struct dataListStruct dataList_s;
  */
 typedef struct dataListStruct {
     int devNo;                      //设备号
-    int linkNo;                     //链路号
     int type;                       //遥测遥信类型
     dataItemList_s dataItemList;    //实时库列表
     int (*init)(dataList_s *pList, u32 size, int devNo, int linkNo, int type);
@@ -48,7 +47,6 @@ typedef struct oneTypeListStruct oneType_s;
  */
 typedef struct oneTypeListStruct {
     int devNo;                      //设备号
-    int linkNo;                     //链路号
     int type;                       //遥测遥信类型
     divDataItemList_s divDataList;  //不连续的实时库列表
     int (*append)(oneType_s *pList, dataItem_s *pDataItem);
@@ -60,25 +58,13 @@ typedef struct oneTypeListStruct {
 } oneType_s;
 
 typedef A_LIST_OF(oneType_s) typeList_s;
-typedef struct oneLinkStruct oneLink_s;
-
-/**
- * 一个链路
- */
-typedef struct oneLinkStruct {
-    int devNo;              //设备号
-    int linkNo;             //链路号
-    typeList_s typeList;    //遥测遥信类型列表
-} oneLink_s;
-
-typedef A_LIST_OF(oneLink_s) linkList_s;
 
 /**
  * 一个设备
  */
 typedef struct oneDeviceStruct {
     int devNo;              //设备号
-    linkList_s linkList;    //链路列表
+    typeList_s typeList;    //链路列表
 } oneDevice_s;
 
 typedef A_LIST_OF(oneDevice_s) devList_s;//设备列表, 总的实时库表
@@ -97,7 +83,6 @@ static void freeDataList(dataList_s *pList)
     pList->dataItemList.free = NULL;
 
     pList->devNo = -1;
-    pList->linkNo = -1;
     pList->free = NULL;
     pList->append = NULL;
     pList->getItemByRealNo = NULL;
@@ -258,7 +243,7 @@ static void printDataList(dataList_s *pList, u32 depth)
         return;
     }
 
-    printf("%sdevNo: %d, linkNo: %d, type: %d\n", depthstr, pList->devNo, pList->linkNo, pList->type);
+    printf("%sdevNo: %d, type: %d\n", depthstr, pList->devNo, pList->type);
     printf("%sList: %p, count: %d, capacity: %d\n", depthstr, pList->dataItemList.list, pList->dataItemList.count, pList->dataItemList.capacity);
 
     for (i = 0; i < pList->dataItemList.count; i++)
@@ -279,7 +264,6 @@ static int initDataList(dataList_s *pList, u32 size, int devNo, int linkNo, int 
     }
 
     pList->devNo = devNo;
-    pList->linkNo = linkNo;
     pList->type = type;
 
     pList->append = appendDataItemToDataList;
@@ -310,7 +294,6 @@ static void freeOneType(oneType_s *pOneType)
 	pOneType->divDataList.free = NULL;
 
 	pOneType->devNo = -1;
-	pOneType->linkNo = -1;
 	pOneType->type = -1;
 }
 
@@ -337,16 +320,7 @@ static int appendDataItemToOneType(oneType_s *pList, dataItem_s *pDataItem)
         }
 
         memcpy(p, pList->divDataList.list, pList->divDataList.count * sizeof(dataList_s));
-
-        if (pList->divDataList.free != NULL)
-        {
-            pList->divDataList.free(pList->divDataList.list);
-        }
-        else
-        {
-            free(pList->divDataList.list);
-        }
-
+        free(pList->divDataList.list);
         pList->divDataList.list = p;
         pList->divDataList.capacity += REAL_DATA_LIST_DELTA_SIZE;
     }
@@ -373,7 +347,6 @@ static void printOneType(oneType_s *pOneType, u32 depth)
     }
 
     printf("%sdevNo: %d\n", depthstr, pOneType->devNo);
-    printf("%slinkNo: %d\n", depthstr, pOneType->linkNo);
     printf("%stype: %d\n", depthstr, pOneType->type);
 
     for (i = 0; i < pOneType->divDataList.count; i++)
@@ -406,7 +379,7 @@ static int initOneType(oneType_s *pOneType, u32 size, int devNo, int linkNo, int
 
 void testInitDataList(void)
 {
-    oneType_s oneType = {.devNo = 11, .linkNo=12, .type = 14};
+    oneType_s oneType = {.devNo = 11, .type = 14};
     initOneType(&oneType, REAL_DATA_LIST_INIT_SIZE, 0, 1, 10);
 
     dataItem_s list_continue[] = {
