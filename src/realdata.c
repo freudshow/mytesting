@@ -168,7 +168,7 @@ static int appendDataItemToDataList(dataList_s *pList, int totalCount, dataItem_
         idx = pList->dataItemList.count;
     }
 
-    switch(pDataItem->type)
+    switch (pDataItem->type)
     {
         case 0:
             snprintf(pDataItem->modeName, sizeof(pDataItem->modeName) - 1, "YX_%d", totalCount);
@@ -199,7 +199,7 @@ static int appendDataItemToDataList(dataList_s *pList, int totalCount, dataItem_
 
 static int getItemByRealNo(dataList_s *pList, int realNo, dataItem_s *pDataItem)
 {
-    assert (pList != NULL && pDataItem != NULL && pList->dataItemList.list != NULL && pList->dataItemList.count != 0 && pList->dataItemList.capacity > 0);
+    assert(pList != NULL && pDataItem != NULL && pList->dataItemList.list != NULL && pList->dataItemList.count != 0 && pList->dataItemList.capacity > 0);
 
     int i = 0;
     for (i = 0; i < pList->dataItemList.count; i++)
@@ -331,27 +331,27 @@ static void freeOneType(oneType_s *pOneType)
         pOneType->divDataList.list[i].free(&pOneType->divDataList.list[i]);
     }
 
-	free(pOneType->divDataList.list);
-	pOneType->divDataList.list = NULL;
-	pOneType->divDataList.capacity = 0;
-	pOneType->divDataList.count = 0;
+    free(pOneType->divDataList.list);
+    pOneType->divDataList.list = NULL;
+    pOneType->divDataList.capacity = 0;
+    pOneType->divDataList.count = 0;
 
-	pOneType->devNo = -1;
-	pOneType->type = -1;
+    pOneType->devNo = -1;
+    pOneType->type = -1;
 }
 
 static int appendDataItemToOneType(oneType_s *pList, dataItem_s *pDataItem)
 {
     assert(pList != NULL && pDataItem != NULL && pList->append != NULL && pList->divDataList.list != NULL && pList->divDataList.capacity > 0);
 
-    if(pList->divDataList.count == 0)
+    if (pList->divDataList.count == 0)
     {
         pList->devNo = pDataItem->devNo;
         pList->type = pDataItem->type;
         pList->divDataList.count++;
     }
 
-    if(pList->type != pDataItem->type)
+    if (pList->type != pDataItem->type)
     {
         return -1;
     }
@@ -359,7 +359,7 @@ static int appendDataItemToOneType(oneType_s *pList, dataItem_s *pDataItem)
     int i = 0;
     for (i = 0; i < pList->divDataList.count; i++)
     {
-        if (pList->divDataList.list[i].append(&pList->divDataList.list[i], pList->totalCount,pDataItem) == 0)
+        if (pList->divDataList.list[i].append(&pList->divDataList.list[i], pList->totalCount, pDataItem) == 0)
         {
             pList->totalCount++;
             return 0;
@@ -386,7 +386,7 @@ static int appendDataItemToOneType(oneType_s *pList, dataItem_s *pDataItem)
     }
 
     u32 idx = pList->divDataList.count;
-    if(pList->divDataList.list[idx].append(&pList->divDataList.list[idx], pList->totalCount, pDataItem) == 0)
+    if (pList->divDataList.list[idx].append(&pList->divDataList.list[idx], pList->totalCount, pDataItem) == 0)
     {
         pList->divDataList.count++;
         pList->divDataList.list[idx].devNo = pDataItem->devNo;
