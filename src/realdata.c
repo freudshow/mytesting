@@ -70,7 +70,6 @@ typedef struct oneDeviceStruct {
 
 typedef A_LIST_OF(oneDevice_s) devList_s;//设备列表, 总的实时库表
 
-
 static void freeDataList(dataList_s *pList)
 {
     assert(pList != NULL && pList->dataItemList.list != NULL);
@@ -420,9 +419,62 @@ static void freeOneDev(oneDevice_s *pOneType)
 
 static int addDataItemToOneDev(oneDevice_s *pOneDev, dataItem_s *pItem)
 {
-    assert(pOneDev != NULL && pItem != NULL);
+    assert(pOneDev != NULL && pItem != NULL && pOneDev->typeList.list != NULL && pOneDev->typeList.capacity > 0);
 
-    return pOneDev->append(&pOneDev->typeList.list[pItem->type], pItem);
+    if (pOneDev->typeList.count == 0)
+    {
+        if (pOneDev->typeList.list[0].append(&pOneDev->typeList.list[0], pItem) == 0)
+        {
+            pOneDev->devNo = pItem->devNo;
+            pOneDev->typeList.list[0].devNo = pItem->devNo;
+            pOneDev->typeList.list[0].type = pItem->type;
+            pOneDev->typeList.count++;
+            return 0;
+        }
+        else
+        {
+            return -1;
+        }
+    }
+
+    int i = 0;
+    for (i = 0; i < pOneDev->typeList.count; i++)
+    {
+        if (pOneDev->typeList.list[i].append(&pOneDev->typeList.list[i], pItem) == 0)
+        {
+            return 0;
+        }
+    }
+
+    if (pOneDev->typeList.count == pOneDev->typeList.capacity)
+    {
+        oneType_s *p = (oneType_s*) calloc((pOneDev->typeList.capacity + REAL_DATA_LIST_DELTA_SIZE), sizeof(oneType_s));
+        if (p == NULL)
+        {
+            return -1;
+        }
+
+        for (i = 0; i < (pOneDev->typeList.capacity + REAL_DATA_LIST_DELTA_SIZE); i++)
+        {
+            initOneType(p + i, REAL_DATA_LIST_INIT_SIZE, -1, -1, -1);
+        }
+
+        memcpy(p, pOneDev->typeList.list, pOneDev->typeList.count * sizeof(dataList_s));
+        free(pOneDev->typeList.list);
+        pOneDev->typeList.list = p;
+        pOneDev->typeList.capacity += REAL_DATA_LIST_DELTA_SIZE;
+    }
+
+    u32 idx = pOneDev->typeList.count;
+    if (pOneDev->typeList.list[idx].append(&pOneDev->typeList.list[idx], pItem) == 0)
+    {
+        pOneDev->typeList.list[idx].devNo = pItem->devNo;
+        pOneDev->typeList.list[idx].type = pItem->type;
+        pOneDev->typeList.count++;
+        return 0;
+    }
+
+    return -1;
 }
 
 static void printOneDev(oneDevice_s *pOneDev, u32 depth)
@@ -450,7 +502,7 @@ static void printOneDev(oneDevice_s *pOneDev, u32 depth)
     }
 }
 
-static int initOneDev(oneDevice_s *pOneType, u32 size, int devNo, int type)
+static int initOneDev(oneDevice_s *pOneType, u32 size, int devNo, int linkNo, int type)
 {
     assert(pOneType != NULL && size > 0);
 
@@ -459,7 +511,7 @@ static int initOneDev(oneDevice_s *pOneType, u32 size, int devNo, int type)
     int i = 0;
     for (i = 0; i < pOneType->typeList.capacity; i++)
     {
-        initOneType(&pOneType->typeList.list[i], size, devNo, -1, type);
+        initOneType(&pOneType->typeList.list[i], size, devNo, linkNo, type);
     }
 
     pOneType->free = freeOneDev;
@@ -552,25 +604,14 @@ void testInitDataList(void)
                 {0, 1, 0, 78, 47.0, "YX_27"},
         };
 
-    oneType_s yxType = {.devNo = 11, .type = 14};
-    initOneType(&yxType, REAL_DATA_LIST_INIT_SIZE, 0, 1, 10);
-
+    oneDevice_s oneDevice = { .devNo = 11 };
+    initOneDev(&oneDevice, REAL_DATA_LIST_INIT_SIZE, -1, -1, -1);
     int i = 0;
     for (i = 0; i < NELEM(list_continue); i++)
     {
-        yxType.append(&yxType, &list_continue[i]);
+        oneDevice.append(&oneDevice, &list_continue[i]);
     }
 
-    yxType.print(&yxType, 0);
-    yxType.free(&yxType);
-
-    oneType_s ycType = {.devNo = 11, .type = 14};
-    initOneType(&ycType, REAL_DATA_LIST_INIT_SIZE, 0, 1, 10);
-    for (i = 24; i < NELEM(list_continue); i++)
-    {
-        ycType.append(&ycType, &list_continue[i]);
-    }
-
-    ycType.print(&ycType, 0);
-    ycType.free(&ycType);
+    oneDevice.print(&oneDevice, 0);
+    oneDevice.free(&oneDevice);
 }
