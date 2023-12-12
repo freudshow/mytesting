@@ -79,15 +79,8 @@ static void freeDataList(dataList_s *pList)
     pList->dataItemList.capacity = 0;
     pList->dataItemList.count = 0;
     pList->dataItemList.idx = 0;
-    pList->dataItemList.free = NULL;
 
     pList->devNo = -1;
-    pList->free = NULL;
-    pList->append = NULL;
-    pList->getItemByRealNo = NULL;
-    pList->getFirst = NULL;
-    pList->getLast = NULL;
-    pList->print = NULL;
 }
 
 static int appendDataItemToDataList(dataList_s *pList, dataItem_s *pDataItem)
@@ -289,7 +282,6 @@ static void freeOneType(oneType_s *pOneType)
 	pOneType->divDataList.list = NULL;
 	pOneType->divDataList.capacity = 0;
 	pOneType->divDataList.count = 0;
-	pOneType->divDataList.free = NULL;
 
 	pOneType->devNo = -1;
 	pOneType->type = -1;
@@ -410,10 +402,6 @@ static void freeOneDev(oneDevice_s *pOneType)
     pOneType->typeList.count = 0;
     pOneType->typeList.capacity = 0;
 
-    pOneType->free = NULL;
-    pOneType->append = NULL;
-    pOneType->print = NULL;
-
     pOneType->devNo = -1;
 }
 
@@ -490,6 +478,7 @@ static void printOneDev(oneDevice_s *pOneDev, u32 depth)
     if (pOneDev == NULL)
     {
         printf("%spOneDev is NULL\n", depthstr);
+        return;
     }
 
     printf("%sdevNo: %d\n", depthstr, pOneDev->devNo);
@@ -614,4 +603,5 @@ void testInitDataList(void)
 
     oneDevice.print(&oneDevice, 0);
     oneDevice.free(&oneDevice);
+    oneDevice.print(&oneDevice, 0);
 }
