@@ -32,7 +32,7 @@ typedef struct dataListStruct {
     dataItemList_s dataItemList;    //实时库列表
     int (*init)(dataList_s *pList, u32 size, int devNo, int linkNo, int type);
     void (*free)(dataList_s *pList);
-    int (*append)(dataList_s *pList, dataItem_s *pDataItem);
+    int (*append)(dataList_s *pList, int totalCount, dataItem_s *pDataItem);
     int (*getItemByRealNo)(dataList_s *pList, int realNo, dataItem_s *pDataItem);
     int (*getFirst)(dataList_s *pList, dataItem_s *pDataItem);
     int (*getLast)(dataList_s *pList, dataItem_s *pDataItem);
@@ -48,6 +48,7 @@ typedef struct oneTypeListStruct oneType_s;
 typedef struct oneTypeListStruct {
     int devNo;                      //设备号
     int type;                       //遥测遥信类型
+    int totalCount;                 //总个数
     divDataItemList_s divDataList;  //不连续的实时库列表
     int (*append)(oneType_s *pList, dataItem_s *pDataItem);
     void (*print)(oneType_s *pList, u32 depth);
@@ -70,6 +71,39 @@ typedef struct oneDeviceStruct {
 
 typedef A_LIST_OF(oneDevice_s) devList_s;//设备列表, 总的实时库表
 
+#pragma pack(push)
+#pragma pack(1)
+
+struct LtuDevHead     //ltudevlib.dat文件头
+{
+    u8 YcLimiteEnable;
+    int TotalYcCount;
+    int TotalYxCount;
+    int TotalYkCount;
+    int TotalDDCount;
+    int DataItemCount;
+};
+
+struct RealdatabasePara                 //ltudevlib.dat文件体
+{
+    int RealDevOrderNum;                 //实时库序号
+    int ProtolNum;                       //规约号
+    short linkNo;                        //链路号
+    short devNo;                         //设备号
+    short RegNo;                         //寄存器号
+    u8 type;                           //0-遥信   1-遥测   2-遥控  3-电度  4-参数
+    float Ratio;                         //系数
+    float DeadSet;                       //死区
+    u8 LessOrMore;                     //0 不进行判断    1 大于死区值时
+    u8 GenerateVirtueYx;               //生成虚拟遥信   1 生成虚拟遥信    0  不生成
+    int TypeProperty;                    //遥信、遥控的属性的偏移量   根据偏移量，ga_sysparam[TypeProperty]的值，找到 遥信是否取反 及遥控的参数
+    float NewYcOverLimite;               //2021-12-24 新增遥测越限  与死区值分开
+    float YcLowLimite;                   //2022-4-12 新增遥测越下限
+    u8 rev[16];                          //16个保留字节
+};
+
+#pragma pack(pop)
+
 static void freeDataList(dataList_s *pList)
 {
     assert(pList != NULL && pList->dataItemList.list != NULL);
@@ -83,7 +117,7 @@ static void freeDataList(dataList_s *pList)
     pList->devNo = -1;
 }
 
-static int appendDataItemToDataList(dataList_s *pList, dataItem_s *pDataItem)
+static int appendDataItemToDataList(dataList_s *pList, int totalCount, dataItem_s *pDataItem)
 {
     assert(pList != NULL && pDataItem != NULL);
 
@@ -127,11 +161,30 @@ static int appendDataItemToDataList(dataList_s *pList, dataItem_s *pDataItem)
         idx = 0;
     }
     else if (pList->dataItemList.list[pList->dataItemList.count - 1].realNo == (pDataItem->realNo - 1) &&
-            pList->dataItemList.list[pList->dataItemList.count - 1].devNo == pDataItem->devNo &&
-            pList->dataItemList.list[pList->dataItemList.count - 1].linkNo == pDataItem->linkNo &&
+//            pList->dataItemList.list[pList->dataItemList.count - 1].devNo == pDataItem->devNo &&
+//            pList->dataItemList.list[pList->dataItemList.count - 1].linkNo == pDataItem->linkNo &&
             pList->dataItemList.list[pList->dataItemList.count - 1].type == pDataItem->type)
     {
         idx = pList->dataItemList.count;
+    }
+
+    switch(pDataItem->type)
+    {
+        case 0:
+            snprintf(pDataItem->modeName, sizeof(pDataItem->modeName) - 1, "YX_%d", totalCount);
+            break;
+        case 1:
+            snprintf(pDataItem->modeName, sizeof(pDataItem->modeName) - 1, "YC_%d", totalCount);
+            break;
+        case 2:
+            snprintf(pDataItem->modeName, sizeof(pDataItem->modeName) - 1, "YK_%d", totalCount);
+            break;
+        case 3:
+            snprintf(pDataItem->modeName, sizeof(pDataItem->modeName) - 1, "DD_%d", totalCount);
+            break;
+        default:
+            snprintf(pDataItem->modeName, sizeof(pDataItem->modeName) - 1, "ERROR_TYPE");
+            break;
     }
 
     if (idx >= 0)
@@ -298,7 +351,7 @@ static int appendDataItemToOneType(oneType_s *pList, dataItem_s *pDataItem)
         pList->divDataList.count++;
     }
 
-    if(pList->devNo != pDataItem->devNo || pList->type != pDataItem->type)
+    if(pList->type != pDataItem->type)
     {
         return -1;
     }
@@ -306,8 +359,9 @@ static int appendDataItemToOneType(oneType_s *pList, dataItem_s *pDataItem)
     int i = 0;
     for (i = 0; i < pList->divDataList.count; i++)
     {
-        if (pList->divDataList.list[i].append(&pList->divDataList.list[i], pDataItem) == 0)
+        if (pList->divDataList.list[i].append(&pList->divDataList.list[i], pList->totalCount,pDataItem) == 0)
         {
+            pList->totalCount++;
             return 0;
         }
     }
@@ -331,10 +385,17 @@ static int appendDataItemToOneType(oneType_s *pList, dataItem_s *pDataItem)
         pList->divDataList.capacity += REAL_DATA_LIST_DELTA_SIZE;
     }
 
-    pList->divDataList.count++;
-    pList->divDataList.list[pList->divDataList.count - 1].devNo = pDataItem->devNo;
-    pList->divDataList.list[pList->divDataList.count - 1].type = pDataItem->type;
-    return pList->divDataList.list[pList->divDataList.count - 1].append(&pList->divDataList.list[pList->divDataList.count - 1], pDataItem);
+    u32 idx = pList->divDataList.count;
+    if(pList->divDataList.list[idx].append(&pList->divDataList.list[idx], pList->totalCount, pDataItem) == 0)
+    {
+        pList->divDataList.count++;
+        pList->divDataList.list[idx].devNo = pDataItem->devNo;
+        pList->divDataList.list[idx].type = pDataItem->type;
+        pList->totalCount++;
+        return 0;
+    }
+
+    return -1;
 }
 
 static void printOneType(oneType_s *pOneType, u32 depth)
@@ -447,7 +508,7 @@ static int addDataItemToOneDev(oneDevice_s *pOneDev, dataItem_s *pItem)
             initOneType(p + i, REAL_DATA_LIST_INIT_SIZE, -1, -1, -1);
         }
 
-        memcpy(p, pOneDev->typeList.list, pOneDev->typeList.count * sizeof(dataList_s));
+        memcpy(p, pOneDev->typeList.list, pOneDev->typeList.count * sizeof(oneType_s));
         free(pOneDev->typeList.list);
         pOneDev->typeList.list = p;
         pOneDev->typeList.capacity += REAL_DATA_LIST_DELTA_SIZE;
@@ -510,98 +571,83 @@ static int initOneDev(oneDevice_s *pOneType, u32 size, int devNo, int linkNo, in
     return 0;
 }
 
-void testInitDataList(void)
+int realDBParse(char *fullfilename, oneDevice_s *pOneDevice)
 {
-    dataItem_s list_continue[] = {
-                {0, 1, 0, 0, 0.0, "YX_0"},
-                {0, 1, 0, 1, 0.0, "YX_1"},
-                {0, 1, 0, 2, 0.0, "YX_2"},
-                {0, 1, 0, 3, 1.0, "YX_3"},
-                {0, 1, 0, 4, 1.0, "YX_4"},
-                {0, 1, 0, 5, 0.0, "YX_5"},
-                {0, 1, 0, 6, 1.0, "YX_6"},
-                {0, 1, 0, 7, 0.0, "YX_7"},
-                {0, 1, 0, 8, 0.0, "YX_8"},
-                {0, 1, 0, 9, 1.0, "YX_9"},
-                {0, 1, 0, 10, 0.0, "YX_10"},
-                {0, 1, 0, 11, 1.0, "YX_11"},
-                {0, 1, 0, 12, 1.0, "YX_12"},
-                {0, 1, 0, 13, 0.0, "YX_13"},
-                {0, 1, 0, 14, 0.0, "YX_14"},
-                {0, 1, 0, 15, 1.0, "YX_15"},
-                {0, 1, 0, 16, 0.0, "YX_16"},
-                {0, 1, 0, 17, 0.0, "YX_17"},
-                {0, 1, 0, 18, 0.0, "YX_18"},
-                {0, 1, 0, 19, 0.0, "YX_19"},
-                {0, 1, 0, 20, 0.0, "YX_20"},
-                {0, 1, 0, 21, 0.0, "YX_21"},
-                {0, 1, 0, 22, 0.0, "YX_22"},
-                {0, 1, 0, 23, 0.0, "YX_23"},
-                {0, 1, 1, 24, 2.0, "YC_0"},
-                {0, 1, 1, 25, 3.0, "YC_1"},
-                {0, 1, 1, 26, 4.0, "YC_2"},
-                {0, 1, 1, 27, 5.0, "YC_3"},
-                {0, 1, 1, 28, 6.0, "YC_4"},
-                {0, 1, 1, 29, 7.0, "YC_5"},
-                {0, 1, 1, 30, 8.0, "YC_6"},
-                {0, 1, 1, 31, 9.0, "YC_7"},
-                {0, 1, 1, 32, 10.0, "YC_8"},
-                {0, 1, 1, 33, 11.0, "YC_9"},
-                {0, 1, 1, 34, 12.0, "YC_10"},
-                {0, 1, 1, 35, 13.0, "YC_11"},
-                {0, 1, 1, 36, 14.0, "YC_12"},
-                {0, 1, 1, 37, 15.0, "YC_13"},
-                {0, 1, 1, 38, 16.0, "YC_14"},
-                {0, 1, 1, 39, 17.0, "YC_15"},
-                {0, 1, 1, 40, 18.0, "YC_16"},
-                {0, 1, 1, 41, 19.0, "YC_17"},
-                {0, 1, 1, 42, 20.0, "YC_18"},
-                {0, 1, 1, 43, 21.0, "YC_19"},
-                {0, 1, 1, 44, 22.0, "YC_20"},
-                {0, 1, 1, 45, 23.0, "YC_21"},
-                {0, 1, 1, 46, 24.0, "YC_22"},
-                {0, 1, 1, 47, 25.0, "YC_23"},
-                {0, 1, 1, 48, 26.0, "YC_24"},
-                {0, 1, 1, 49, 27.0, "YC_25"},
-                {0, 1, 1, 50, 28.0, "YC_26"},
-                {0, 1, 1, 51, 29.0, "YC_27"},
-                {0, 1, 1, 52, 30.0, "YC_28"},
-                {0, 1, 1, 53, 31.0, "YC_29"},
-                {0, 1, 1, 54, 32.0, "YC_30"},
-                {0, 1, 1, 55, 33.0, "YC_31"},
-                {0, 1, 1, 56, 34.0, "YC_32"},
-                {0, 1, 1, 57, 35.0, "YC_33"},
-                {0, 1, 1, 58, 36.0, "YC_34"},
-                {0, 1, 1, 59, 37.0, "YC_35"},
-                {0, 1, 1, 60, 38.0, "YC_36"},
-                {0, 1, 1, 61, 39.0, "YC_37"},
-                {0, 1, 1, 62, 40.0, "YC_38"},
-                {0, 1, 1, 63, 41.0, "YC_39"},
-                {0, 1, 1, 64, 42.0, "YC_40"},
-                {0, 1, 1, 65, 43.0, "YC_41"},
-                {0, 1, 1, 66, 44.0, "YC_42"},
-                {0, 1, 1, 67, 45.0, "YC_43"},
-                {0, 1, 1, 68, 46.0, "YC_44"},
-                {0, 1, 1, 69, 47.0, "YC_45"},
-                {0, 1, 1, 71, 47.0, "YC_46"},
-                {0, 1, 1, 72, 47.0, "YC_47"},
-                {0, 1, 1, 73, 47.0, "YC_48"},
-                {0, 1, 1, 74, 47.0, "YC_49"},
-                {0, 1, 0, 75, 47.0, "YX_24"},
-                {0, 1, 0, 76, 47.0, "YX_25"},
-                {0, 1, 0, 77, 47.0, "YX_26"},
-                {0, 1, 0, 78, 47.0, "YX_27"},
-        };
+    assert(fullfilename != NULL && pOneDevice != NULL);
 
-    oneDevice_s oneDevice = { .devNo = 11 };
-    initOneDev(&oneDevice, REAL_DATA_LIST_INIT_SIZE, -1, -1, -1);
-    int i = 0;
-    for (i = 0; i < NELEM(list_continue); i++)
+    struct LtuDevHead head;
+    struct RealdatabasePara databasePara;
+
+    int headLen = sizeof(head);
+    int itemLen = sizeof(databasePara);
+    int len = 0;
+    int itemCount = 0;
+
+    FILE *fd = fopen(fullfilename, "r");
+    if (fd == NULL)
     {
-        oneDevice.append(&oneDevice, &list_continue[i]);
+        return -1;
     }
 
-    oneDevice.print(&oneDevice, 0);
-    oneDevice.free(&oneDevice);
-    oneDevice.print(&oneDevice, 0);
+    struct stat st;
+    if (stat(fullfilename, &st) != 0)
+    {
+        fclose(fd);
+        return -1;
+    }
+
+    if (((st.st_size - headLen) % itemLen) != 0)
+    {
+        fclose(fd);
+        return -1;
+    }
+
+    len = fread(&head, 1, headLen, fd);
+    if (len != headLen)
+    {
+        fclose(fd);
+        return -1;
+    }
+
+    itemCount = ((st.st_size - headLen) / itemLen);
+    dataItem_s item = { 0 };
+
+    if (initOneDev(pOneDevice, REAL_DATA_LIST_INIT_SIZE, -1, -1, -1) != 0)
+    {
+        return -1;
+    }
+
+    int i = 0;
+    for (i = 0; i < itemCount; i++)
+    {
+        len = fread(&databasePara, 1, itemLen, fd);
+        if (len != itemLen)
+        {
+            fclose(fd);
+            return -1;
+        }
+
+        item.devNo = databasePara.devNo;
+        item.type = databasePara.type;
+        item.linkNo = databasePara.linkNo;
+        item.realNo = databasePara.RealDevOrderNum;
+
+        if (pOneDevice->append(pOneDevice, &item) != 0)
+        {
+            fclose(fd);
+            pOneDevice->free(pOneDevice);
+            return -1;
+        }
+    }
+
+    pOneDevice->print(pOneDevice, 0);
+    fclose(fd);
+
+    return 0;
+}
+
+void testInitDataList(void)
+{
+    oneDevice_s oneDev;
+    realDBParse("/home/floyd/repo/mytesting/Debug/ltudevlib.dat", &oneDev);
 }
