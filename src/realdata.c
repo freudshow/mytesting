@@ -201,13 +201,24 @@ static int getItemByRealNo(dataList_s *pList, int realNo, dataItem_s *pDataItem)
 {
     assert(pList != NULL && pDataItem != NULL && pList->dataItemList.list != NULL && pList->dataItemList.count != 0 && pList->dataItemList.capacity > 0);
 
-    int i = 0;
-    for (i = 0; i < pList->dataItemList.count; i++)
+    int low = 0;
+    int high = pList->dataItemList.count - 1;
+    int mid = 0;
+    while (low <= high)
     {
-        if (pList->dataItemList.list[i].realNo == realNo)
+        mid = low + (high - low) / 2;
+        if (pList->dataItemList.list[mid].realNo == realNo)
         {
-            memcpy(pDataItem, &pList->dataItemList.list[i], sizeof(dataItem_s));
-            return 0;
+            memcpy(pDataItem, &pList->dataItemList.list[mid], sizeof(dataItem_s));
+            return mid;
+        }
+        else if (pList->dataItemList.list[mid].realNo < realNo)
+        {
+            low = mid + 1;
+        }
+        else if (pList->dataItemList.list[mid].realNo > realNo)
+        {
+            high = mid - 1;
         }
     }
 
@@ -650,4 +661,14 @@ void testInitDataList(void)
 {
     oneDevice_s oneDev;
     realDBParse("/home/floyd/repo/mytesting/Debug/ltudevlib.dat", &oneDev);
+
+    dataItem_s item = { 0 };
+    oneDev.typeList.list[0].divDataList.list[0].getItemByRealNo(&oneDev.typeList.list[0].divDataList.list[0], 3, &item);
+    printDataItem(&item, 0);
+
+    oneDev.typeList.list[0].divDataList.list[0].getItemByRealNo(&oneDev.typeList.list[0].divDataList.list[0], 63, &item);
+    printDataItem(&item, 0);
+
+    oneDev.typeList.list[0].divDataList.list[0].getItemByRealNo(&oneDev.typeList.list[0].divDataList.list[0], 53, &item);
+    printDataItem(&item, 0);
 }
