@@ -11,11 +11,13 @@
 #define REAL_DATA_MAX_DEPTH           128//最大深度
 
 typedef struct dataItemStruct {
+    int seq;           //序号
     int devNo;         //设备号
     int linkNo;        //链路号
     int type;          //遥测遥信类型
     int realNo;        //实时库号
     float value;       //实时库值
+    float PreVal;      //实时库上次的值
     char modeName[16]; //模型名, 比如"YX_0", "YC_34"
 } dataItem_s;
 
@@ -27,6 +29,7 @@ typedef struct dataListStruct dataList_s;
  * 的各个数据项列表
  */
 typedef struct dataListStruct {
+    int seq;                        //序号
     int devNo;                      //设备号
     int type;                       //遥测遥信类型
     dataItemList_s dataItemList;    //实时库列表
@@ -46,6 +49,7 @@ typedef struct oneTypeListStruct oneType_s;
  * 一个遥测遥信类型
  */
 typedef struct oneTypeListStruct {
+    int seq;                        //序号
     int devNo;                      //设备号
     int type;                       //遥测遥信类型
     int totalCount;                 //总个数
@@ -53,6 +57,7 @@ typedef struct oneTypeListStruct {
     int (*append)(oneType_s *pList, dataItem_s *pDataItem);
     void (*print)(oneType_s *pList, u32 depth);
     void (*free)(oneType_s *pList);
+    int (*getItemByRealNo)(oneType_s *pOneType, int realNo, dataItem_s *pDataItem);
 } oneType_s;
 
 typedef A_LIST_OF(oneType_s) typeList_s;
@@ -62,14 +67,16 @@ typedef struct oneDeviceStruct oneDevice_s;
  * 一个设备
  */
 typedef struct oneDeviceStruct {
+    int seq;                //序号
     int devNo;              //设备号
     typeList_s typeList;    //遥测遥信类型列表
     void (*free)(oneDevice_s *pList);
     int (*append)(oneDevice_s *pList, dataItem_s *pDataItem);
     void (*print)(oneDevice_s *pList, u32 depth);
+    int (*getItemByRealNo)(oneDevice_s *pOneDev, int realNo, dataItem_s *pDataItem);
 } oneDevice_s;
 
-typedef A_LIST_OF(oneDevice_s) devList_s;//设备列表, 总的实时库表
+typedef A_LIST_OF(oneDevice_s) devList_s;    //设备列表, 总的实时库表
 
 #pragma pack(push)
 #pragma pack(1)
@@ -161,11 +168,14 @@ static int appendDataItemToDataList(dataList_s *pList, int totalCount, dataItem_
         idx = 0;
     }
     else if (pList->dataItemList.list[pList->dataItemList.count - 1].realNo == (pDataItem->realNo - 1) &&
-//            pList->dataItemList.list[pList->dataItemList.count - 1].devNo == pDataItem->devNo &&
-//            pList->dataItemList.list[pList->dataItemList.count - 1].linkNo == pDataItem->linkNo &&
             pList->dataItemList.list[pList->dataItemList.count - 1].type == pDataItem->type)
     {
         idx = pList->dataItemList.count;
+    }
+
+    if (idx < 0)
+    {
+        return -1;
     }
 
     switch (pDataItem->type)
@@ -187,19 +197,16 @@ static int appendDataItemToDataList(dataList_s *pList, int totalCount, dataItem_
             break;
     }
 
-    if (idx >= 0)
-    {
-        memcpy(&pList->dataItemList.list[idx], pDataItem, sizeof(dataItem_s));
-        pList->dataItemList.count++;
-        return 0;
-    }
+    pDataItem->seq = idx;
+    memcpy(&pList->dataItemList.list[idx], pDataItem, sizeof(dataItem_s));
+    pList->dataItemList.count++;
 
-    return -1;
+    return 0;
 }
 
 static int getItemByRealNo(dataList_s *pList, int realNo, dataItem_s *pDataItem)
 {
-    assert(pList != NULL && pDataItem != NULL && pList->dataItemList.list != NULL && pList->dataItemList.count != 0 && pList->dataItemList.capacity > 0);
+    assert(pList != NULL && pDataItem != NULL && pList->dataItemList.list != NULL && pList->dataItemList.count > 0 && pList->dataItemList.capacity > 0);
 
     int low = 0;
     int high = pList->dataItemList.count - 1;
@@ -233,11 +240,7 @@ static int getItemByRealNo(dataList_s *pList, int realNo, dataItem_s *pDataItem)
 
 static int getItemByIdx(dataList_s *pList, u32 idx, dataItem_s *pDataItem)
 {
-    assert(pList != NULL &&
-            pDataItem != NULL &&
-            pList->dataItemList.list != NULL &&
-            pList->dataItemList.count != 0 &&
-            pList->dataItemList.capacity > 0);
+    assert(pList != NULL && pDataItem != NULL && pList->dataItemList.list != NULL && pList->dataItemList.count != 0 && pList->dataItemList.capacity > 0);
 
     if (idx >= pList->dataItemList.count)
     {
@@ -274,11 +277,13 @@ static void printDataItem(dataItem_s *pItem, u32 depth)
         return;
     }
 
+    printf("%sseq: %d\n", depthstr, pItem->seq);
     printf("%sdevNo: %d\n", depthstr, pItem->devNo);
     printf("%slinkNo: %d\n", depthstr, pItem->linkNo);
     printf("%stype: %d\n", depthstr, pItem->type);
     printf("%srealNo: %d\n", depthstr, pItem->realNo);
     printf("%svalue: %f\n", depthstr, pItem->value);
+    printf("%sPreVal: %f\n", depthstr, pItem->PreVal);
     printf("%smodeName: %s\n", depthstr, pItem->modeName);
 }
 
@@ -298,6 +303,7 @@ static void printDataList(dataList_s *pList, u32 depth)
         return;
     }
 
+    printf("%sseq: %d\n", depthstr, pList->seq);
     printf("%sdevNo: %d, type: %d\n", depthstr, pList->devNo, pList->type);
     printf("%sList: %p, count: %d, capacity: %d\n", depthstr, pList->dataItemList.list, pList->dataItemList.count, pList->dataItemList.capacity);
 
@@ -357,6 +363,7 @@ static int appendDataItemToOneType(oneType_s *pList, dataItem_s *pDataItem)
 
     if (pList->divDataList.count == 0)
     {
+        pList->divDataList.list[0].seq = 0;
         pList->devNo = pDataItem->devNo;
         pList->type = pDataItem->type;
         pList->divDataList.count++;
@@ -399,11 +406,28 @@ static int appendDataItemToOneType(oneType_s *pList, dataItem_s *pDataItem)
     u32 idx = pList->divDataList.count;
     if (pList->divDataList.list[idx].append(&pList->divDataList.list[idx], pList->totalCount, pDataItem) == 0)
     {
+        pList->divDataList.list[idx].seq = idx;
         pList->divDataList.count++;
         pList->divDataList.list[idx].devNo = pDataItem->devNo;
         pList->divDataList.list[idx].type = pDataItem->type;
         pList->totalCount++;
         return 0;
+    }
+
+    return -1;
+}
+
+static int getItemByRealNoInOneType(oneType_s *pOneType, int realNo, dataItem_s *pDataItem)
+{
+    assert(pOneType != NULL && pDataItem != NULL && pOneType->divDataList.list != NULL && pOneType->divDataList.capacity > 0);
+
+    int i = 0;
+    for (i = 0; i < pOneType->divDataList.count; i++)
+    {
+        if (pOneType->divDataList.list[i].getItemByRealNo(&pOneType->divDataList.list[i], realNo, pDataItem) >= 0)
+        {
+            return 0;
+        }
     }
 
     return -1;
@@ -426,6 +450,7 @@ static void printOneType(oneType_s *pOneType, u32 depth)
         return;
     }
 
+    printf("%sseq: %d\n", depthstr, pOneType->seq);
     printf("%sdevNo: %d\n", depthstr, pOneType->devNo);
     printf("%stype: %d\n", depthstr, pOneType->type);
     printf("%scount: %d\n", depthstr, pOneType->divDataList.count);
@@ -455,6 +480,7 @@ static int initOneType(oneType_s *pOneType, u32 size, int devNo, int linkNo, int
     pOneType->free = freeOneType;
     pOneType->append = appendDataItemToOneType;
     pOneType->print = printOneType;
+    pOneType->getItemByRealNo = getItemByRealNoInOneType;
 
     return 0;
 }
@@ -486,6 +512,7 @@ static int addDataItemToOneDev(oneDevice_s *pOneDev, dataItem_s *pItem)
         if (pOneDev->typeList.list[0].append(&pOneDev->typeList.list[0], pItem) == 0)
         {
             pOneDev->devNo = pItem->devNo;
+            pOneDev->typeList.list[0].seq = 0;
             pOneDev->typeList.list[0].devNo = pItem->devNo;
             pOneDev->typeList.list[0].type = pItem->type;
             pOneDev->typeList.count++;
@@ -528,10 +555,27 @@ static int addDataItemToOneDev(oneDevice_s *pOneDev, dataItem_s *pItem)
     u32 idx = pOneDev->typeList.count;
     if (pOneDev->typeList.list[idx].append(&pOneDev->typeList.list[idx], pItem) == 0)
     {
+        pOneDev->typeList.list[idx].seq = idx;
         pOneDev->typeList.list[idx].devNo = pItem->devNo;
         pOneDev->typeList.list[idx].type = pItem->type;
         pOneDev->typeList.count++;
         return 0;
+    }
+
+    return -1;
+}
+
+static int getItemByRealNoInOneDev(oneDevice_s *pOneDev, int realNo, dataItem_s *pDataItem)
+{
+    assert(pOneDev != NULL && pOneDev->typeList.list != NULL && pOneDev->typeList.capacity > 0 && pDataItem != NULL);
+
+    int i = 0;
+    for (i = 0; i < pOneDev->typeList.count; i++)
+    {
+        if (pOneDev->typeList.list[i].getItemByRealNo(&pOneDev->typeList.list[i], realNo, pDataItem) == 0)
+        {
+            return 0;
+        }
     }
 
     return -1;
@@ -578,11 +622,12 @@ static int initOneDev(oneDevice_s *pOneType, u32 size, int devNo, int linkNo, in
     pOneType->free = freeOneDev;
     pOneType->append = addDataItemToOneDev;
     pOneType->print = printOneDev;
+    pOneType->getItemByRealNo = getItemByRealNoInOneDev;
 
     return 0;
 }
 
-int realDBParse(char *fullfilename, oneDevice_s *pOneDevice)
+int realDBParse(const char *fullfilename, oneDevice_s *pOneDevice)
 {
     assert(fullfilename != NULL && pOneDevice != NULL);
 
@@ -651,7 +696,6 @@ int realDBParse(char *fullfilename, oneDevice_s *pOneDevice)
         }
     }
 
-    pOneDevice->print(pOneDevice, 0);
     fclose(fd);
 
     return 0;
@@ -661,14 +705,15 @@ void testInitDataList(void)
 {
     oneDevice_s oneDev;
     realDBParse("/home/floyd/repo/mytesting/Debug/ltudevlib.dat", &oneDev);
+    oneDev.print(&oneDev, 0);
 
     dataItem_s item = { 0 };
-    oneDev.typeList.list[0].divDataList.list[0].getItemByRealNo(&oneDev.typeList.list[0].divDataList.list[0], 3, &item);
+    oneDev.getItemByRealNo(&oneDev, 3, &item);
     printDataItem(&item, 0);
 
-    oneDev.typeList.list[0].divDataList.list[0].getItemByRealNo(&oneDev.typeList.list[0].divDataList.list[0], 63, &item);
+    oneDev.getItemByRealNo(&oneDev, 63, &item);
     printDataItem(&item, 0);
 
-    oneDev.typeList.list[0].divDataList.list[0].getItemByRealNo(&oneDev.typeList.list[0].divDataList.list[0], 53, &item);
+    oneDev.getItemByRealNo(&oneDev, 53, &item);
     printDataItem(&item, 0);
 }
