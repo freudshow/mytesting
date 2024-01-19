@@ -21,6 +21,7 @@
 
 #include "oled.h"
 #include "oledfont.h"
+#include "sqlite3.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/types.h>
@@ -32,103 +33,76 @@
 #include <linux/i2c-dev.h>
 #include <sys/ioctl.h>
 
+typedef struct oledPageLayout {
+    u8 curRow;
+    u8 curCol;
+    u8 curPage;
+} oledPageLayout_s;
+
+/**
+ * 存储字符串在屏幕上的位置
+ * 信息
+ */
+typedef struct oledStringPosition {
+    char *pString;                  //字符串指针
+    int charIdx;                    //要查找的字符索引
+    int byteIdx;                    //要查找的字符的字节索引
+    u8 curRow;                      //字符所在行
+    u8 curCol;                      //字符所在列
+} oledStringPosition_s;
+
 static u8 s_OLED_GRAM[PAGE_COUNT][MAX_COLUMN] = { 0 };
 static u8 s_PIXEL_GRAM[MAX_ROW][MAX_COLUMN] = { 0 };
-static int s_oled_fd;
+static oledPageLayout_s s_oled_layout = { 0 };
+static char s_OLED_upperHexLetter[16] = { '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F' };
 
-/******************************************************
- * 函数功能: 向 IIC 总线写入一个字节的数据
- * ---------------------------------------------------
- * @param - IIC_Data, 要写入的数据
- * ---------------------------------------------------
- * @return - 无
- ******************************************************/
-int i2c_write_data(__u16 slave_addr, __u8 reg_addr, __u8 reg_data)
+static sqlite3 *s_db;
+
+int openFontDB(char *dbfile)
 {
-	int ret;
-	u8 buf[2];
-	struct i2c_rdwr_ioctl_data i2c_write_rtc;   //定义I2C数据包结构体
-	buf[0] = reg_addr;
-	buf[1] = reg_data;
-	struct i2c_msg msg[1] = {                   //构建i2c_msg结构体
-			[0] = { .addr = slave_addr, .flags = 0, .buf = buf, .len =
-					sizeof(buf) }, };
-	i2c_write_rtc.msgs = msg;                   //要发送的数据包的指针
-	i2c_write_rtc.nmsgs = 1;                        //要发送的数据包的个数
-	ret = ioctl(s_oled_fd, I2C_RDWR, &i2c_write_rtc);  //使用ioctl的I2C_RDWR进行数据传输
-	if (ret < 0)
-	{
-		perror("ioctl error is:");
-		return ret;
-	}
-	return ret;
+    return sqlite3_open(dbfile, &s_db) == SQLITE_OK ? 1 : -1;
 }
 
-int i2c_read_data(__u16 slave_addr, __u8 reg_addr, __u8 *rx_data, __u16 rxlen)
+int closeFontDB(void)
 {
-	int ret;
-	struct i2c_rdwr_ioctl_data i2c_read_rtc;    //定义I2C数据包结构体
-
-	struct i2c_msg msg[2] = {                   //构建i2c_msg结构体
-			[0] = { .addr = slave_addr, .flags = 0, .buf = &reg_addr, .len =
-					sizeof(reg_addr) }, [1] = { .addr = slave_addr, .flags = 1,
-					.buf = rx_data, .len = rxlen } };
-
-	i2c_read_rtc.msgs = msg;                    //要发送的数据包的指针
-	i2c_read_rtc.nmsgs = 2;                     //要发送的数据包的个数
-
-	ret = ioctl(s_oled_fd, I2C_RDWR, &i2c_read_rtc);   //使用ioctl的I2C_RDWR进行数据传输
-	if (ret < 0)
-	{
-		perror("ioctl error is:");
-		return ret;
-	}
-	return ret;
+    return (sqlite3_close(s_db) == SQLITE_OK) ? 1 : -1;
 }
 
-/******************************************************
- * 函数功能: 向 IIC 总线写入一个字节的命令
- * ---------------------------------------------------
- * @param - IIC_Command, 要写入的命令
- * ---------------------------------------------------
- * @return - 无
- ******************************************************/
-void Write_IIC_Command(u8 IIC_Command)
+static int getResult(char *sql, char *buf)
 {
-	i2c_write_data(0x3c, 0x0, IIC_Command);
+    sqlite3_stmt *stmt;
+
+    sqlite3_prepare_v2(s_db, sql, strlen(sql), &stmt, NULL);
+    int result = sqlite3_step(stmt);
+    int len = 0;
+    if (result == SQLITE_ROW)
+    {
+        const char *pdata = sqlite3_column_blob(stmt, 0);
+        len = sqlite3_column_bytes(stmt, 0);
+        memcpy(buf, pdata, len);
+    }
+
+    sqlite3_finalize(stmt);
+
+    return len;
 }
 
-/******************************************************
- * 函数功能: 向 IIC 总线写入一个字节的数据
- * ---------------------------------------------------
- * @param - IIC_Data, 要写入的数据
- * ---------------------------------------------------
- * @return - 无
- ******************************************************/
-void Write_IIC_Data(u8 IIC_Data)
+int getFontUTF8(int unicode, char *buf)
 {
-	i2c_write_data(0x3c, 0x40, IIC_Data);
+    char sql[128];
+
+    snprintf(sql, 127, "select font from t_unicode_gbk where unicode=%d;", unicode);
+
+    return getResult(sql, buf);
 }
 
-/******************************************************
- * 函数功能: 向 IIC 总线写入一个字节的数据/命令
- * ---------------------------------------------------
- * @param - dat, 要写入的数据
- * @param - cmd, 要写入的是否为数据.
- *               1-要写入的是数据; 其他值-要写入的是命令
- * ---------------------------------------------------
- * @return - 无
- ******************************************************/
-void OLED_WR_Byte(unsigned dat, unsigned cmd)
+int getFontGBK(int gbk, char *buf)
 {
-	if (cmd)
-	{
-		Write_IIC_Data(dat);
-	}
-	else
-	{
-		Write_IIC_Command(dat);
-	}
+    char sql[128];
+
+    snprintf(sql, 127, "select font from t_unicode_gbk where gbk=%d;", gbk);
+
+    return getResult(sql, buf);
 }
 
 void OLED_expand_byte(u8 dat, int row, int col)
@@ -159,79 +133,6 @@ void OLED_print_canvas()
 	}
 }
 
-/**********************************************
- * 初始化SSD1306
- * -------------------------------------------
- * @param - 无
- * -------------------------------------------
- * @return - 无
- **********************************************/
-void OLED_Init(int fd)
-{
-	OLED_WR_Byte(0xAE, OLED_CMD); //--display off
-	OLED_WR_Byte(0x00, OLED_CMD); //---set low column address
-	OLED_WR_Byte(0x10, OLED_CMD); //---set high column address
-	OLED_WR_Byte(0x40, OLED_CMD); //--set start line address
-	OLED_WR_Byte(0xB0, OLED_CMD); //--set page address
-	OLED_WR_Byte(0x81, OLED_CMD); // contract control
-	OLED_WR_Byte(0xFF, OLED_CMD); //--128
-	OLED_WR_Byte(0xA1, OLED_CMD); // set segment remap
-	OLED_WR_Byte(0xA6, OLED_CMD); //--normal / reverse
-	OLED_WR_Byte(0xA8, OLED_CMD); //--set multiplex ratio(1 to 64)
-	OLED_WR_Byte(0x3F, OLED_CMD); //--1/32 duty
-	OLED_WR_Byte(0xC8, OLED_CMD); // Com scan direction
-	OLED_WR_Byte(0xD3, OLED_CMD); //-set display offset
-	OLED_WR_Byte(0x00, OLED_CMD); //
-
-	OLED_WR_Byte(0xD5, OLED_CMD); // set osc division
-	OLED_WR_Byte(0x80, OLED_CMD); //
-
-	OLED_WR_Byte(0xD8, OLED_CMD); // set area color mode off
-	OLED_WR_Byte(0x05, OLED_CMD); //
-
-	OLED_WR_Byte(0xD9, OLED_CMD); // Set Pre-Charge Period
-	OLED_WR_Byte(0xF1, OLED_CMD); //
-
-	OLED_WR_Byte(0xDA, OLED_CMD); // set com pin configuartion
-	OLED_WR_Byte(0x12, OLED_CMD); //
-
-	OLED_WR_Byte(0xDB, OLED_CMD); // set Vcomh
-	OLED_WR_Byte(0x30, OLED_CMD); //
-
-	OLED_WR_Byte(0x8D, OLED_CMD); // set charge pump enable
-	OLED_WR_Byte(0x14, OLED_CMD); //
-
-	OLED_WR_Byte(0xAF, OLED_CMD); //--turn on oled panel
-
-	s_oled_fd = fd;
-}
-
-/**************************************************
- * 函数功能: 设置坐标
- * SSD1306控制芯片内置 128*8=1024字节的GDDRAM, oled
- * 屏幕的有128*64=8192像素, GDDRAM的每1bit对应屏幕
- * 的一个像素. 每一行128像素, 8行为一个page(页), 当
- * 控制芯片处于page模式时, 每写入一个字节, 对应的是
- * 屏幕上指定页的一列的8个像素; 写入时, 字节的高位
- * 写入当前列的底端, 低位写入当前列的顶端.
- *                       --参见SSD1306手册的8.7节
- * 当写入汉字时, 由于现在使用的汉字库时16x16的点阵,
- * 所以一个汉字占两行, 16列
- * ------------------------------------------------
- * @param - x, 列号, 取值范围: 0~127
- * @param - y, page号(或者称行号), 取值范围: 0~7
- * ------------------------------------------------
- * @return - 无
- **************************************************/
-void OLED_Set_Pos(u8 x, u8 y)
-{
-	x = (x % MAX_COLUMN);
-	y = (y % PAGE_COUNT);
-	OLED_WR_Byte(0xb0 + y, OLED_CMD);                 //设置page号
-	OLED_WR_Byte(((x & 0xf0) >> 4) | 0x10, OLED_CMD); //设置列值的高4位
-	OLED_WR_Byte((x & 0x0f), OLED_CMD);               //设置列值的低4位
-}
-
 //更新显存到OLED
 void OLED_Refresh()
 {
@@ -247,22 +148,6 @@ void OLED_Refresh()
 	}
 
 	OLED_print_canvas();
-}
-
-//开启OLED显示
-void OLED_Display_On()
-{
-	OLED_WR_Byte(0X8D, OLED_CMD); // SET DCDC命令
-	OLED_WR_Byte(0X14, OLED_CMD); // DCDC ON
-	OLED_WR_Byte(0XAF, OLED_CMD); // DISPLAY ON
-}
-
-//关闭OLED显示
-void OLED_Display_Off()
-{
-	OLED_WR_Byte(0X8D, OLED_CMD); // SET DCDC命令
-	OLED_WR_Byte(0X10, OLED_CMD); // DCDC OFF
-	OLED_WR_Byte(0XAE, OLED_CMD); // DISPLAY OFF
 }
 
 //反显函数
@@ -397,10 +282,22 @@ void OLED_DrawCircle(u8 x, u8 y, u8 r)
  * ------------------------------------------------
  * @return - 无
  ******************************************************/
-void OLED_Set_8x8_Cell(u8 row, u8 col, u8 *data, u8 len)
+void OLED_Set_8x8_Cell(u8 row, u8 col, u8 *data, u8 len, u8 mode)
 {
-	u8 x = (col % ASCII_CHAR_COUNT_PER_LINE) * ASCII_WIDTH;
-	memcpy(&s_OLED_GRAM[row][x], data, len);
+    u8 x = (col % ASCII_CHAR_COUNT_PER_LINE) * ASCII_WIDTH;
+    row = row % PAGE_COUNT;
+    len = len % (ASCII_WIDTH + 1);
+
+    memcpy(&s_OLED_GRAM[row][x], data, len);
+
+    if (mode == OLED_ROW_HIGH_LIGHT_ON)
+    {
+        int i = 0;
+        for (i = 0; i < len; i++)
+        {
+            s_OLED_GRAM[row][x + i] = ~s_OLED_GRAM[row][x + i];
+        }
+    }
 }
 
 /******************************************************
@@ -413,8 +310,8 @@ void OLED_Set_8x8_Cell(u8 row, u8 col, u8 *data, u8 len)
  ******************************************************/
 void OLED_Clear_8x8_Cell(int fd, u8 row, u8 col)
 {
-	u8 d[ASCII_WIDTH] = { 0 };
-	OLED_Set_8x8_Cell(row, col, d, ASCII_WIDTH);
+    u8 d[ASCII_WIDTH] = { 0 };
+    OLED_Set_8x8_Cell(row, col, d, ASCII_WIDTH, OLED_ROW_HIGH_LIGHT_OFF);
 }
 
 /******************************************************
@@ -426,7 +323,8 @@ void OLED_Clear_8x8_Cell(int fd, u8 row, u8 col)
  ******************************************************/
 void OLED_Clear_Row(u8 row)
 {
-	memset(&s_OLED_GRAM[row][0], 0, sizeof(s_OLED_GRAM[row]));
+    row = row % PAGE_COUNT;
+    memset(&s_OLED_GRAM[row][0], 0, sizeof(s_OLED_GRAM[row % PAGE_COUNT]));
 }
 
 /******************************************************
@@ -438,15 +336,15 @@ void OLED_Clear_Row(u8 row)
  ******************************************************/
 void OLED_Light_Row(u8 row)
 {
-	u8 i;
-	u8 d[ASCII_WIDTH];
+    u8 i;
+    u8 d[ASCII_WIDTH];
 
-	memset(d, 0xFF, ASCII_WIDTH);
+    memset(d, 0xFF, ASCII_WIDTH);
 
-	for (i = 0; i < ASCII_CHAR_COUNT_PER_LINE; i++)
-	{
-		OLED_Set_8x8_Cell(row, i, d, ASCII_WIDTH);
-	}
+    for (i = 0; i < ASCII_CHAR_COUNT_PER_LINE; i++)
+    {
+        OLED_Set_8x8_Cell(row, i, d, ASCII_WIDTH, OLED_ROW_HIGH_LIGHT_ON);
+    }
 }
 
 /******************************************************
@@ -481,13 +379,12 @@ void OLED_LIGHT_ALL()
  * ----------------------------------------
  * @return - 无
  ******************************************/
-void OLED_Show8x16Char(u8 row, u8 col, u8 c)
+void OLED_Show8x16Char(u8 row, u8 col, u8 c, u8 mode)
 {
-	c = c - ' '; //得到字库中的索引
+    c = c - ' '; //得到字库中的索引
 
-	OLED_Set_8x8_Cell(row, col, (u8*) (F8X16 + c * 16), ASCII_WIDTH);   //显示上半部分
-	OLED_Set_8x8_Cell(row + 1, col, (u8*) (F8X16 + c * 16 + PAGE_HEIGHT),
-			ASCII_WIDTH); //显示下半部分
+    OLED_Set_8x8_Cell(row, col, (u8*) (F8X16 + c * 16), ASCII_WIDTH, mode);                   //显示上半部分
+    OLED_Set_8x8_Cell(row + 1, col, (u8*) (F8X16 + c * 16 + PAGE_HEIGHT), ASCII_WIDTH, mode); //显示下半部分
 }
 
 /******************************************
@@ -498,22 +395,23 @@ void OLED_Show8x16Char(u8 row, u8 col, u8 c)
  * ----------------------------------------
  * @return - 无
  ******************************************/
-void OLED_Show16x16Chinese(u8 row, u8 col, u16 c)
+void OLED_Show16x16Chinese(u8 row, u8 col, u16 c, u8 mode)
 {
-	u32 i = 0;
-	for (i = 0; i < chzCharCount; i++)
-	{
-		if (CN16_Msk[i].Index == c)
-		{
-			OLED_Set_8x8_Cell(row, col, (u8*) (CN16_Msk[i].Msk), ASCII_WIDTH); //显示左上部分
-			OLED_Set_8x8_Cell(row, col + 1,
-					(u8*) (CN16_Msk[i].Msk + ASCII_WIDTH), ASCII_WIDTH); //显示右上部分
-			OLED_Set_8x8_Cell(row + 1, col,
-					(u8*) (CN16_Msk[i].Msk + 2 * ASCII_WIDTH), ASCII_WIDTH); //显示左下部分
-			OLED_Set_8x8_Cell(row + 1, col + 1,
-					(u8*) (CN16_Msk[i].Msk + 3 * ASCII_WIDTH), ASCII_WIDTH); //显示右下部分
-		}
-	}
+    char buf[32] = { 0 };
+    int len = getFontGBK(c, buf);
+
+    if (len > 0)
+    {
+        OLED_Set_8x8_Cell(row, col, (u8*) (buf), ASCII_WIDTH, mode);                           //显示左上部分
+        OLED_Set_8x8_Cell(row, col + 1, (u8*) (buf + ASCII_WIDTH), ASCII_WIDTH, mode);         //显示右上部分
+        OLED_Set_8x8_Cell(row + 1, col, (u8*) (buf + 2 * ASCII_WIDTH), ASCII_WIDTH, mode);     //显示左下部分
+        OLED_Set_8x8_Cell(row + 1, col + 1, (u8*) (buf + 3 * ASCII_WIDTH), ASCII_WIDTH, mode); //显示右下部分
+    }
+    else
+    {
+        OLED_Show8x16Char(row, col, '?', mode);
+        OLED_Show8x16Char(row, col + 1, '?', mode);
+    }
 }
 
 /******************************************
@@ -525,22 +423,23 @@ void OLED_Show16x16Chinese(u8 row, u8 col, u16 c)
  * ----------------------------------------
  * @return - 无
  ******************************************/
-void OLED_Show16x16Chinese_UTF8(u8 row, u8 col, u32 c)
+void OLED_Show16x16Chinese_UTF8(u8 row, u8 col, u32 c, u8 mode)
 {
-	u32 i = 0;
-	for (i = 0; i < chzCharCount; i++)
-	{
-		if (CN16_Msk[i].unicode == c)
-		{
-			OLED_Set_8x8_Cell(row, col, (u8*) (CN16_Msk[i].Msk), ASCII_WIDTH); //显示左上部分
-			OLED_Set_8x8_Cell(row, col + 1,
-					(u8*) (CN16_Msk[i].Msk + ASCII_WIDTH), ASCII_WIDTH); //显示右上部分
-			OLED_Set_8x8_Cell(row + 1, col,
-					(u8*) (CN16_Msk[i].Msk + 2 * ASCII_WIDTH), ASCII_WIDTH); //显示左下部分
-			OLED_Set_8x8_Cell(row + 1, col + 1,
-					(u8*) (CN16_Msk[i].Msk + 3 * ASCII_WIDTH), ASCII_WIDTH); //显示右下部分
-		}
-	}
+    char buf[32] = { 0 };
+    int len = getFontUTF8(c, buf);
+
+    if (len > 0)
+    {
+        OLED_Set_8x8_Cell(row, col, (u8*) (buf), ASCII_WIDTH, mode);                           //显示左上部分
+        OLED_Set_8x8_Cell(row, col + 1, (u8*) (buf + ASCII_WIDTH), ASCII_WIDTH, mode);         //显示右上部分
+        OLED_Set_8x8_Cell(row + 1, col, (u8*) (buf + 2 * ASCII_WIDTH), ASCII_WIDTH, mode);     //显示左下部分
+        OLED_Set_8x8_Cell(row + 1, col + 1, (u8*) (buf + 3 * ASCII_WIDTH), ASCII_WIDTH, mode); //显示右下部分
+    }
+    else
+    {
+        OLED_Show8x16Char(row, col, '?', mode);
+        OLED_Show8x16Char(row, col + 1, '?', mode);
+    }
 }
 
 /******************************************************
@@ -555,7 +454,7 @@ void OLED_Show16x16Chinese_UTF8(u8 row, u8 col, u32 c)
  * @return - 无
  ******************************************************/
 /***********功能描述：128×64起始点坐标(x,y),x的范围0～127，y为页的范围0～7*****************/
-void OLED_DrawBMP(int fd, u8 x0, u8 y0, u8 x1, u8 y1, u8 BMP[])
+void OLED_DrawBMP(int fd, u8 x0, u8 y0, u8 x1, u8 y1, u8 BMP[], u8 mode)
 {
 	unsigned int j = 0;
 	u8 x, y;
@@ -571,11 +470,9 @@ void OLED_DrawBMP(int fd, u8 x0, u8 y0, u8 x1, u8 y1, u8 BMP[])
 
 	for (y = y0; y < y1; y++)
 	{
-		OLED_Set_Pos(x0, y);
-
 		for (x = x0; x < x1; x++)
 		{
-			OLED_WR_Byte(BMP[j++], OLED_DATA);
+			s_PIXEL_GRAM[x][y] = BMP[j++];
 		}
 	}
 }
@@ -595,52 +492,60 @@ void OLED_DrawBMP(int fd, u8 x0, u8 y0, u8 x1, u8 y1, u8 BMP[])
  * ---------------------------------------------------
  * @return - 无
  ******************************************************/
-void OLED_Print(u8 row, u8 col, u8 width, char *s)
+void OLED_Print(u8 row, u8 col, u8 width, char *s, u8 mode)
 {
-	u32 i;
-	u8 delta;
-	unsigned short chs = 0;
-	u32 length = strlen(s); //取字符串总长
-	char *p = s;            //字符串
+    u32 i;
+    u8 delta;
+    unsigned short chs = 0;
+    u32 length = strlen(s); //取字符串总长
+    char *p = s;            //字符串
 
-	u8 curRow = row;
-	u8 curCol = col;
+    u8 curRow = row;
+    u8 curCol = col;
 
-	for (i = 0; i < length; i += delta, col += delta)
-	{
-		if (p[i] <= 127) //小于128是ASCII符号
-		{
-			delta = 1;
-		}
-		else if (p[i] > 127) //大于127，为汉字，前后两个组成汉字内码
-		{
-			chs = (p[i] << 8) | (p[i + 1]); //取汉字的内码
-			delta = 2;
-		}
+    for (i = 0; i < length; i += delta, col += delta)
+    {
+        if (p[i] <= 127) //小于128是ASCII符号
+        {
+            delta = 1;
+        }
+        else if (p[i] > 127) //大于127，为汉字，前后两个组成汉字内码
+        {
+            chs = (p[i] << 8) | (p[i + 1]); //取汉字的内码
+            delta = 2;
+        }
 
-		if (((curCol - col) + delta) > width)
-		{
-			if ((curRow + CHAR_LOGICAL_HEIGHT) >= LOGICAL_ROW_COUNT)
-			{
-				curRow = 0;
-			}
-			else
-			{
-				curRow += CHAR_LOGICAL_HEIGHT;
-			}
+        if (((curCol - col) + delta) > width)
+        {
+            if ((curRow + CHAR_LOGICAL_HEIGHT) >= LOGICAL_ROW_COUNT)
+            {
+                curRow = 0;
+            }
+            else
+            {
+                curRow += CHAR_LOGICAL_HEIGHT;
+            }
 
-			curCol = col;
-		}
+            curCol = col;
+        }
 
-		if (1 == delta) // ASCII码
-		{
-			OLED_Show8x16Char(row, col, s[i]);
-		}
-		else if (2 == delta) //汉字
-		{
-			OLED_Show16x16Chinese(row, col, chs);
-		}
-	}
+        if (1 == delta) // ASCII码
+        {
+            if (p[i] == '\n')
+            {
+                curRow += CHAR_LOGICAL_HEIGHT;
+                curCol = 0;
+            }
+            else
+            {
+                OLED_Show8x16Char(curRow, curCol, p[i], mode);
+            }
+        }
+        else if (2 == delta) //汉字
+        {
+            OLED_Show16x16Chinese(row, col, chs, mode);
+        }
+    }
 }
 
 /******************************************************
@@ -658,61 +563,374 @@ void OLED_Print(u8 row, u8 col, u8 width, char *s)
  * ---------------------------------------------------
  * @return - 无
  ******************************************************/
-void OLED_Print_UTF8(u8 row, u8 col, u8 width, char *s)
+void OLED_Print_UTF8(u8 row, u8 col, u8 width, char *s, u8 mode)
 {
-	u32 i;           //字符串索引
-	u8 delta;        //每次的列增量
-	u32 unicode = 0; // Unicode 编码值
-	u8 bytes = 0;    // utf-8字节数
-	u32 length = 0;  //取字符串总长
-	char *p = s;     //字符串
+    u32 i;           //字符串索引
+    u8 delta;        //每次的列增量
+    u32 unicode = 0; // Unicode 编码值
+    u8 bytes = 0;    // utf-8字节数
+    u32 length = 0;  //取字符串总长
+    char *p = s;     //字符串
 
-	u8 curRow = row;
-	u8 curCol = col;
+    u8 curRow = row;
+    u8 curCol = col;
 
-	if (NULL == s)
-	{
-		return;
-	}
+    if (NULL == s)
+    {
+        return;
+    }
 
-	length = strlen(s);
+    length = strlen(s);
 
-	for (i = 0; i < length; i += bytes, curCol += delta)
-	{
-		bytes = utf8_to_unicode(p + i, length - i, &unicode);
+    for (i = 0; i < length; i += bytes, curCol += delta)
+    {
+        bytes = utf8_to_unicode(p + i, length - i, &unicode);
 
-		if (1 == bytes) // 1个字节编码, 是ASCII符号
-		{
-			delta = 1;
-		}
-		else if (bytes >= 2) //大于等于2个字节, 为汉字
-		{
-			delta = 2;
-		}
+        if (1 == bytes) // 1个字节编码, 是ASCII符号
+        {
+            delta = 1;
+        }
+        else if (bytes >= 2) //大于等于2个字节, 为汉字
+        {
+            delta = 2;
+        }
 
-		if (((curCol - col) + delta) > width)
-		{
-			if ((curRow + CHAR_LOGICAL_HEIGHT) >= LOGICAL_ROW_COUNT)
-			{
-				curRow = 0;
-			}
-			else
-			{
-				curRow += CHAR_LOGICAL_HEIGHT;
-			}
+        if (((curCol - col) + delta) > width)
+        {
+            if ((curRow + CHAR_LOGICAL_HEIGHT) >= LOGICAL_ROW_COUNT)
+            {
+                curRow = 0;
+            }
+            else
+            {
+                curRow += CHAR_LOGICAL_HEIGHT;
+            }
 
-			curCol = col;
-		}
+            curCol = col;
+        }
 
-		if (1 == delta) // ASCII码
-		{
-			OLED_Show8x16Char(curRow, curCol, p[i]);
-		}
-		else if (2 == delta) //汉字
-		{
-			OLED_Show16x16Chinese_UTF8(curRow, curCol, unicode);
-		}
-	}
+        if (1 == delta) // ASCII码
+        {
+            if (p[i] == '\n')
+            {
+                curRow += CHAR_LOGICAL_HEIGHT;
+                curCol = 0;
+                delta = 0;
+            }
+            else
+            {
+                OLED_Show8x16Char(curRow, curCol, p[i], mode);
+            }
+        }
+        else if (2 == delta) //汉字
+        {
+            OLED_Show16x16Chinese_UTF8(curRow, curCol, unicode, mode);
+        }
+    }
+
+    s_oled_layout.curRow = curRow;
+    s_oled_layout.curCol = curCol;
+}
+
+/******************************************************
+ * 函数功能: 获取一个字符串中的一个字符在屏幕上的位置.
+ * ---------------------------------------------------
+ * @param - row, 逻辑行号, 取值范围 0~7, 此字符串的第1个字符的
+ *               所在行号
+ * @param - col, 逻辑列号, 取值范围 0~15, 此字符串的第1个字符的
+ *               所在列号
+ * @param - pPosition, 字符串位置信息, 输入时必须指定成员内的
+ *          pString为所查询的字符串, charIdx为所查询的字符索引.
+ *          函数如果正确返回, 则在其成员的curRow和curCol中存储
+ *          要查找的字符的位置信息, byteIdx存储要查找的字符编码
+ *          在字符串中的字节索引值.
+ * @param - pUnicode, 如果成功查找到, 则存储该字符的Unicode编码
+ * ---------------------------------------------------
+ * @return - 查找成功 - 返回字符的UTF-8编码长度;
+ *           查找失败 - 返回-1
+ ******************************************************/
+int OLED_getPositionByIndex(u8 row, u8 col, u8 width, oledStringPosition_s *pPosition, u32 *pUnicode)
+{
+    if (pPosition == NULL || pPosition->pString == NULL || pPosition->charIdx < 0 || pUnicode == NULL)
+    {
+        return -1;
+    }
+
+    u32 i = 0;       //字符串索引
+    u8 delta = 0;    //每次的列增量
+    u8 bytes = 0;    //utf-8字节数
+    u32 length = 0;  //取字符串总长
+    char *p = pPosition->pString;     //字符串
+    int curIdx = 0;
+    u8 curRow = row;
+    u8 curCol = col;
+
+    length = strlen(pPosition->pString);
+
+    for (i = 0, curIdx = 0; i < length; i += bytes, curCol += delta, curIdx++)
+    {
+        bytes = utf8_to_unicode(p + i, length - i, pUnicode);
+
+        if (1 == bytes) // 1个字节编码, 是ASCII符号
+        {
+            delta = 1;
+        }
+        else if (bytes >= 2) //大于等于2个字节, 为汉字
+        {
+            delta = 2;
+        }
+
+        if (curIdx == pPosition->charIdx)
+        {
+            pPosition->byteIdx = i;
+            pPosition->curRow = curRow;
+            pPosition->curCol = curCol;
+            return delta;
+        }
+
+        if (((curCol - col) + delta) > width)
+        {
+            if ((curRow + CHAR_LOGICAL_HEIGHT) >= LOGICAL_ROW_COUNT)
+            {
+                curRow = 0;
+            }
+            else
+            {
+                curRow += CHAR_LOGICAL_HEIGHT;
+            }
+
+            curCol = col;
+        }
+
+        if (p[i] == '\n')
+        {
+            curRow += CHAR_LOGICAL_HEIGHT;
+            curCol = 0;
+            delta = 0;
+        }
+    }
+
+    return -1;
+}
+
+/******************************************************
+ * 函数功能: 设置一个字符串中的一个字符为高亮或者普通
+ * ---------------------------------------------------
+ * @param - row, 逻辑行号, 取值范围 0~7, 此字符串的第1个字符的
+ *               所在行号
+ * @param - col, 逻辑列号, 取值范围 0~15, 此字符串的第1个字符的
+ *               所在列号
+ * @param - s, 字符串字符
+ * @param - idx, 要高亮的字符, 在s中的索引值
+ * ---------------------------------------------------
+ * @return - 无
+ ******************************************************/
+void OLED_LightOrNormalCharByIndex(u8 row, u8 col, u8 width, char *s, int idx, u8 mode)
+{
+    if (NULL == s || idx < 0)
+    {
+        return;
+    }
+
+    oledStringPosition_s pos = { .pString = s, .charIdx = idx };
+    u32 unicode = 0;
+
+    int res = OLED_getPositionByIndex(row, col, width, &pos, &unicode);
+
+    if (1 == res) // ASCII码
+    {
+        OLED_Show8x16Char(pos.curRow, pos.curCol, unicode, mode);
+    }
+    else if (2 == res) //汉字
+    {
+        OLED_Show16x16Chinese_UTF8(pos.curRow, pos.curCol, unicode, mode);
+    }
+}
+
+/******************************************************
+ * 函数功能: 获取给定数d模mod的余数. mod必须大于1, 否则返回-1.
+ * 根据余数的定义, d = n * mod + r, 0 <= r < mod, r为余数,
+ * 则返回的余数必须介于 0 ~ mod-1 之间,
+ * ---------------------------------------------------
+ * @param - d, 被求余数的值
+ * @param - mod, 模的值
+ * ---------------------------------------------------
+ * @return - 余数r, 且 0 <= r < mod
+ ******************************************************/
+int OLED_getReminder(int d, int mod)
+{
+    if (mod <= 1)
+    {
+        return -1;
+    }
+
+    if (d >= 0)
+    {
+        return d % mod;
+    }
+
+    int abs = d * -1;
+    return mod - abs % mod;
+}
+
+/******************************************************
+ * 函数功能: 设置一个字符串中的一个字符增长或减少
+ * ---------------------------------------------------
+ * @param - row, 逻辑行号, 取值范围 0~7, 此字符串的第1个字符的
+ *               所在行号
+ * @param - col, 逻辑列号, 取值范围 0~15, 此字符串的第1个字符的
+ *               所在列号
+ * @param - s, 字符串字符
+ * @param - idx, 要高亮的字符, 在s中的索引值
+ * @param - incre, 要增加的值
+ * ---------------------------------------------------
+ * @return - 无
+ ******************************************************/
+void OLED_increaseCharByIndex(u8 row, u8 col, u8 width, char *s, int idx, int incre, int base, u8 mode)
+{
+    if (NULL == s || idx < 0)
+    {
+        return;
+    }
+
+    oledStringPosition_s pos = { .pString = s, .charIdx = idx };
+    u32 unicode = 0;
+
+    int res = OLED_getPositionByIndex(row, col, width, &pos, &unicode);
+
+    if (1 == res) // ASCII码
+    {
+        //16进制数, 或者10进制数.
+        //且当前字符在 '0' ~ '9' || 'a'~'f' || 'A'~'F' 之间
+        if (
+                (
+                     base == 10 ||
+                     base == 16
+                ) &&
+                (
+                    (unicode >= '0' && unicode <= '9') ||
+                    (unicode >= 'a' && unicode <= 'f') ||
+                    (unicode >= 'A' && unicode <= 'F')
+                )
+           )
+        {
+            incre = OLED_getReminder(incre, base);
+            int idx = 0;
+            if (unicode >= '0' && unicode <= '9')
+            {
+                idx = unicode - '0';
+            }
+            else if (unicode >= 'a' && unicode <= 'f')
+            {
+                idx = unicode - 'a' + 10;
+            }
+            else if (unicode >= 'A' && unicode <= 'F')
+            {
+                idx = unicode - 'A' + 10;
+            }
+
+            idx = ((idx + incre) % base);
+            unicode = s_OLED_upperHexLetter[idx];
+            OLED_Show8x16Char(pos.curRow, pos.curCol, unicode, mode);
+            s[pos.byteIdx] = unicode;
+        }
+    }
+}
+
+/******************************************************
+ * 函数功能: 打印一个 UTF-8 字符串.可以在指定位置进行高亮显示
+ * 如果本文件(或者其他调用液晶打印的文件)是以 UTF-8 编
+ * 码的, 如果想往液晶输出带汉字的打印信息, 应调用此函数
+ * ---------------------------------------------------
+ * @param - row, 逻辑行号, 取值范围 0~7
+ * @param - col, 逻辑列号, 取值范围 0~15
+ * @param - width, 数据项描述宽度, 以逻辑列为单位, 取值
+ *          范围1~15, 即至少1列, 至多15列, 留1列给数值.
+ * @param - s, 要显示的字符串
+ * @param    mode: OLED_ROW_HIGH_LIGHT_ON  OLED_ROW_HIGH_LIGHT_OFF
+ *  @param  start 哪一列开始高亮  mode=OLED_ROW_HIGH_LIGHT_ON 有效
+ *  @param  end 哪一列结束高亮显示  ，高亮显示范围为 start----end
+ *
+ * ---------------------------------------------------
+ * @return - 无
+ ******************************************************/
+void OLED_Print_UTF8_StarttoEndHighLight(u8 row, u8 col, u8 width, char *s,   u8 start, u8 end)
+{
+    u32 i;           //字符串索引
+    u8 delta;        //每次的列增量
+    u32 unicode = 0; // Unicode 编码值
+    u8 bytes = 0;    // utf-8字节数
+    u32 length = 0;  //取字符串总长
+    char *p = s;     //字符串
+
+    u8 curRow = row;
+    u8 curCol = col;
+
+    if (NULL == s)
+    {
+        return;
+    }
+
+    length = strlen(s);
+
+    for (i = 0; i < length; i += bytes, curCol += delta)
+    {
+        bytes = utf8_to_unicode(p + i, length - i, &unicode);
+
+        if (1 == bytes) // 1个字节编码, 是ASCII符号
+        {
+            delta = 1;
+        }
+        else if (bytes >= 2) //大于等于2个字节, 为汉字
+        {
+            delta = 2;
+        }
+
+        if (((curCol - col) + delta) > width)
+        {
+            if ((curRow + CHAR_LOGICAL_HEIGHT) >= LOGICAL_ROW_COUNT)
+            {
+                curRow = 0;
+            }
+            else
+            {
+                curRow += CHAR_LOGICAL_HEIGHT;
+            }
+
+            curCol = col;
+        }
+
+        if (1 == delta) // ASCII码
+        {
+            if (p[i] == '\n')
+            {
+                curRow += CHAR_LOGICAL_HEIGHT;
+                curCol = 0;
+                delta = 0;
+            }
+            else
+            {
+                if(curCol>=start && curCol<=end )
+                {
+                       p[i] = p[i] - ' '; //得到字库中的索引
+                       OLED_Set_8x8_Cell(row, col, (u8*) (F8X16 + p[i] * 16), ASCII_WIDTH, OLED_ROW_HIGH_LIGHT_ON);                   //显示上半部分
+                       OLED_Set_8x8_Cell(row + 1, col, (u8*) (F8X16 + p[i] * 16 + PAGE_HEIGHT), ASCII_WIDTH, OLED_ROW_HIGH_LIGHT_ON); //显示下半部分
+
+                }else
+                {
+                    OLED_Show8x16Char(curRow, curCol, p[i], OLED_ROW_HIGH_LIGHT_OFF);
+                }
+
+            }
+        }
+        else if (2 == delta) //汉字 不支持 高亮
+        {
+            //OLED_Show16x16Chinese_UTF8(curRow, curCol, unicode, mode);
+        }
+    }
+
+    s_oled_layout.curRow = curRow;
+    s_oled_layout.curCol = curCol;
 }
 
 /******************************************************
@@ -964,4 +1182,12 @@ u8 utf8_to_unicode(char *s, u16 len, u32 *unicode)
 	}
 
 	return (u8) i;
+}
+
+void OLED_test(void)
+{
+    openFontDB("/home/floyd/repo/mytesting/db/font.db");
+    OLED_Print_UTF8(0,0,16, "遥信告警", OLED_ROW_HIGH_LIGHT_OFF);
+    OLED_Refresh();
+    closeFontDB();
 }

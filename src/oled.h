@@ -43,6 +43,13 @@
 #define OLED_CMD  0	//写命令
 #define OLED_DATA 1	//写数据
 
+
+#define OLED_ROW_HIGH_LIGHT_ON          1
+#define OLED_ROW_HIGH_LIGHT_OFF         0
+
+#define OLED_HighLightCharByIndex(row, col, width, s, idx)     OLED_LightOrNormalCharByIndex(row, col, width, s, idx, OLED_ROW_HIGH_LIGHT_ON)
+#define OLED_normalLightCharByIndex(row, col, width, s, idx)     OLED_LightOrNormalCharByIndex(row, col, width, s, idx, OLED_ROW_HIGH_LIGHT_OFF)
+
 typedef struct oled_key_queen {
 #define OLED_KEY_QUEEN_LEN  16  //按键队列长度
 #define OLED_KEY_INVALID    0   //无效键值
@@ -109,7 +116,7 @@ extern "C" {
 //OLED控制用函数
     extern void OLED_Display_On();
     extern void OLED_Display_Off();
-    extern void OLED_Set_8x8_Cell(u8 row, u8 col, u8 *data, u8 len);
+    extern void OLED_Set_8x8_Cell(u8 row, u8 col, u8 *data, u8 len, u8 mode);
     extern void OLED_Clear();
     void OLED_LIGHT_ALL();
     void OLED_Light_Row(u8 row);
@@ -118,8 +125,8 @@ extern "C" {
     void OLED_Refresh();
     void OLED_DrawPoint(u8 x, u8 y, u8 t);
 
-    extern void OLED_Print(u8 row, u8 col, u8 width, char *s);
-    extern void OLED_Print_UTF8(u8 row, u8 col, u8 width, char *s);
+    extern void OLED_Print(u8 row, u8 col, u8 width, char *s, u8 mode);
+    extern void OLED_Print_UTF8(u8 row, u8 col, u8 width, char *s, u8 mode);
     extern void OLED_Init(int fd);
 
     extern int parse_oled_config(unsigned char linkno, const char *cxxxxjson);

@@ -631,6 +631,11 @@ int realDBParse(const char *fullfilename, oneDevice_s *pOneDevice)
 {
     assert(fullfilename != NULL && pOneDevice != NULL);
 
+    if (initOneDev(pOneDevice, REAL_DATA_LIST_INIT_SIZE, -1, -1, -1) != 0)
+    {
+        return -1;
+    }
+
     struct LtuDevHead head;
     struct RealdatabasePara databasePara;
 
@@ -667,11 +672,6 @@ int realDBParse(const char *fullfilename, oneDevice_s *pOneDevice)
 
     itemCount = ((st.st_size - headLen) / itemLen);
     dataItem_s item = { 0 };
-
-    if (initOneDev(pOneDevice, REAL_DATA_LIST_INIT_SIZE, -1, -1, -1) != 0)
-    {
-        return -1;
-    }
 
     int i = 0;
     for (i = 0; i < itemCount; i++)
