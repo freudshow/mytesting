@@ -53,6 +53,12 @@
 #define OLED_RECTANGEL_LINE             0x20
 
 #define OLED_UP_LEFT_LINE               (OLED_UP_LINE | OLED_LEFT_LINE)
+#define OLED_UP_RIGHT_LINE              (OLED_UP_LINE | OLED_RIGHT_LINE)
+#define OLED_BOTTOM_LEFT_LINE           (OLED_BOTTOM_LINE | OLED_LEFT_LINE)
+#define OLED_BOTTOM_RIGHT_LINE          (OLED_BOTTOM_LINE | OLED_RIGHT_LINE)
+
+#define OLED_UP_LEFT_RIGHT_LINE         (OLED_UP_LINE | OLED_LEFT_LINE | OLED_RIGHT_LINE)
+#define OLED_BOTTOM_LEFT_RIGHT_LINE     (OLED_BOTTOM_LINE | OLED_LEFT_LINE | OLED_RIGHT_LINE)
 
 #define OLED_HighLightCharByIndex(row, col, width, s, idx)     OLED_LightOrNormalCharByIndex(row, col, width, s, idx, OLED_ROW_HIGH_LIGHT_ON)
 #define OLED_normalLightCharByIndex(row, col, width, s, idx)     OLED_LightOrNormalCharByIndex(row, col, width, s, idx, OLED_ROW_HIGH_LIGHT_OFF)

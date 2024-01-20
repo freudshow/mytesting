@@ -302,6 +302,7 @@ void OLED_DrawLine(u8 x1, u8 y1, u8 x2, u8 y2, u8 mode)
 		incx = -1;
 		delta_x = -delta_x;
 	}
+
 	if (delta_y > 0)
 		incy = 1;
 	else if (delta_y == 0)
@@ -388,47 +389,38 @@ void OLED_Set_8x8_Cell(u8 row, u8 col, u8 *data, u8 len, u8 mode)
 
     memcpy(&s_OLED_GRAM[row][x], data, len);
 
-    switch (mode)
+    if (mode & OLED_ROW_HIGH_LIGHT_ON)
     {
-        case OLED_ROW_HIGH_LIGHT_ON:
-            for (i = 0; i < len; i++)
-            {
-                s_OLED_GRAM[row][x + i] = ~s_OLED_GRAM[row][x + i];
-            }
-            break;
-        case OLED_UP_LINE:
-            for (i = 0; i < len; i++)
-            {
-                s_OLED_GRAM[row][x + i] = s_OLED_GRAM[row][x + i] | 0x01;
-            }
-            break;
-        case OLED_BOTTOM_LINE:
-            for (i = 0; i < len; i++)
-            {
-                s_OLED_GRAM[row][x + i] = s_OLED_GRAM[row][x + i] | 0x80;
-            }
-            break;
-        case OLED_LEFT_LINE:
-            s_OLED_GRAM[row][x] = 0xFF;
-            break;
-        case OLED_RIGHT_LINE:
-            s_OLED_GRAM[row][x + len - 1] = 0xFF;
-            break;
-        case OLED_RECTANGEL_LINE:
-            s_OLED_GRAM[row][x] = 0xFF;
-            s_OLED_GRAM[row][x + len - 1] = 0xFF;
-            for (i = 0; i < len; i++)
-            {
-                s_OLED_GRAM[row][x + i] = s_OLED_GRAM[row][x + i] | 0x01;
-            }
+        for (i = 0; i < len; i++)
+        {
+            s_OLED_GRAM[row][x + i] = ~s_OLED_GRAM[row][x + i];
+        }
+    }
 
-            for (i = 0; i < len; i++)
-            {
-                s_OLED_GRAM[row][x + i] = s_OLED_GRAM[row][x + i] | 0x80;
-            }
-            break;
-        default:
-            break;
+    if (mode & OLED_UP_LINE)
+    {
+        for (i = 0; i < len; i++)
+        {
+            s_OLED_GRAM[row][x + i] = s_OLED_GRAM[row][x + i] | 0x01;
+        }
+    }
+
+    if (mode & OLED_BOTTOM_LINE)
+    {
+        for (i = 0; i < len; i++)
+        {
+            s_OLED_GRAM[row][x + i] = s_OLED_GRAM[row][x + i] | 0x80;
+        }
+    }
+
+    if (mode & OLED_LEFT_LINE)
+    {
+        s_OLED_GRAM[row][x] = 0xFF;
+    }
+
+    if (mode & OLED_RIGHT_LINE)
+    {
+        s_OLED_GRAM[row][x + len - 1] = 0xFF;
     }
 }
 
@@ -515,8 +507,29 @@ void OLED_Show8x16Char(u8 row, u8 col, u8 c, u8 mode)
 {
     c = c - ' '; //得到字库中的索引
 
-    OLED_Set_8x8_Cell(row, col, (u8*) (F8X16 + c * 16), ASCII_WIDTH, mode);                   //显示上半部分
-    OLED_Set_8x8_Cell(row + 1, col, (u8*) (F8X16 + c * 16 + PAGE_HEIGHT), ASCII_WIDTH, mode); //显示下半部分
+    switch (mode)
+    {
+        case OLED_UP_LINE:
+            OLED_Set_8x8_Cell(row, col, (u8*) (F8X16 + c * 16), ASCII_WIDTH, OLED_UP_LINE);                                 //显示上半部分
+            OLED_Set_8x8_Cell(row + 1, col, (u8*) (F8X16 + c * 16 + PAGE_HEIGHT), ASCII_WIDTH, OLED_ROW_HIGH_LIGHT_OFF);    //显示下半部分
+            break;
+        case OLED_BOTTOM_LINE:
+            OLED_Set_8x8_Cell(row, col, (u8*) (F8X16 + c * 16), ASCII_WIDTH, OLED_ROW_HIGH_LIGHT_OFF);                                 //显示上半部分
+            OLED_Set_8x8_Cell(row + 1, col, (u8*) (F8X16 + c * 16 + PAGE_HEIGHT), ASCII_WIDTH, OLED_BOTTOM_LINE);    //显示下半部分
+            break;
+        case OLED_RECTANGEL_LINE:
+            OLED_Set_8x8_Cell(row, col, (u8*) (F8X16 + c * 16), ASCII_WIDTH, OLED_UP_LEFT_RIGHT_LINE);                                 //显示上半部分
+            OLED_Set_8x8_Cell(row + 1, col, (u8*) (F8X16 + c * 16 + PAGE_HEIGHT), ASCII_WIDTH, OLED_BOTTOM_LEFT_RIGHT_LINE);
+            break;
+        case OLED_ROW_HIGH_LIGHT_ON:
+        case OLED_ROW_HIGH_LIGHT_OFF:
+        case OLED_RIGHT_LINE:
+        case OLED_LEFT_LINE:
+        default:
+            OLED_Set_8x8_Cell(row, col, (u8*) (F8X16 + c * 16), ASCII_WIDTH, mode);                     //显示上半部分
+            OLED_Set_8x8_Cell(row + 1, col, (u8*) (F8X16 + c * 16 + PAGE_HEIGHT), ASCII_WIDTH, mode);   //显示下半部分
+            break;
+    }
 }
 
 /******************************************
@@ -562,10 +575,10 @@ void OLED_Show16x16Chinese_UTF8(u8 row, u8 col, u32 c, u8 mode)
                 OLED_Set_8x8_Cell(row + 1, col + 1, (u8*) (buf + 3 * ASCII_WIDTH), ASCII_WIDTH, OLED_RIGHT_LINE); //显示右下部分
                 break;
             case OLED_RECTANGEL_LINE:
-                OLED_Set_8x8_Cell(row, col, (u8*) (buf), ASCII_WIDTH, OLED_ROW_HIGH_LIGHT_OFF);                    //显示左上部分
-                OLED_Set_8x8_Cell(row, col + 1, (u8*) (buf + ASCII_WIDTH), ASCII_WIDTH, OLED_RIGHT_LINE);  //显示右上部分
-                OLED_Set_8x8_Cell(row + 1, col, (u8*) (buf + 2 * ASCII_WIDTH), ASCII_WIDTH, OLED_ROW_HIGH_LIGHT_OFF);     //显示左下部分
-                OLED_Set_8x8_Cell(row + 1, col + 1, (u8*) (buf + 3 * ASCII_WIDTH), ASCII_WIDTH, OLED_RIGHT_LINE); //显示右下部分
+                OLED_Set_8x8_Cell(row, col, (u8*) (buf), ASCII_WIDTH, OLED_UP_LEFT_LINE);                               //显示左上部分
+                OLED_Set_8x8_Cell(row, col + 1, (u8*) (buf + ASCII_WIDTH), ASCII_WIDTH, OLED_UP_RIGHT_LINE);            //显示右上部分
+                OLED_Set_8x8_Cell(row + 1, col, (u8*) (buf + 2 * ASCII_WIDTH), ASCII_WIDTH, OLED_BOTTOM_LEFT_LINE);     //显示左下部分
+                OLED_Set_8x8_Cell(row + 1, col + 1, (u8*) (buf + 3 * ASCII_WIDTH), ASCII_WIDTH, OLED_BOTTOM_RIGHT_LINE);//显示右下部分
                 break;
             case OLED_ROW_HIGH_LIGHT_ON:
             case OLED_ROW_HIGH_LIGHT_OFF:
@@ -1279,10 +1292,12 @@ void getInput(void)
 void OLED_test(void)
 {
     openFontDB("/home/floyd/repo/mytesting/db/font.db");
-    OLED_Print_UTF8(0, 0, 16, "大開眼界", OLED_BOTTOM_LINE);
+//    OLED_Print_UTF8(0, 0, 16, "大開眼界", OLED_RECTANGEL_LINE);
+//    OLED_Print_UTF8(2, 0, 16, "abcde", OLED_RECTANGEL_LINE);
+//    OLED_Print_UTF8(4, 0, 16, "abcde", OLED_BOTTOM_LINE);
     closeFontDB();
 
-//    OLED_DrawLine(0, 0, 10, 10, 1);
+    OLED_DrawLine(0, 0, 10, 8, 1);
 //    OLED_DrawCircle(9,9,5);
     OLED_Refresh();
 }
