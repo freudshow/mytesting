@@ -43,9 +43,16 @@
 #define OLED_CMD  0	//写命令
 #define OLED_DATA 1	//写数据
 
+#define OLED_ROW_HIGH_LIGHT_OFF         0x00
+#define OLED_ROW_HIGH_LIGHT_ON          0x01
 
-#define OLED_ROW_HIGH_LIGHT_ON          1
-#define OLED_ROW_HIGH_LIGHT_OFF         0
+#define OLED_UP_LINE                    0x02
+#define OLED_BOTTOM_LINE                0x04
+#define OLED_LEFT_LINE                  0x08
+#define OLED_RIGHT_LINE                 0x10
+#define OLED_RECTANGEL_LINE             0x20
+
+#define OLED_UP_LEFT_LINE               (OLED_UP_LINE | OLED_LEFT_LINE)
 
 #define OLED_HighLightCharByIndex(row, col, width, s, idx)     OLED_LightOrNormalCharByIndex(row, col, width, s, idx, OLED_ROW_HIGH_LIGHT_ON)
 #define OLED_normalLightCharByIndex(row, col, width, s, idx)     OLED_LightOrNormalCharByIndex(row, col, width, s, idx, OLED_ROW_HIGH_LIGHT_OFF)
