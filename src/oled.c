@@ -1292,12 +1292,12 @@ void getInput(void)
 void OLED_test(void)
 {
     openFontDB("/home/floyd/repo/mytesting/db/font.db");
-//    OLED_Print_UTF8(0, 0, 16, "大開眼界", OLED_RECTANGEL_LINE);
-//    OLED_Print_UTF8(2, 0, 16, "abcde", OLED_RECTANGEL_LINE);
-//    OLED_Print_UTF8(4, 0, 16, "abcde", OLED_BOTTOM_LINE);
+    OLED_Print_UTF8(0, 0, 16, "大開眼界", OLED_BOTTOM_LINE);
+    OLED_Print_UTF8(2, 0, 16, "abcde", OLED_BOTTOM_LINE);
+    OLED_Print_UTF8(4, 0, 16, "abcde", OLED_BOTTOM_LINE);
     closeFontDB();
 
-    OLED_DrawLine(0, 0, 10, 8, 1);
+//    OLED_DrawLine(0, 0, 10, 8, 1);
 //    OLED_DrawCircle(9,9,5);
     OLED_Refresh();
 }

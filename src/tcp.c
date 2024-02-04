@@ -14,6 +14,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <net/if.h>
+#include <net/route.h>
 #include <arpa/inet.h>
 #include <sys/ioctl.h>
 #include <string.h>
@@ -341,7 +342,7 @@ int testip(void)
     return 0;
 }
 
-int ipmain(void)
+int printAllInterfaces(void)
 {
     struct ifaddrs *addresses;
     if (getifaddrs(&addresses) == -1)
@@ -370,4 +371,205 @@ int ipmain(void)
     freeifaddrs(addresses);
 
     return 0;
+}
+
+int addRouteItem(const char* gateway, const char* dest_ip, const char* mask, const char* dev)
+{
+    int sockfd;
+    struct rtentry rt = {0};  //创建结构体变量
+    //创建套接字
+    sockfd = socket(AF_INET, SOCK_DGRAM, 0);
+    if (sockfd == -1)
+    {
+        perror("socket creation failed\n");
+        return -1;
+    }
+
+    struct sockaddr_in *sockinfo = NULL;
+
+    //设置网关，又名下一跳：转到下个路由的路由地址
+
+    if(strlen(gateway) > 0 && strlen(gateway) < IF_NAMESIZE)
+    {
+        struct sockaddr_in *sockinfo = (struct sockaddr_in*) &rt.rt_gateway;
+        sockinfo->sin_family = AF_INET;
+        sockinfo->sin_addr.s_addr = inet_addr(gateway);
+    }
+
+    //设置目的地址
+    sockinfo = (struct sockaddr_in*) &rt.rt_dst;
+    sockinfo->sin_family = AF_INET;
+    sockinfo->sin_addr.s_addr = inet_addr(dest_ip);
+
+    //设置子网掩码
+    if(strlen(mask) > 0 && strlen(mask) < IF_NAMESIZE)
+    {
+        sockinfo = (struct sockaddr_in*) &rt.rt_genmask;
+        sockinfo->sin_family = AF_INET;
+        sockinfo->sin_addr.s_addr = inet_addr(mask);
+    }
+
+    if(strlen(dev) > 0 && strlen(dev) < IF_NAMESIZE)
+    {
+        //设置网卡设备名
+        rt.rt_flags = RTF_UP | RTF_GATEWAY;
+        rt.rt_dev = (char*) dev;
+    }
+
+    //ioctl接口进行路由属性设置
+    if (ioctl(sockfd, SIOCADDRT, &rt) < 0)
+    {
+        perror("ioctl:");
+        return -1;
+    }
+
+    return 1;
+}
+
+int delRouteItem(const char* nexthop, const char* dest_ip, const char* mask, const char* dev)
+{
+    int fd;
+    struct sockaddr_in _sin;
+    struct sockaddr_in *sin = &_sin;
+    struct rtentry rt;
+
+    fd = socket(AF_INET, SOCK_DGRAM, 0);
+    if (fd < 0)
+    {
+        perror("create fd of socket error:");
+        return -1;
+    }
+
+    //要删除的网关信息，网关信息可以不填充，有ip 子网掩码即可删除路由
+    memset(&rt, 0, sizeof(struct rtentry));
+    memset(sin, 0, sizeof(struct sockaddr_in));
+    sin->sin_family = AF_INET;
+    sin->sin_port = 0;
+    if (inet_aton(nexthop, &sin->sin_addr) < 0)
+    {
+        perror("gateWay inet_aton error:");
+        close(fd);
+        return -1;
+    }
+    memcpy(&rt.rt_gateway, sin, sizeof(struct sockaddr_in));
+
+    //要删除的ip信息
+    ((struct sockaddr_in*) &rt.rt_dst)->sin_family = AF_INET;
+    if (inet_aton(dest_ip, &((struct sockaddr_in*) &rt.rt_dst)->sin_addr) < 0)
+    {
+        perror("dest addr inet_aton error:");
+        close(fd);
+        return -1;
+    }
+
+    //要删除的子网掩码
+    ((struct sockaddr_in*) &rt.rt_genmask)->sin_family = AF_INET;
+    if (inet_aton(mask, &((struct sockaddr_in*) &rt.rt_genmask)->sin_addr) < 0)
+    {
+        perror("mask inet_aton error:");
+        close(fd);
+        return -1;
+    }
+
+    //网卡设备名
+    rt.rt_dev = (char*) dev;
+    rt.rt_flags = RTF_UP | RTF_GATEWAY;
+
+    if (ioctl(fd, SIOCDELRT, &rt) < 0)
+    {
+        perror("ioctl SIOCADDRT error : ");
+        close(fd);
+        return -1;
+    }
+
+    close(fd);
+
+    return 1;
+}
+
+typedef struct routeInfoStruct
+{
+    char gateway[32];
+    char destIp[32];
+    char mask[32];
+    char dev[32];
+}routeInfo_s;
+
+int getAllRouteInfos(routeInfo_s *pInfos, size_t len)
+{
+    if (pInfos == NULL || len == 0)
+    {
+        return -1;
+    }
+
+    FILE *fp;
+    char devname[64];
+    unsigned long d, g, m;
+    int r = 0;
+    int flgs, ref, use, metric, mtu, win, ir;
+    uint8_t gate[4] = {0};
+    uint8_t ip[4] = {0};
+    uint8_t mask[4] = {0};
+    uint8_t ip_str[128] = {0};
+    uint8_t mask_str[128] = {0};
+    uint8_t gate_str[128] = {0};
+
+    fp = fopen("/proc/net/route", "r");
+    /* Skip the first line. */
+    r = fscanf(fp, "%*[^\n]\n");
+    if (r < 0)
+    {
+        /* Empty line, read error, or EOF. Yes, if routing table
+         * is completely empty, /proc/net/route has no header.
+         */
+        fclose(fp);
+        return -1;
+    }
+
+
+    size_t count = 0;
+    while (count < len)
+    {
+        r = fscanf(fp, "%63s%lx%lx%X%d%d%d%lx%d%d%d\n",
+                   devname, &d, &g, &flgs, &ref, &use, &metric, &m,
+                   &mtu, &win, &ir);
+
+        if (r != 11)
+        {
+            if ((r < 0) && feof(fp))
+            { /* EOF with no (nonspace) chars read. */
+                break;
+            }
+        }
+
+        // RTF_UP表示该路由可用，RTF_GATEWAY表示该路由为一个网关，组合在一起就是3，表示一个可用的网关
+//        if ((flgs & RTF_GATEWAY) &&
+//            (flgs & RTF_UP) &&
+//            g != 0)
+        if (flgs & RTF_UP)
+        {
+            memcpy(ip, &d, 4);
+            memcpy(mask, &m, 4);
+            memcpy(gate, &g, 4);
+            sprintf((char *)gate_str, "%d.%d.%d.%d", gate[0], gate[1], gate[2], gate[3]);
+            sprintf((char *)ip_str, "%d.%d.%d.%d", ip[0], ip[1], ip[2], ip[3]);
+            sprintf((char *)mask_str, "%d.%d.%d.%d", mask[0], mask[1], mask[2], mask[3]);
+
+            printf("gate : %d.%d.%d.%d\n", gate[0], gate[1], gate[2], gate[3]);
+            printf("ip : %d.%d.%d.%d\n", ip[0], ip[1], ip[2], ip[3]);
+            printf("mask : %d.%d.%d.%d\n", mask[0], mask[1], mask[2], mask[3]);
+            printf("dev: %s\n", devname);
+        }
+    }
+
+    fclose(fp);
+    return 1;
+}
+
+void testtcp(void)
+{
+    addRouteItem("", "10.2.3.4", "", "ens33");
+
+    routeInfo_s routeInfoArray[64] = {0};
+    getAllRouteInfos(routeInfoArray, NELEM(routeInfoArray));
 }
