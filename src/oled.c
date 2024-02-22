@@ -293,41 +293,51 @@ void OLED_DrawLine(u8 x1, u8 y1, u8 x2, u8 y2, u8 mode)
 	delta_y = y2 - y1;
 	uRow = x1; //画线起点坐标
 	uCol = y1;
-	if (delta_x > 0)
+
+	if (delta_x > 0) {
 		incx = 1; //设置单步方向
-	else if (delta_x == 0)
+	}
+
+	else if (delta_x == 0) {
 		incx = 0; //垂直线
-	else
-	{
+	}
+
+	else {
 		incx = -1;
 		delta_x = -delta_x;
 	}
 
-	if (delta_y > 0)
+	if (delta_y > 0) {
 		incy = 1;
-	else if (delta_y == 0)
+	}
+
+	else if (delta_y == 0) {
 		incy = 0; //水平线
-	else
-	{
+	}
+
+	else {
 		incy = -1;
 		delta_y = -delta_x;
 	}
-	if (delta_x > delta_y)
+
+	if (delta_x > delta_y) {
 		distance = delta_x; //选取基本增量坐标轴
-	else
+	}
+
+	else {
 		distance = delta_y;
-	for (t = 0; t < distance + 1; t++)
-	{
+	}
+
+	for (t = 0; t < distance + 1; t++) {
 		OLED_DrawPoint(uRow, uCol, mode); //画点
 		xerr += delta_x;
 		yerr += delta_y;
-		if (xerr > distance)
-		{
+		if (xerr > distance) {
 			xerr -= distance;
 			uRow += incx;
 		}
-		if (yerr > distance)
-		{
+
+		if (yerr > distance) {
 			yerr -= distance;
 			uCol += incy;
 		}

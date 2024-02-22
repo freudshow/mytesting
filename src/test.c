@@ -17,6 +17,8 @@ int main(int argc, char **argv)
 //    testbase64();
 //    testInitDataList();
     testtcp();
+//    OLED_test();
+//	testmydb();
 
     return 0;
 }
