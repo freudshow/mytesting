@@ -9,16 +9,18 @@
 //void testInitDataList(void);
 //void testbase64(void);
 //void OLED_test(void);
-void testtcp(void);
+//void testtcp(void);
+void testjson(void);
 
 int main(int argc, char **argv)
 {
 //    testjansson();
 //    testbase64();
 //    testInitDataList();
-    testtcp();
+//    testtcp();
 //    OLED_test();
 //	testmydb();
+    testjson();
 
     return 0;
 }
