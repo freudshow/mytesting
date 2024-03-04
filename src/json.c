@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <string.h>
 #include <json-c/json.h>
 
 void analyze_json_object(struct json_object *json_obj, const char *key, int depth)
@@ -32,27 +33,27 @@ void analyze_json_object(struct json_object *json_obj, const char *key, int dept
             printf("%sValue: %d\n", deep, json_object_get_int(json_obj));
             break;
         case json_type_object:
-            printf("Type: Object\n");
+            printf("%sType: Object\n", deep);
             json_object_object_foreach(json_obj, key, val)
             {
-                analyze_json_object(val, key);
+                analyze_json_object(val, key, depth + 1);
             }
             break;
         case json_type_array:
-            printf("Type: Array\n");
+            printf("%sType: Array\n", deep);
             int array_len = json_object_array_length(json_obj);
             for (int i = 0; i < array_len; i++)
             {
                 struct json_object *array_val = json_object_array_get_idx(json_obj, i);
-                analyze_json_object(array_val, NULL);
+                analyze_json_object(array_val, NULL, depth + 1);
             }
             break;
         case json_type_string:
-            printf("Type: String\n");
-            printf("Value: %s\n", json_object_get_string(json_obj));
+            printf("%sType: String\n", deep);
+            printf("%sValue: %s\n", deep, json_object_get_string(json_obj));
             break;
         default:
-            printf("Type: Unknown\n");
+            printf("%sType: Unknown\n", deep);
             break;
     }
 }
@@ -68,7 +69,7 @@ void testjson(void)
 
     json_object_object_foreach(json_obj, key, val)
     {
-        analyze_json_object(val, key);
+        analyze_json_object(val, key, 0);
     }
 
     json_object_put(json_obj); // Free the json object
