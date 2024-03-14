@@ -434,7 +434,7 @@ int addRouteItem(const char* gateway, const char* dest_ip, const char* mask, con
     return 0;
 }
 
-int delRouteItem(const char* nexthop, const char* dest_ip, const char* mask, const char* dev)
+int delRouteItem(const char *gateway, const char *dest_ip, const char *mask, const char *dev)
 {
     int fd;
     struct sockaddr_in _sin;
@@ -447,41 +447,36 @@ int delRouteItem(const char* nexthop, const char* dest_ip, const char* mask, con
         perror("create fd of socket error:");
         return -1;
     }
-
-    //要删除的网关信息，网关信息可以不填充，有ip 子网掩码即可删除路由
+    // 要删除的网关信息，网关信息可以不填充，有ip 子网掩码即可删除路由
     memset(&rt, 0, sizeof(struct rtentry));
     memset(sin, 0, sizeof(struct sockaddr_in));
     sin->sin_family = AF_INET;
     sin->sin_port = 0;
-    if (inet_aton(nexthop, &sin->sin_addr) < 0)
+    if (inet_aton(gateway, &sin->sin_addr) < 0)
     {
         perror("gateWay inet_aton error:");
         close(fd);
         return -1;
     }
-
     memcpy(&rt.rt_gateway, sin, sizeof(struct sockaddr_in));
-
     //要删除的ip信息
-    ((struct sockaddr_in*) &rt.rt_dst)->sin_family = AF_INET;
-    if (inet_aton(dest_ip, &((struct sockaddr_in*) &rt.rt_dst)->sin_addr) < 0)
+    ((struct sockaddr_in *)&rt.rt_dst)->sin_family = AF_INET;
+    if (inet_aton(dest_ip, &((struct sockaddr_in *)&rt.rt_dst)->sin_addr) < 0)
     {
         perror("dest addr inet_aton error:");
         close(fd);
         return -1;
     }
-
     //要删除的子网掩码
-    ((struct sockaddr_in*) &rt.rt_genmask)->sin_family = AF_INET;
-    if (inet_aton(mask, &((struct sockaddr_in*) &rt.rt_genmask)->sin_addr) < 0)
+    ((struct sockaddr_in *)&rt.rt_genmask)->sin_family = AF_INET;
+    if (inet_aton(mask, &((struct sockaddr_in *)&rt.rt_genmask)->sin_addr) < 0)
     {
         perror("mask inet_aton error:");
         close(fd);
         return -1;
     }
-
     //网卡设备名
-    rt.rt_dev = (char*) dev;
+    rt.rt_dev = (char *)dev;
     rt.rt_flags = RTF_UP | RTF_GATEWAY;
 
     if (ioctl(fd, SIOCDELRT, &rt) < 0)
@@ -576,9 +571,20 @@ int getAllRouteInfos(routeInfo_s *pInfos, size_t len)
 
 void testtcp(void)
 {
-    if (addRouteItem("172.16.175.1", "10.0.2.15", "", "vmnet1") == 0)
+    char *ip = "10.0.2.15";
+//    char *gateway = "172.16.175.1";
+    char *gateway = "";
+    char *mask = "255.255.255.255";
+    if (addRouteItem(gateway, ip, "", "vmnet1") == 0)
     {
         routeInfo_s routeInfoArray[64] = {0};
         getAllRouteInfos(routeInfoArray, NELEM(routeInfoArray));
+
+        DEBUG_TIME_LINE("before delete");
+        if (delRouteItem(gateway, ip, mask, "vmnet1") == 0)
+        {
+            getAllRouteInfos(routeInfoArray, NELEM(routeInfoArray));
+        }
+        DEBUG_TIME_LINE("after delete");
     }
 }
