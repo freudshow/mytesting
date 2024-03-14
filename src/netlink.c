@@ -10,7 +10,8 @@
 
 #define BUF_SIZE 8192
 
-int addEntry() {
+int addEntry()
+{
     int fd;
     struct sockaddr_nl sa;
     struct {
@@ -22,7 +23,8 @@ int addEntry() {
     memset(&req, 0, sizeof(req));
 
     fd = socket(AF_NETLINK, SOCK_RAW, NETLINK_ROUTE);
-    if (fd < 0) {
+    if (fd < 0)
+    {
         perror("socket");
         return 1;
     }
@@ -44,17 +46,18 @@ int addEntry() {
 
     struct rtattr *rta;
     int rta_len = RTA_LENGTH(4);
-    rta = (struct rtattr *)(((char *)&req) + NLMSG_ALIGN(req.nlmsg.nlmsg_len));
+    rta = (struct rtattr*) (((char*) &req) + NLMSG_ALIGN(req.nlmsg.nlmsg_len));
     rta->rta_type = RTA_GATEWAY;
     rta->rta_len = rta_len;
-    *((unsigned int *)RTA_DATA(rta)) = inet_addr("192.168.1.1");
+    *((unsigned int*) RTA_DATA(rta)) = inet_addr("192.168.1.1");
 
     req.nlmsg.nlmsg_len = NLMSG_ALIGN(req.nlmsg.nlmsg_len) + RTA_ALIGN(rta_len);
 
     struct iovec iov = { &req, req.nlmsg.nlmsg_len };
     struct msghdr msg = { &sa, sizeof(sa), &iov, 1, NULL, 0, 0 };
 
-    if (sendmsg(fd, &msg, 0) < 0) {
+    if (sendmsg(fd, &msg, 0) < 0)
+    {
         perror("sendmsg");
         close(fd);
         return 1;
@@ -121,4 +124,9 @@ int delEntry(const char *dstIP)
     close(fd);
 
     return 0;
+}
+
+void testlink(void)
+{
+    addEntry("237.84.2.178");
 }

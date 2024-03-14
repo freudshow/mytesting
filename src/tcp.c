@@ -378,7 +378,10 @@ int printAllInterfaces(void)
 int addRouteItem(const char* gateway, const char* dest_ip, const char* mask, const char* dev)
 {
     int sockfd;
-    struct rtentry rt = {0};  //创建结构体变量
+    struct rtentry rt = { 0 };  //创建结构体变量
+    struct sockaddr_in *sockinfo = NULL;
+    memset(&rt, 0, sizeof(rt));
+
     //创建套接字
     sockfd = socket(AF_INET, SOCK_DGRAM, 0);
     if (sockfd == -1)
@@ -387,18 +390,13 @@ int addRouteItem(const char* gateway, const char* dest_ip, const char* mask, con
         return -1;
     }
 
-    struct sockaddr_in *sockinfo = NULL;
-
     //设置网关，又名下一跳：转到下个路由的路由地址
-    sockinfo = (struct sockaddr_in*) &rt.rt_gateway;
-    sockinfo->sin_family = AF_INET;
-    if(strlen(gateway) > 0 && strlen(gateway) < IF_NAMESIZE)
+    if (strlen(gateway) > 0 && strlen(gateway) < IF_NAMESIZE)
     {
+        sockinfo = (struct sockaddr_in*) &rt.rt_gateway;
+        sockinfo->sin_family = AF_INET;
         sockinfo->sin_addr.s_addr = inet_addr(gateway);
-    }
-    else
-    {
-        sockinfo->sin_addr.s_addr = inet_addr("0.0.0.0");
+        rt.rt_flags |= RTF_GATEWAY;
     }
 
     //设置目的地址
@@ -409,7 +407,7 @@ int addRouteItem(const char* gateway, const char* dest_ip, const char* mask, con
     //设置子网掩码
     sockinfo = (struct sockaddr_in*) &rt.rt_genmask;
     sockinfo->sin_family = AF_INET;
-    if(strlen(mask) > 0 && strlen(mask) < IF_NAMESIZE)
+    if (strlen(mask) > 0 && strlen(mask) < IF_NAMESIZE)
     {
         sockinfo->sin_addr.s_addr = inet_addr(mask);
     }
@@ -418,12 +416,13 @@ int addRouteItem(const char* gateway, const char* dest_ip, const char* mask, con
         sockinfo->sin_addr.s_addr = INADDR_NONE;
     }
 
-    if(strlen(dev) > 0 && strlen(dev) < IF_NAMESIZE)
+    //设置网卡设备名
+    if (strlen(dev) > 0 && strlen(dev) < IF_NAMESIZE)
     {
-        //设置网卡设备名
-        rt.rt_flags = RTF_UP | RTF_GATEWAY;
         rt.rt_dev = (char*) dev;
     }
+
+    rt.rt_flags |= RTF_UP;
 
     //ioctl接口进行路由属性设置
     if (ioctl(sockfd, SIOCADDRT, &rt) < 0)
@@ -564,9 +563,9 @@ int getAllRouteInfos(routeInfo_s *pInfos, size_t len)
             sprintf((char *)ip_str, "%d.%d.%d.%d", ip[0], ip[1], ip[2], ip[3]);
             sprintf((char *)mask_str, "%d.%d.%d.%d", mask[0], mask[1], mask[2], mask[3]);
 
-            printf("gate : %d.%d.%d.%d\n", gate[0], gate[1], gate[2], gate[3]);
-            printf("ip : %d.%d.%d.%d\n", ip[0], ip[1], ip[2], ip[3]);
-            printf("mask : %d.%d.%d.%d\n", mask[0], mask[1], mask[2], mask[3]);
+            printf("ip : %d.%d.%d.%d\t", ip[0], ip[1], ip[2], ip[3]);
+            printf("gate : %d.%d.%d.%d\t", gate[0], gate[1], gate[2], gate[3]);
+            printf("mask : %d.%d.%d.%d\t", mask[0], mask[1], mask[2], mask[3]);
             printf("dev: %s\n", devname);
         }
     }
@@ -577,7 +576,7 @@ int getAllRouteInfos(routeInfo_s *pInfos, size_t len)
 
 void testtcp(void)
 {
-    if (addRouteItem("", "10.0.2.15", "", "vmnet1") == 0)
+    if (addRouteItem("172.16.175.1", "10.0.2.15", "", "vmnet1") == 0)
     {
         routeInfo_s routeInfoArray[64] = {0};
         getAllRouteInfos(routeInfoArray, NELEM(routeInfoArray));
