@@ -31,20 +31,6 @@ u32 crc32(const void *data, u32 len)
     return ~crc;                // 取反操作得到最终结果
 }
 
-u32 crc32Continue(const u8 *data, u32 len, u32 lastcrc, u8 useLastCRC)
-{
-    u32 crc = 0xFFFFFFFFUL;
-
-    if (useLastCRC > 0)
-    {
-        crc = lastcrc;
-    }
-
-    // 循环处理每个字节
-
-    return crc;
-}
-
 u32 crc32File(const char *fullname)
 {
     u8 buf[512] = { 0 };

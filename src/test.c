@@ -1,6 +1,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <unistd.h>
+#include <string.h>
 
 #include "basedef.h"
 
@@ -10,8 +11,8 @@
 //void OLED_test(void);
 //void testtcp(void);
 //void testjson(void);
-u32 crc32File(const char *fullname);
-u8 buf[64*1024*1024];
+//u32 crc32File(const char *fullname);
+
 int main(int argc, char **argv)
 {
 //    testjansson();
@@ -22,14 +23,11 @@ int main(int argc, char **argv)
 //	  testmydb();
 //    testjson();
 
-    u32 crc = crc32File("/home/floyd/repo/busybox-1.36.1.tar.bz2");
-    printf("crc32: %08X\n", crc);
-
-    int fd = open("/home/floyd/repo/busybox-1.36.1.tar.bz2", O_RDONLY, 0777);
-
-    u32 len = read(fd, buf, sizeof(buf));
-    crc = crc32(buf, len);
-    printf("crc32: %08X\n", crc);
+    s8 tmpBuf2[200] = {'\0'};
+    strncpy(tmpBuf2, "1", 199);
+    char AllDev = 0;
+    sscanf(tmpBuf2, "%hhu", &AllDev);
+    printf("%d, %c\n", AllDev, AllDev);
 
     return 0;
 }
