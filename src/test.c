@@ -12,6 +12,7 @@
 void testtcp(void);
 //void testjson(void);
 //u32 crc32File(const char *fullname);
+int getWeekByDate(int year, int month, int day);
 
 int main(int argc, char **argv)
 {
@@ -22,6 +23,9 @@ int main(int argc, char **argv)
 //    OLED_test();
 //	  testmydb();
 //    testjson();
+
+    int week = getWeekByDate(2024, 4, 9);
+    printf("weekday: %d\n", week);
 
     return 0;
 }
