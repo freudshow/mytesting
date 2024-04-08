@@ -96,7 +96,7 @@ typedef struct  SysTime_t
  * 1个电能累计数据项
  */
 typedef struct accumDataStruct {
-    s16 realDbNo;                       //数据项写入的实时数据库号
+    u16 realDbNo;                       //数据项写入的实时数据库号
     int linkNo;                         //link号
     int devNo;                          //设备号
     int regNo;                          //寄存器号
@@ -122,7 +122,7 @@ typedef struct accumDataList {
  * 1个分相/合相电能列表
  */
 typedef struct accumFreezeList {
-    int srcDbNo;                                    //源实时库号, 比如A相正向有功电能的实时数据库号
+    u16 srcDbNo;                                    //源实时库号, 比如A相正向有功电能的实时数据库号
     char description[ACCUM_STRING_LEN];             //源数据描述, 比如A相正向有功电能的描述
     ACCUM_A_LIST_OF(accumDataList_s) freezeDataList;      //当前相的数据列表, 包括日冻结, 月冻结, 年冻结和周冻结的当前数据+上N次数据
 } accumFreezeList_s;
@@ -697,7 +697,7 @@ static void accum_printFreezeList(accumFreezeList_s *p_freezeList, int depth)
     }
 
     printf("%ssrcDbNo: %d\n", tabs, p_freezeList->srcDbNo);
-    printf("%ssrcDbNo: %s\n", tabs, p_freezeList->description);
+    printf("%sdescription: %s\n", tabs, p_freezeList->description);
     printf("%sfreezeDataList:\n", tabs);
     for (i = 0; i < p_freezeList->freezeDataList.capacity; i++)
     {
@@ -965,32 +965,29 @@ static u16 accum_readDataList(accumDataList_s *p_dataList, u8 *pBuf, u16 bufSize
 
     u16 acumType = 0;
     memcpy(&acumType, pBuf + offset, sizeof(acumType));
-    p_dataList->accumType = (accumEnergyType_e)acumType;
-    offset += sizeof(acumType);//2 bytes
+    p_dataList->accumType = (accumEnergyType_e) acumType;
+    offset += sizeof(acumType);    //2 bytes
 
-	u16 count = 0;
-	memcpy(&count, pBuf + offset, sizeof(count));
-	offset += sizeof(count);//2 bytes
+    u16 count = 0;
+    memcpy(&count, pBuf + offset, sizeof(count));
+    offset += sizeof(count);    //2 bytes
 
     p_dataList->dataList.list = (accumDataItem_s*) calloc(count, sizeof(accumDataItem_s));
     if (p_dataList->dataList.list == NULL)
     {
+        p_dataList->dataList.capacity = 0;
         return 0;
     }
 
+    p_dataList->dataList.capacity = count;
+
     int i = 0;
-    json_t *dataItem = NULL;
-    for (i = 0; i < count; i++)
+    for (i = 0; i < count && bufSize >= offset; i++)
     {
-        dataItem = json_array_get(dataList, i);
-        accum_readDataItem(dataItem, &p_dataList->dataList.list[i]);
-        if (p_dataList->dataList.list[i].freezeTime.Year != 0)
-        {
-            p_dataList->dataList.count++;
-        }
+        offset += accum_readDataItem(&p_dataList->dataList.list[i], pBuf + offset, bufSize - offset);
     }
 
-
+    return offset;
 }
 
 /*******************************************************
@@ -1008,34 +1005,40 @@ static u16 accum_readDataList(accumDataList_s *p_dataList, u8 *pBuf, u16 bufSize
 * 补充信息: 无
 * 修改日志: 无
 *******************************************************/
-static void accum_readFreezeList(json_t *item, accumFreezeList_s *p_freezeList)
+static u16 accum_readFreezeList(accumFreezeList_s *p_freezeList, u8 *pBuf, u16 bufSize)
 {
-    if (item == NULL || p_freezeList == NULL)
+    if (pBuf == NULL || p_freezeList == NULL)
     {
-        return;
+        return 0;
     }
 
-    p_freezeList->srcDbNo = json_integer_value(json_object_get(item, "srcDbNo"));
-    strcpy(p_freezeList->description, json_string_value(json_object_get(item, "description")));
+    u16 offset = 0;
 
-    json_t *freezeList = json_object_get(item, "freezeDataList");
-    size_t count = json_array_size(freezeList);
+    u16 srcDbNo = 0;
+    memcpy(&srcDbNo, pBuf + offset, sizeof(srcDbNo));
+    p_freezeList->srcDbNo = srcDbNo;
+    offset += sizeof(srcDbNo);
+
+    u16 count = 0;
+    memcpy(&count, pBuf + offset, sizeof(count));
+    offset += sizeof(count);
+
     p_freezeList->freezeDataList.list = (accumDataList_s*) calloc(count, sizeof(accumDataList_s));
     if (p_freezeList->freezeDataList.list == NULL)
     {
-        return;
-    }
-
-    int i = 0;
-    json_t *freezeItem = NULL;
-    for (i = 0; i < count; i++)
-    {
-        freezeItem = json_array_get(freezeList, i);
-        accum_readDataList(freezeItem, &p_freezeList->freezeDataList.list[i]);
+        p_freezeList->freezeDataList.capacity = 0;
+        return offset;
     }
 
     p_freezeList->freezeDataList.capacity = count;
-    p_freezeList->freezeDataList.count = count;
+
+    int i = 0;
+    for (i = 0; i < count && bufSize >= offset; i++)
+    {
+        offset += accum_readDataList(&p_freezeList->freezeDataList.list[i], pBuf + offset, bufSize - offset);
+    }
+
+    return offset;
 }
 
 /*******************************************************
@@ -1053,51 +1056,38 @@ static void accum_readFreezeList(json_t *item, accumFreezeList_s *p_freezeList)
 * 补充信息: 无
 * 修改日志: 无
 *******************************************************/
-static int accum_readData(char *filename, accumEnergyList_s *p_energyList)
+static u16 accum_readData(accumEnergyList_s *p_energyList, u8 *pBuf, u16 bufSize)
 {
-    if (filename == NULL || p_energyList == NULL)
+    if (pBuf == NULL || p_energyList == NULL)
     {
-        return -1;
+        return 0;
     }
 
-    json_error_t error;
-    json_t *root = json_load_file((const char*) filename, 0, &error);
-    if (NULL == root)
-    {
-        return -1;
-    }
+    u16 offset = 0;
 
-    char md5str[64] = { 0 };
-    strcpy(md5str, json_string_value(json_object_get(root, "jsonMd5")));
-    int len = readFrame(md5str, sizeof(p_energyList->jsonMd5), p_energyList->jsonMd5);
-    if (len != 16)
-    {
-        json_decref(root);
-        return -1;
-    }
+    memcpy(p_energyList->jsonMd5, pBuf + offset, sizeof(p_energyList->jsonMd5));
+    offset += sizeof(p_energyList->jsonMd5);
 
-    json_t *phaseList = json_object_get(root, "phaseDataList");
-    size_t count = json_array_size(phaseList);
+    u16 count = 0;
+    memcpy(&count, pBuf + offset, sizeof(count));
+    offset += sizeof(count);
+
     p_energyList->phaseDataList.list = (accumFreezeList_s*) calloc(count, sizeof(accumFreezeList_s));
     if (p_energyList->phaseDataList.list == NULL)
     {
-        return -1;
+        p_energyList->phaseDataList.capacity = 0;
+        return offset;
     }
-
-    int i = 0;
-    json_t *phaseItem = NULL;
-    for (i = 0; i < count; i++)
-    {
-        phaseItem = json_array_get(phaseList, i);
-        accum_readFreezeList(phaseItem, &p_energyList->phaseDataList.list[i]);
-    }
-
-    json_decref(root);
 
     p_energyList->phaseDataList.capacity = count;
-    p_energyList->phaseDataList.count = count;
 
-    return 0;
+    int i = 0;
+    for (i = 0; i < count && bufSize >= offset; i++)
+    {
+        offset += accum_readFreezeList(&p_energyList->phaseDataList.list[i], pBuf + offset, bufSize - offset);
+    }
+
+    return offset;
 }
 
 /*******************************************************
@@ -1118,9 +1108,9 @@ static int accum_readData(char *filename, accumEnergyList_s *p_energyList)
 * 补充信息: 无
 * 修改日志: 无
 *******************************************************/
-static int accum_readFlash(Link_status *link, accumEnergyList_s *p_energyList)
+static int accum_readFlash(const char *configFileName, accumEnergyConfig_s *pConfig, accumEnergyList_s *p_energyList, u8 *pBuf, u16 bufSize)
 {
-    if (link == NULL || p_energyList == NULL)
+    if (pBuf == NULL || p_energyList == NULL)
     {
         return -1;
     }
@@ -1128,26 +1118,8 @@ static int accum_readFlash(Link_status *link, accumEnergyList_s *p_energyList)
     //
     //如果以前保存过数据, 读取其保存的配置文件的md5码和数据
     //
-    char fullfilename[128] = { 0 };
-    if (getIecPath(fullfilename, sizeof(fullfilename)) < 0)
-    {
-        return -1;
-    }
-
-    strcat(fullfilename, "/");
-    strcat(fullfilename, ACCUM_DATA_FILE);
-
-    char cfg[32] = { 0 };
-    snprintf(cfg, sizeof(cfg) - 1, ".%02d.json", link->link_id);
-    strcat(fullfilename, cfg);
-
-    if (access(fullfilename, F_OK) != 0)
-    {
-        return -1;
-    }
-
-    int res = accum_readData(fullfilename, p_energyList);
-    if (res < 0)
+    u16 offset = accum_readData(p_energyList, pBuf, bufSize);
+    if (offset == 0)
     {
         return -1;
     }
@@ -1155,17 +1127,8 @@ static int accum_readFlash(Link_status *link, accumEnergyList_s *p_energyList)
     //
     //读取配置文件的md5码
     //
-    if (getParaPath(fullfilename, sizeof(fullfilename)) < 0)
-    {
-        return -1;
-    }
-
-    char filename[32] = { 0 };
-    snprintf(filename, sizeof(filename) - 1, "/c%02d%02d.json", link->link_id, ProtoType_accum_energy);
-    strcat(fullfilename, filename);
-
     u8 md5[16] = { 0 };
-    MD5File(fullfilename, md5);
+    MD5File(configFileName, md5);
 
     //
     //如果md5码不匹配, 则返回-1, 且释放之前的数据所占用的内存
@@ -1176,30 +1139,38 @@ static int accum_readFlash(Link_status *link, accumEnergyList_s *p_energyList)
         return -1;
     }
 
-    p_energyList->pEnergyConfig = (accumEnergyConfig_s*) gat_ProPad[link->link_id].pad;
+    p_energyList->pEnergyConfig = pConfig;
 
     return 0;
 }
 
 void testAccum(void)
 {
-    accumEnergyConfig_s* pConfig = parse_accumulate_config("/home/floyd/repo/mytesting/Debug/accumConfig.json");
+    const char configFileName[] = "/home/floyd/repo/mytesting/Debug/accumConfig.json";
+    accumEnergyConfig_s* pConfig = parse_accumulate_config(configFileName);
     if (pConfig == NULL)
     {
         DEBUG_TIME_LINE("parse config error");
         return;
     }
 
-    accumEnergyList_s pEnergyList;
-    accum_readconfig(pConfig, &pEnergyList);
+    accumEnergyList_s energyListSave;
+    accum_readconfig(pConfig, &energyListSave);
 
-    accum_printEnergyList(&pEnergyList, 0);
+    accum_printEnergyList(&energyListSave, 0);
 
     u8 buf[81920] = { 0 };
     u16 bufSize = (u16)sizeof(buf);
-    u16 offset = accum_saveData("/home/floyd/repo/mytesting/Debug/accumConfig.json", &pEnergyList, buf, bufSize);
+    u16 offset = accum_saveData(configFileName, &energyListSave, buf, bufSize);
 
     DEBUG_TIME_LINE("offset = %d", offset);
 
     DEBUG_BUFF_FORMAT(buf, offset, "buf:--->>> ");
+
+    accumEnergyList_s energyListRead;
+    if (accum_readFlash(configFileName, pConfig, &energyListRead, buf, offset) == 0)
+    {
+        DEBUG_TIME_LINE("after read data:----------------------");
+        accum_printEnergyList(&energyListRead, 0);
+    }
 }

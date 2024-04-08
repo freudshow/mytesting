@@ -32,7 +32,7 @@ typedef struct
 void MD5Init(MD5_CTX *);
 void MD5Update(MD5_CTX *, unsigned char *, unsigned int);
 void MD5Final(unsigned char [16], MD5_CTX *);
-int MD5File(char *filename, u8 *md5code);
+int MD5File(const char *filename, u8 *md5code);
 
 #ifdef	__cplusplus
 }
