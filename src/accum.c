@@ -4,6 +4,7 @@
 #include <jansson.h>
 
 #include "basedef.h"
+#include "md5.h"
 
 /**
  * 声明一个列表
@@ -30,6 +31,12 @@ typedef enum accumEnergyType {
     e_accumulate_type_count = 4,    //冻结类型的个数
     e_accumulate_invalid = 255      //非法类型
 }accumEnergyType_e;
+
+typedef enum accumPhaseType {
+    e_accum_phase_A = 0,      //A相
+    e_accum_phase_B = 1,      //B相
+    e_accum_phase_C = 2,      //C相
+}accumPhaseType_e;
 
 typedef enum accumResultType {
     e_accumulate_result_total = 0,      //三相总电能
@@ -500,8 +507,8 @@ static int accum_readconfig(accumEnergyConfig_s *pConfig, accumEnergyList_s *p_a
     int realNo = p_accumEnergyList->pEnergyConfig->startRealDbNo;
     int devno = 0;
     int regno = 0;
-    char desc[10] = { 0 };
-    char last[10] = { 0 };
+    char desc[1024] = { 0 };
+    char last[1024] = { 0 };
     char dayOrMonth[10] = { 0 };
     for (i = 0; i < p_accumEnergyList->phaseDataList.capacity; i++)
     {
@@ -528,13 +535,13 @@ static int accum_readconfig(accumEnergyConfig_s *pConfig, accumEnergyList_s *p_a
             case e_accumulate_result_divide:
                 switch (i)
                 {
-                    case 0:
+                    case e_accum_phase_A:
                         strcpy(desc, "A相");
                         break;
-                    case 1:
+                    case e_accum_phase_B:
                         strcpy(desc, "B相");
                         break;
-                    case 2:
+                    case e_accum_phase_C:
                         strcpy(desc, "C相");
                         break;
                     default:
@@ -740,7 +747,7 @@ u16 accum_saveDataItem(accumDataItem_s *p_dataItem, u8 *pBuf, u16 bufMaxSize)
 {
     if (p_dataItem == NULL)
     {
-        return NULL;
+        return 0;
     }
 
     u16 offset = 0;
@@ -779,7 +786,7 @@ u16 accum_saveDataList(accumDataList_s *p_dataList, u8 *pBuf, u16 bufMaxSize)
 {
     if (p_dataList == NULL)
     {
-        return NULL;
+        return 0;
     }
 
     u16 offset = 0;
@@ -793,7 +800,7 @@ u16 accum_saveDataList(accumDataList_s *p_dataList, u8 *pBuf, u16 bufMaxSize)
     offset += sizeof(dataCount);//2 bytes
 
     int i = 0;
-    for (i = 0; i < p_dataList->dataList.capacity && bufMaxSize >= offset; i++)
+    for (i = 0; i < dataCount && bufMaxSize >= offset; i++)
     {
         offset += accum_saveDataItem(&p_dataList->dataList.list[i], pBuf + offset, bufMaxSize - offset);
     }
@@ -811,16 +818,364 @@ u16 accum_saveFreezeList(accumFreezeList_s *p_freezeList, u8 *pBuf, u16 bufMaxSi
     u16 offset = 0;
 
     u16 srcDbNo = p_freezeList->srcDbNo;
-    u16 description = p_freezeList->description;
+	memcpy(pBuf + offset, &srcDbNo, sizeof(srcDbNo));
+	offset += sizeof(srcDbNo);//2 bytes
 
-    json_t *freezeList = json_array();
+	u16 dataListCount = p_freezeList->freezeDataList.capacity;
+	memcpy(pBuf + offset, &dataListCount, sizeof(dataListCount));
+	offset += sizeof(dataListCount);//2 bytes
+
     int i = 0;
-    for (i = 0; i < p_freezeList->freezeDataList.capacity; i++)
+    for (i = 0; i < dataListCount && bufMaxSize >= offset; i++)
     {
-    	offset = accum_saveDataList(&p_freezeList->freezeDataList.list[i], pBuf + offset, bufMaxSize - offset);
+    	offset += accum_saveDataList(&p_freezeList->freezeDataList.list[i], pBuf + offset, bufMaxSize - offset);
     }
 
     return offset;
+}
+
+/*******************************************************
+* 函数名称: accum_saveData
+* ---------------------------------------------------
+* 功能描述: 保存总的数据列表
+* ---------------------------------------------------
+* 输入参数: link - 链路配置指针
+*         p_freezeList - 总的数据列表指针
+* ---------------------------------------------------
+* 输出参数: 无
+* ---------------------------------------------------
+* 返回值: 无
+* ---------------------------------------------------
+* 补充信息: 无
+* 修改日志: 无
+*******************************************************/
+static int accum_saveData(const char *configFilename, accumEnergyList_s *p_accumEnergyList, u8 *pBuf, u16 bufMaxSize)
+{
+    if (p_accumEnergyList == NULL)
+    {
+        return 0;
+    }
+
+    u16 offset = 0;
+    int i = 0;
+
+    //
+    //保存配置文件的md5校验码
+    //
+    MD5File(configFilename, p_accumEnergyList->jsonMd5);
+    memcpy(pBuf + offset, p_accumEnergyList->jsonMd5, sizeof(p_accumEnergyList->jsonMd5));
+	offset += sizeof(p_accumEnergyList->jsonMd5);//16 bytes
+
+    //
+    //保存数据列表
+    //
+    u16 phaseCount = p_accumEnergyList->phaseDataList.capacity;
+    memcpy(pBuf + offset, &phaseCount, sizeof(phaseCount));
+	offset += sizeof(phaseCount);//2 bytes
+
+    for (i = 0; i < phaseCount && bufMaxSize >= offset; i++)
+    {
+        offset += accum_saveFreezeList(&p_accumEnergyList->phaseDataList.list[i], pBuf + offset, bufMaxSize - offset);
+    }
+
+    return offset;
+}
+
+/*******************************************************
+* 函数名称: accum_readDataItem
+* ---------------------------------------------------
+* 功能描述: 读取1个数据项
+* ---------------------------------------------------
+* 输入参数: item - json指针
+*         p_dataItem - 数据项指针
+* ---------------------------------------------------
+* 输出参数: 无
+* ---------------------------------------------------
+* 返回值: 无
+* ---------------------------------------------------
+* 补充信息: 无
+* 修改日志: 无
+*******************************************************/
+static u16 accum_readDataItem(accumDataItem_s *p_dataItem, u8 *pBuf, u16 bufSize)
+{
+    if (p_dataItem == NULL || pBuf == NULL)
+    {
+        return 0;
+    }
+
+    u16 offset = 0;
+
+    u16 realDbNo = 0;
+    memcpy(&p_dataItem->realDbNo, pBuf + offset, sizeof(realDbNo));
+    p_dataItem->realDbNo = realDbNo;
+    offset += sizeof(realDbNo);    //2 bytes
+
+//    p_dataItem->linkNo = json_integer_value(json_object_get(item, "linkNo"));
+//    p_dataItem->devNo = json_integer_value(json_object_get(item, "devNo"));
+//    p_dataItem->regNo = json_integer_value(json_object_get(item, "regNo"));
+
+    float value = 0.0f;
+    memcpy(&value, pBuf + offset, sizeof(value));
+    p_dataItem->freezeValue = value;
+    offset += sizeof(value);    //4 bytes
+
+    memcpy(&p_dataItem->freezeTime.Year, pBuf + offset, sizeof(p_dataItem->freezeTime.Year));
+    offset += sizeof(p_dataItem->freezeTime.Year);    //2 bytes
+
+    memcpy(&p_dataItem->freezeTime.Month, pBuf + offset, sizeof(p_dataItem->freezeTime.Month));
+    offset += sizeof(p_dataItem->freezeTime.Month);    //1 bytes
+
+    memcpy(&p_dataItem->freezeTime.Day, pBuf + offset, sizeof(p_dataItem->freezeTime.Day));
+    offset += sizeof(p_dataItem->freezeTime.Day);    //1 bytes
+
+    memcpy(&p_dataItem->freezeTime.Hour, pBuf + offset, sizeof(p_dataItem->freezeTime.Hour));
+    offset += sizeof(p_dataItem->freezeTime.Hour);    //1 bytes
+
+    memcpy(&p_dataItem->freezeTime.Minute, pBuf + offset, sizeof(p_dataItem->freezeTime.Minute));
+    offset += sizeof(p_dataItem->freezeTime.Minute);    //1 bytes
+
+    memcpy(&p_dataItem->freezeTime.Second, pBuf + offset, sizeof(p_dataItem->freezeTime.Second));
+    offset += sizeof(p_dataItem->freezeTime.Second);    //1 bytes
+
+    memcpy(&p_dataItem->freezeTime.weekday, pBuf + offset, sizeof(p_dataItem->freezeTime.weekday));
+    offset += sizeof(p_dataItem->freezeTime.weekday);    //1 bytes
+
+    return offset;
+}
+
+/*******************************************************
+* 函数名称: accum_readDataList
+* ---------------------------------------------------
+* 功能描述: 读取1个数据项列表
+* ---------------------------------------------------
+* 输入参数: item - json指针
+*         p_dataList - 数据项列表指针
+* ---------------------------------------------------
+* 输出参数: 无
+* ---------------------------------------------------
+* 返回值: 无
+* ---------------------------------------------------
+* 补充信息: 无
+* 修改日志: 无
+*******************************************************/
+static u16 accum_readDataList(accumDataList_s *p_dataList, u8 *pBuf, u16 bufSize)
+{
+    if (pBuf == NULL || p_dataList == NULL)
+    {
+        return 0;
+    }
+
+    u16 offset = 0;
+
+    p_dataList->accumType = json_integer_value(json_object_get(item, "accumType"));
+
+    p_dataList->dataList.list = (accumDataItem_s*) calloc(count, sizeof(accumDataItem_s));
+    if (p_dataList->dataList.list == NULL)
+    {
+        return 0;
+    }
+
+    int i = 0;
+    json_t *dataItem = NULL;
+    for (i = 0; i < count; i++)
+    {
+        dataItem = json_array_get(dataList, i);
+        accum_readDataItem(dataItem, &p_dataList->dataList.list[i]);
+        if (p_dataList->dataList.list[i].freezeTime.Year != 0)
+        {
+            p_dataList->dataList.count++;
+        }
+    }
+
+
+}
+
+/*******************************************************
+* 函数名称: accum_readFreezeList
+* ---------------------------------------------------
+* 功能描述: 读取1个单相数据列表
+* ---------------------------------------------------
+* 输入参数: item - json指针
+*         p_freezeList - 单相数据列表指针
+* ---------------------------------------------------
+* 输出参数: 无
+* ---------------------------------------------------
+* 返回值: 无
+* ---------------------------------------------------
+* 补充信息: 无
+* 修改日志: 无
+*******************************************************/
+static void accum_readFreezeList(json_t *item, accumFreezeList_s *p_freezeList)
+{
+    if (item == NULL || p_freezeList == NULL)
+    {
+        return;
+    }
+
+    p_freezeList->srcDbNo = json_integer_value(json_object_get(item, "srcDbNo"));
+    strcpy(p_freezeList->description, json_string_value(json_object_get(item, "description")));
+
+    json_t *freezeList = json_object_get(item, "freezeDataList");
+    size_t count = json_array_size(freezeList);
+    p_freezeList->freezeDataList.list = (accumDataList_s*) calloc(count, sizeof(accumDataList_s));
+    if (p_freezeList->freezeDataList.list == NULL)
+    {
+        return;
+    }
+
+    int i = 0;
+    json_t *freezeItem = NULL;
+    for (i = 0; i < count; i++)
+    {
+        freezeItem = json_array_get(freezeList, i);
+        accum_readDataList(freezeItem, &p_freezeList->freezeDataList.list[i]);
+    }
+
+    p_freezeList->freezeDataList.capacity = count;
+    p_freezeList->freezeDataList.count = count;
+}
+
+/*******************************************************
+* 函数名称: accum_readData
+* ---------------------------------------------------
+* 功能描述: 读取上次保存的数据文件
+* ---------------------------------------------------
+* 输入参数: filename - 数据文件名
+* ---------------------------------------------------
+* 输出参数: p_energyList - 读取结果
+* ---------------------------------------------------
+* 返回值: 0 - 读取成功;
+*      -1 - 读取失败
+* ---------------------------------------------------
+* 补充信息: 无
+* 修改日志: 无
+*******************************************************/
+static int accum_readData(char *filename, accumEnergyList_s *p_energyList)
+{
+    if (filename == NULL || p_energyList == NULL)
+    {
+        return -1;
+    }
+
+    json_error_t error;
+    json_t *root = json_load_file((const char*) filename, 0, &error);
+    if (NULL == root)
+    {
+        return -1;
+    }
+
+    char md5str[64] = { 0 };
+    strcpy(md5str, json_string_value(json_object_get(root, "jsonMd5")));
+    int len = readFrame(md5str, sizeof(p_energyList->jsonMd5), p_energyList->jsonMd5);
+    if (len != 16)
+    {
+        json_decref(root);
+        return -1;
+    }
+
+    json_t *phaseList = json_object_get(root, "phaseDataList");
+    size_t count = json_array_size(phaseList);
+    p_energyList->phaseDataList.list = (accumFreezeList_s*) calloc(count, sizeof(accumFreezeList_s));
+    if (p_energyList->phaseDataList.list == NULL)
+    {
+        return -1;
+    }
+
+    int i = 0;
+    json_t *phaseItem = NULL;
+    for (i = 0; i < count; i++)
+    {
+        phaseItem = json_array_get(phaseList, i);
+        accum_readFreezeList(phaseItem, &p_energyList->phaseDataList.list[i]);
+    }
+
+    json_decref(root);
+
+    p_energyList->phaseDataList.capacity = count;
+    p_energyList->phaseDataList.count = count;
+
+    return 0;
+}
+
+/*******************************************************
+* 函数名称: accum_readFlash
+* ---------------------------------------------------
+* 功能描述: 对比上次保存的数据文件中的配置文件的md5校验码和当前的
+*         配置文件的md5校验码, 如果二者相同, 则读取上次保存的数据;
+*         如果二者不同, 或者没找到上次保存的数据文件, 则重新读取
+*         当前的配置.
+* ---------------------------------------------------
+* 输入参数: link - 链路配置指针
+* ---------------------------------------------------
+* 输出参数: p_energyList - 读取的结果指针
+* ---------------------------------------------------
+* 返回值: 0 - 读取成功;
+*      -1 - 读取失败
+* ---------------------------------------------------
+* 补充信息: 无
+* 修改日志: 无
+*******************************************************/
+static int accum_readFlash(Link_status *link, accumEnergyList_s *p_energyList)
+{
+    if (link == NULL || p_energyList == NULL)
+    {
+        return -1;
+    }
+
+    //
+    //如果以前保存过数据, 读取其保存的配置文件的md5码和数据
+    //
+    char fullfilename[128] = { 0 };
+    if (getIecPath(fullfilename, sizeof(fullfilename)) < 0)
+    {
+        return -1;
+    }
+
+    strcat(fullfilename, "/");
+    strcat(fullfilename, ACCUM_DATA_FILE);
+
+    char cfg[32] = { 0 };
+    snprintf(cfg, sizeof(cfg) - 1, ".%02d.json", link->link_id);
+    strcat(fullfilename, cfg);
+
+    if (access(fullfilename, F_OK) != 0)
+    {
+        return -1;
+    }
+
+    int res = accum_readData(fullfilename, p_energyList);
+    if (res < 0)
+    {
+        return -1;
+    }
+
+    //
+    //读取配置文件的md5码
+    //
+    if (getParaPath(fullfilename, sizeof(fullfilename)) < 0)
+    {
+        return -1;
+    }
+
+    char filename[32] = { 0 };
+    snprintf(filename, sizeof(filename) - 1, "/c%02d%02d.json", link->link_id, ProtoType_accum_energy);
+    strcat(fullfilename, filename);
+
+    u8 md5[16] = { 0 };
+    MD5File(fullfilename, md5);
+
+    //
+    //如果md5码不匹配, 则返回-1, 且释放之前的数据所占用的内存
+    //
+    if (strncmp((const char*) p_energyList->jsonMd5, (const char*) md5, sizeof(md5)) != 0)
+    {
+        accum_freeEnergyList(p_energyList);
+        return -1;
+    }
+
+    p_energyList->pEnergyConfig = (accumEnergyConfig_s*) gat_ProPad[link->link_id].pad;
+
+    return 0;
 }
 
 void testAccum(void)
@@ -836,4 +1191,12 @@ void testAccum(void)
     accum_readconfig(pConfig, &pEnergyList);
 
     accum_printEnergyList(&pEnergyList, 0);
+
+    u8 buf[81920] = { 0 };
+    u16 bufSize = (u16)sizeof(buf);
+    u16 offset = accum_saveData("/home/floyd/repo/mytesting/Debug/accumConfig.json", &pEnergyList, buf, bufSize);
+
+    DEBUG_TIME_LINE("offset = %d", offset);
+
+    DEBUG_BUFF_FORMAT(buf, offset, "buf:--->>> ");
 }
