@@ -96,7 +96,7 @@ typedef struct  SysTime_t
  * 1个电能累计数据项
  */
 typedef struct accumDataStruct {
-    int realDbNo;                       //数据项写入的实时数据库号
+    s16 realDbNo;                       //数据项写入的实时数据库号
     int linkNo;                         //link号
     int devNo;                          //设备号
     int regNo;                          //寄存器号
@@ -791,9 +791,9 @@ u16 accum_saveDataList(accumDataList_s *p_dataList, u8 *pBuf, u16 bufMaxSize)
 
     u16 offset = 0;
 
-    u16 acumType = (u16)p_dataList->accumType;
-    memcpy(pBuf + offset, &acumType, sizeof(acumType));
-    offset += sizeof(acumType);//2 bytes
+    u16 accumType = (u16)p_dataList->accumType;
+    memcpy(pBuf + offset, &accumType, sizeof(accumType));
+    offset += sizeof(accumType);//2 bytes
 
     u16 dataCount = (u16)p_dataList->dataList.capacity;
     memcpy(pBuf + offset, &dataCount, sizeof(dataCount));
@@ -905,19 +905,15 @@ static u16 accum_readDataItem(accumDataItem_s *p_dataItem, u8 *pBuf, u16 bufSize
 
     u16 offset = 0;
 
-    u16 realDbNo = 0;
-    memcpy(&p_dataItem->realDbNo, pBuf + offset, sizeof(realDbNo));
-    p_dataItem->realDbNo = realDbNo;
-    offset += sizeof(realDbNo);    //2 bytes
+    memcpy(&p_dataItem->realDbNo, pBuf + offset, sizeof(p_dataItem->realDbNo));
+    offset += sizeof(p_dataItem->realDbNo);    //2 bytes
 
 //    p_dataItem->linkNo = json_integer_value(json_object_get(item, "linkNo"));
 //    p_dataItem->devNo = json_integer_value(json_object_get(item, "devNo"));
 //    p_dataItem->regNo = json_integer_value(json_object_get(item, "regNo"));
 
-    float value = 0.0f;
-    memcpy(&value, pBuf + offset, sizeof(value));
-    p_dataItem->freezeValue = value;
-    offset += sizeof(value);    //4 bytes
+    memcpy(&p_dataItem->freezeValue, pBuf + offset, sizeof(p_dataItem->freezeValue));
+    offset += sizeof(p_dataItem->freezeValue);    //4 bytes
 
     memcpy(&p_dataItem->freezeTime.Year, pBuf + offset, sizeof(p_dataItem->freezeTime.Year));
     offset += sizeof(p_dataItem->freezeTime.Year);    //2 bytes
@@ -967,7 +963,14 @@ static u16 accum_readDataList(accumDataList_s *p_dataList, u8 *pBuf, u16 bufSize
 
     u16 offset = 0;
 
-    p_dataList->accumType = json_integer_value(json_object_get(item, "accumType"));
+    u16 acumType = 0;
+    memcpy(&acumType, pBuf + offset, sizeof(acumType));
+    p_dataList->accumType = (accumEnergyType_e)acumType;
+    offset += sizeof(acumType);//2 bytes
+
+	u16 count = 0;
+	memcpy(&count, pBuf + offset, sizeof(count));
+	offset += sizeof(count);//2 bytes
 
     p_dataList->dataList.list = (accumDataItem_s*) calloc(count, sizeof(accumDataItem_s));
     if (p_dataList->dataList.list == NULL)
