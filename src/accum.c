@@ -131,6 +131,130 @@ typedef struct accumEnergyList {
 } accumEnergyList_s;
 
 
+/*********************************************
+ * 函数功能: 读取json配置文件
+ * ------------------------------------------
+ * @param - 无
+ * ------------------------------------------
+ * @return - 无
+ ********************************************/
+accumEnergyConfig_s* parse_accumulate_config(const char *configFileName)
+{
+    json_t *root = NULL;
+    json_t *arrayList = NULL;
+    json_t *arrayItem = NULL;
+    json_t *object_tmp = NULL;
+    json_error_t error;
+
+    root = json_load_file((const char*) configFileName, 0, &error);
+    if (NULL == root)
+    {
+        return NULL;
+    }
+
+    accumEnergyConfig_s *p_accumEnergyConfig = malloc(sizeof(accumEnergyConfig_s));
+    if (NULL == p_accumEnergyConfig)
+    {
+        DEBUG_TIME_LINE("pad malloc err");
+        return NULL;
+    }
+
+    memset(p_accumEnergyConfig, 0, sizeof(accumEnergyConfig_s));
+    p_accumEnergyConfig->acqPeriod = 2000; //默认10秒钟刷新一次数据
+    p_accumEnergyConfig->resultType = e_accumulate_result_total;
+
+    //读取头部信息 start
+    object_tmp = json_object_get(root, "acqPeriod");
+    p_accumEnergyConfig->acqPeriod = json_integer_value(object_tmp);
+
+    object_tmp = json_object_get(root, "resultStoreType");
+    p_accumEnergyConfig->resultType = (accumResultType_e) json_integer_value(object_tmp);
+
+    object_tmp = json_object_get(root, "startRealDbNo");
+    p_accumEnergyConfig->startRealDbNo = json_integer_value(object_tmp);
+    //读取头部信息 end
+
+    //读取分相电能的数据源实时库号 start
+    arrayList = json_object_get(root, "dataSourceList");
+    size_t count = json_array_size(arrayList);
+    if (count == 0)
+    {
+        json_decref(root);
+        free(p_accumEnergyConfig);
+        return NULL;
+    }
+
+    p_accumEnergyConfig->accumItemList.list = (accumItemStruct_s*) malloc(count * sizeof(accumItemStruct_s));
+    if(p_accumEnergyConfig->accumItemList.list == NULL)
+    {
+        json_decref(root);
+        free(p_accumEnergyConfig);
+        return NULL;
+    }
+
+    memset(p_accumEnergyConfig->accumItemList.list, 0, count * sizeof(accumItemStruct_s));
+    p_accumEnergyConfig->accumItemList.capacity = count;
+    p_accumEnergyConfig->accumItemList.count = count;
+
+    int i = 0;
+    for (i = 0; i < count; i++)
+    {
+        arrayItem = json_array_get(arrayList, i);
+
+        object_tmp = json_object_get(arrayItem, "realDbNo");
+        p_accumEnergyConfig->accumItemList.list[i].realDbNo = json_integer_value(object_tmp);
+
+        object_tmp = json_object_get(arrayItem, "description");
+        strncpy(p_accumEnergyConfig->accumItemList.list[i].description,
+                json_string_value(object_tmp),
+                sizeof(p_accumEnergyConfig->accumItemList.list[i].description) - 1);
+    }
+
+    //读取分相电能的数据源实时库号 end
+
+    //读取冻结类型项目 start
+    arrayList = json_object_get(root, "freezeDataList");
+    count = json_array_size(arrayList);
+    if (count == 0)
+    {
+        json_decref(root);
+        free(p_accumEnergyConfig->accumItemList.list);
+        free(p_accumEnergyConfig);
+        return NULL;
+    }
+
+    p_accumEnergyConfig->freezeItemList.list = (freezeItem_s*) malloc(count * sizeof(freezeItem_s));
+    if(p_accumEnergyConfig->freezeItemList.list == NULL)
+    {
+        json_decref(root);
+        free(p_accumEnergyConfig->accumItemList.list);
+        free(p_accumEnergyConfig);
+        return NULL;
+    }
+
+    memset(p_accumEnergyConfig->freezeItemList.list, 0, count * sizeof(freezeItem_s));
+    p_accumEnergyConfig->freezeItemList.capacity = count;
+    p_accumEnergyConfig->freezeItemList.count = count;
+
+    i = 0;
+    for (i = 0; i < count; i++)
+    {
+        arrayItem = json_array_get(arrayList, i);
+
+        object_tmp = json_object_get(arrayItem, "type");
+        p_accumEnergyConfig->freezeItemList.list[i].type = (accumEnergyType_e)json_integer_value(object_tmp);
+
+        object_tmp = json_object_get(arrayItem, "depth");
+        p_accumEnergyConfig->freezeItemList.list[i].depth = json_integer_value(object_tmp);
+    }
+
+    //读取冻结类型项目 end
+
+    json_decref(root);
+
+    return p_accumEnergyConfig;
+}
+
 /*******************************************************
 * 函数名称: accum_freeDataItemList
 * ---------------------------------------------------
@@ -701,5 +825,15 @@ u16 accum_saveFreezeList(accumFreezeList_s *p_freezeList, u8 *pBuf, u16 bufMaxSi
 
 void testAccum(void)
 {
+    accumEnergyConfig_s* pConfig = parse_accumulate_config("/home/floyd/repo/mytesting/Debug/accumConfig.json");
+    if (pConfig == NULL)
+    {
+        DEBUG_TIME_LINE("parse config error");
+        return;
+    }
 
+    accumEnergyList_s pEnergyList;
+    accum_readconfig(pConfig, &pEnergyList);
+
+    accum_printEnergyList(&pEnergyList, 0);
 }
