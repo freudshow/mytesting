@@ -857,9 +857,9 @@ static int accum_saveData(const char *configFilename, accumEnergyList_s *p_accum
     }
 
     u8 *p = pBuf;
-    u16 *len = (u16*)pBuf;
-    u16 offset = sizeof(*len);
-    p += sizeof(*len);
+    u16 len = 0;
+    u16 offset = sizeof(len);
+    p += sizeof(len);
 
     //
     //保存配置文件的md5校验码
@@ -867,7 +867,7 @@ static int accum_saveData(const char *configFilename, accumEnergyList_s *p_accum
     MD5File(configFilename, p_accumEnergyList->jsonMd5);
     memcpy(p, p_accumEnergyList->jsonMd5, sizeof(p_accumEnergyList->jsonMd5));
 	offset += sizeof(p_accumEnergyList->jsonMd5);//16 bytes
-	*len += sizeof(p_accumEnergyList->jsonMd5);//16 bytes
+	len += sizeof(p_accumEnergyList->jsonMd5);//16 bytes
 	p += sizeof(p_accumEnergyList->jsonMd5);//16 bytes
 
     //
@@ -876,7 +876,7 @@ static int accum_saveData(const char *configFilename, accumEnergyList_s *p_accum
     u16 phaseCount = p_accumEnergyList->phaseDataList.capacity;
     memcpy(p, &phaseCount, sizeof(phaseCount));
 	offset += sizeof(phaseCount);//2 bytes
-	*len += sizeof(phaseCount);//2 bytes
+	len += sizeof(phaseCount);//2 bytes
 	p += sizeof(phaseCount);//2 bytes
 
     int i = 0;
@@ -885,11 +885,13 @@ static int accum_saveData(const char *configFilename, accumEnergyList_s *p_accum
     {
     	delta = accum_saveFreezeList(&p_accumEnergyList->phaseDataList.list[i], p, bufMaxSize - offset);
     	offset += delta;
-    	*len += delta;
+    	len += delta;
     	p += delta;
     }
 
-    u16 crc16 = calcCRC16(pBuf + sizeof(*len), *len);
+    memcpy(pBuf, &len, sizeof(len));
+
+    u16 crc16 = calcCRC16(pBuf + sizeof(len), len);
     memcpy(p, &crc16, sizeof(crc16));
     offset += sizeof(crc16);
     p += sizeof(crc16);
@@ -925,10 +927,6 @@ static u16 accum_readDataItem(accumDataItem_s *p_dataItem, u8 *pBuf, u16 bufSize
 
     memcpy(&p_dataItem->realDbNo, pBuf + offset, sizeof(p_dataItem->realDbNo));
     offset += sizeof(p_dataItem->realDbNo);    //2 bytes
-
-//    p_dataItem->linkNo = json_integer_value(json_object_get(item, "linkNo"));
-//    p_dataItem->devNo = json_integer_value(json_object_get(item, "devNo"));
-//    p_dataItem->regNo = json_integer_value(json_object_get(item, "regNo"));
 
     memcpy(&p_dataItem->freezeValue, pBuf + offset, sizeof(p_dataItem->freezeValue));
     offset += sizeof(p_dataItem->freezeValue);    //4 bytes
@@ -1140,6 +1138,11 @@ static u16 accum_readFlash(const char *configFileName, accumEnergyConfig_s *pCon
     memcpy(&len, p, sizeof(len));
     offset += sizeof(len);
     p += sizeof(len);
+
+    if (len == 0)
+    {
+    	return 0;
+    }
 
     //
     //如果以前保存过数据, 读取其保存的配置文件的md5码和数据
