@@ -1,6 +1,7 @@
 #include "md5.h"
 #include <string.h>
 #include <sys/stat.h>
+#include <unistd.h>
 
 
 #define S11 7

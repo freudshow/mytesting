@@ -310,6 +310,7 @@ u8 chkSum(u8 *buf, u16 bufSize);
 int decode_base64(char *enStr, u32 enSize, u8 *deBuf);
 int encode_base64(u8 *buf, u32 len, char *enStr);
 int logLimit(const char *fname, int logsize, int logCount);
+u16 calcCRC16(u8 *buf, u32 len);
 
 #ifdef __cplusplus
 #if __cplusplus

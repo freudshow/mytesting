@@ -856,27 +856,45 @@ static int accum_saveData(const char *configFilename, accumEnergyList_s *p_accum
         return 0;
     }
 
-    u16 offset = 0;
-    int i = 0;
+    u8 *p = pBuf;
+    u16 *len = (u16*)pBuf;
+    u16 offset = sizeof(*len);
+    p += sizeof(*len);
 
     //
     //保存配置文件的md5校验码
     //
     MD5File(configFilename, p_accumEnergyList->jsonMd5);
-    memcpy(pBuf + offset, p_accumEnergyList->jsonMd5, sizeof(p_accumEnergyList->jsonMd5));
+    memcpy(p, p_accumEnergyList->jsonMd5, sizeof(p_accumEnergyList->jsonMd5));
 	offset += sizeof(p_accumEnergyList->jsonMd5);//16 bytes
+	*len += sizeof(p_accumEnergyList->jsonMd5);//16 bytes
+	p += sizeof(p_accumEnergyList->jsonMd5);//16 bytes
 
     //
     //保存数据列表
     //
     u16 phaseCount = p_accumEnergyList->phaseDataList.capacity;
-    memcpy(pBuf + offset, &phaseCount, sizeof(phaseCount));
+    memcpy(p, &phaseCount, sizeof(phaseCount));
 	offset += sizeof(phaseCount);//2 bytes
+	*len += sizeof(phaseCount);//2 bytes
+	p += sizeof(phaseCount);//2 bytes
 
+    int i = 0;
+	u16 delta = 0;
     for (i = 0; i < phaseCount && bufMaxSize >= offset; i++)
     {
-        offset += accum_saveFreezeList(&p_accumEnergyList->phaseDataList.list[i], pBuf + offset, bufMaxSize - offset);
+    	delta = accum_saveFreezeList(&p_accumEnergyList->phaseDataList.list[i], p, bufMaxSize - offset);
+    	offset += delta;
+    	*len += delta;
+    	p += delta;
     }
+
+    u16 crc16 = calcCRC16(pBuf + sizeof(*len), *len);
+    memcpy(p, &crc16, sizeof(crc16));
+    offset += sizeof(crc16);
+    p += sizeof(crc16);
+
+    DEBUG_BUFF_FORMAT(pBuf, offset, "pBuf: -------------->>>>>>>");
 
     return offset;
 }
@@ -1108,21 +1126,32 @@ static u16 accum_readData(accumEnergyList_s *p_energyList, u8 *pBuf, u16 bufSize
 * 补充信息: 无
 * 修改日志: 无
 *******************************************************/
-static int accum_readFlash(const char *configFileName, accumEnergyConfig_s *pConfig, accumEnergyList_s *p_energyList, u8 *pBuf, u16 bufSize)
+static u16 accum_readFlash(const char *configFileName, accumEnergyConfig_s *pConfig, accumEnergyList_s *p_energyList, u8 *pBuf, u16 bufSize)
 {
     if (pBuf == NULL || p_energyList == NULL)
     {
-        return -1;
+        return 0;
     }
+
+    u16 offset = 0;
+    u16 len = 0;
+    u8 *p = pBuf;
+
+    memcpy(&len, p, sizeof(len));
+    offset += sizeof(len);
+    p += sizeof(len);
 
     //
     //如果以前保存过数据, 读取其保存的配置文件的md5码和数据
     //
-    u16 offset = accum_readData(p_energyList, pBuf, bufSize);
-    if (offset == 0)
+    u16 readLen = accum_readData(p_energyList, p, bufSize - sizeof(len));
+    if (readLen != len)
     {
-        return -1;
+        return 0;
     }
+
+    offset += len;
+    p += len;
 
     //
     //读取配置文件的md5码
@@ -1136,12 +1165,26 @@ static int accum_readFlash(const char *configFileName, accumEnergyConfig_s *pCon
     if (strncmp((const char*) p_energyList->jsonMd5, (const char*) md5, sizeof(md5)) != 0)
     {
         accum_freeEnergyList(p_energyList);
-        return -1;
+        return 0;
+    }
+
+    //
+    //crc check
+    //
+    u16 crc16 = 0;
+    memcpy(&crc16, p, sizeof(crc16));
+    offset += sizeof(crc16);
+    p+= sizeof(crc16);
+
+    u16 crcSum = calcCRC16(pBuf + sizeof(len), len);
+    if (crcSum != crc16)
+    {
+    	return 0;
     }
 
     p_energyList->pEnergyConfig = pConfig;
 
-    return 0;
+    return offset;
 }
 
 void testAccum(void)
@@ -1168,9 +1211,10 @@ void testAccum(void)
     DEBUG_BUFF_FORMAT(buf, offset, "buf:--->>> ");
 
     accumEnergyList_s energyListRead;
-    if (accum_readFlash(configFileName, pConfig, &energyListRead, buf, offset) == 0)
+    u16 readLen = accum_readFlash(configFileName, pConfig, &energyListRead, buf, offset);
+    if (readLen > 0)
     {
-        DEBUG_TIME_LINE("after read data:----------------------");
+        DEBUG_TIME_LINE("after read [%d] data:----------------------", readLen);
         accum_printEnergyList(&energyListRead, 0);
     }
 }
