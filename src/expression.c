@@ -64,7 +64,8 @@ int isOperator(char symbol)
 //converts infix expression to postfix
 void convert(char infix[], char postfix[])
 {
-    int i, symbol, j = 0;
+    int i, j = 0;
+    char symbol;
     stack[++top] = '#';
     for (i = 0; i < strlen(infix); i++)
     {
