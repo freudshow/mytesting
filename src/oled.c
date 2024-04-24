@@ -21,6 +21,8 @@
 
 #include "oled.h"
 #include "sqlite3.h"
+#include "oled_gui.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/types.h>
@@ -257,118 +259,6 @@ void OLED_ColorTurn()
 		for (col = 0; col < MAX_COLUMN; col++)
 		{
 			s_OLED_GRAM[row][col] = ~s_OLED_GRAM[row][col];
-		}
-	}
-}
-
-//画点
-//x:0~127
-//y:0~63
-//t:1 填充 0,清空
-void OLED_DrawPoint(u8 col, u8 y, u8 t)
-{
-	u8 row, m, n;
-	row = y / 8; //像素位于哪一行，1行=8个纵向像素
-	m = y % 8; //像素位于一列中的哪一行，从上到下开始数
-	n = 1 << m; //像素的值
-	if (t) //如果是点亮，则将这一像素对应的位, 置1
-	{
-		s_OLED_GRAM[row][col] |= n;
-	}
-	else   //如果是熄灭，则将这一像素对应的位, 置0
-	{
-		s_OLED_GRAM[row][col] &= (~(1 << m));
-	}
-}
-
-//画线
-//x1,y1:起点坐标
-//x2,y2:结束坐标
-void OLED_DrawLine(u8 x1, u8 y1, u8 x2, u8 y2, u8 mode)
-{
-	u16 t;
-	int xerr = 0, yerr = 0, delta_x, delta_y, distance;
-	int incx, incy, uRow, uCol;
-	delta_x = x2 - x1; //计算坐标增量
-	delta_y = y2 - y1;
-	uRow = x1; //画线起点坐标
-	uCol = y1;
-
-	if (delta_x > 0) {
-		incx = 1; //设置单步方向
-	}
-
-	else if (delta_x == 0) {
-		incx = 0; //垂直线
-	}
-
-	else {
-		incx = -1;
-		delta_x = -delta_x;
-	}
-
-	if (delta_y > 0) {
-		incy = 1;
-	}
-
-	else if (delta_y == 0) {
-		incy = 0; //水平线
-	}
-
-	else {
-		incy = -1;
-		delta_y = -delta_x;
-	}
-
-	if (delta_x > delta_y) {
-		distance = delta_x; //选取基本增量坐标轴
-	}
-
-	else {
-		distance = delta_y;
-	}
-
-	for (t = 0; t < distance + 1; t++) {
-		OLED_DrawPoint(uRow, uCol, mode); //画点
-		xerr += delta_x;
-		yerr += delta_y;
-		if (xerr > distance) {
-			xerr -= distance;
-			uRow += incx;
-		}
-
-		if (yerr > distance) {
-			yerr -= distance;
-			uCol += incy;
-		}
-	}
-}
-
-//x,y:圆心坐标
-//r:圆的半径
-void OLED_DrawCircle(u8 x, u8 y, u8 r)
-{
-	int a, b, num;
-	a = 0;
-	b = r;
-	while (2 * b * b >= r * r)
-	{
-		OLED_DrawPoint(x + a, y - b, 1);
-		OLED_DrawPoint(x - a, y - b, 1);
-		OLED_DrawPoint(x - a, y + b, 1);
-		OLED_DrawPoint(x + a, y + b, 1);
-
-		OLED_DrawPoint(x + b, y + a, 1);
-		OLED_DrawPoint(x + b, y - a, 1);
-		OLED_DrawPoint(x - b, y - a, 1);
-		OLED_DrawPoint(x - b, y + a, 1);
-
-		a++;
-		num = (a * a + b * b) - r * r; //计算画的点离圆心的距离
-		if (num > 0)
-		{
-			b--;
-			a--;
 		}
 	}
 }
@@ -1301,12 +1191,24 @@ void getInput(void)
 
 void OLED_test(void)
 {
-    openFontDB("/home/floyd/repo/mytesting/db/font.db");
-    OLED_Print_UTF8(0, 0, 16, "大開眼界", OLED_BOTTOM_LINE);
-    OLED_Print_UTF8(2, 0, 16, "abcde", OLED_BOTTOM_LINE);
-    OLED_Print_UTF8(4, 0, 16, "abcde", OLED_BOTTOM_LINE);
-    closeFontDB();
+//    openFontDB("/home/floyd/repo/mytesting/db/font.db");
+//    OLED_Print_UTF8(0, 0, 16, "大開眼界", OLED_BOTTOM_LINE);
+//    OLED_Print_UTF8(2, 0, 16, "abcde", OLED_BOTTOM_LINE);
+//    OLED_Print_UTF8(4, 0, 16, "abcde", OLED_BOTTOM_LINE);
+//    closeFontDB();
 
+    int x = 0;
+    int y = 0;
+    oledGuiPoint_s point = { .x = 0, .y = 0, .OnOff = 1 };
+    for (point.x = 0; point.x < 128; point.x++)
+    {
+        for(point.y = 0; point.y < 64; point.y++)
+        {
+            OLED_GUI_DrawPoint(&point, s_OLED_GRAM);
+        }
+    }
+
+    OLED_clearRectangle(5, 60, 3, 70, s_OLED_GRAM);
 //    OLED_DrawLine(0, 0, 10, 8, 1);
 //    OLED_DrawCircle(9,9,5);
     OLED_Refresh();

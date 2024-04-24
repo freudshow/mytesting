@@ -8,12 +8,13 @@
 //void testjansson(void);
 //void testInitDataList(void);
 //void testbase64(void);
-//void OLED_test(void);
+void OLED_test(void);
 //void testtcp(void);
 //void testjson(void);
 //u32 crc32File(const char *fullname);
 //int getWeekByDate(int year, int month, int day);
-void testAccum(void);
+//void testAccum(void);
+int expmain(int argc, char **argv);
 
 int main(int argc, char **argv)
 {
@@ -25,6 +26,9 @@ int main(int argc, char **argv)
 //	  testmydb();
 //    testjson();
 
-    testAccum();
+//    testAccum();
+
+    expmain(argc, argv);
+
     return 0;
 }

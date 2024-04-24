@@ -136,7 +136,6 @@ extern "C" {
     void OLED_Clear_Row(u8 row);
     void OLED_ColorTurn();
     void OLED_Refresh();
-    void OLED_DrawPoint(u8 x, u8 y, u8 t);
 
     extern void OLED_Print(u8 row, u8 col, u8 width, char *s, u8 mode);
     extern void OLED_Print_UTF8(u8 row, u8 col, u8 width, char *s, u8 mode);
