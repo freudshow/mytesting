@@ -18,6 +18,8 @@ typedef enum {
     TOKEN_BIT_XOR,
     TOKEN_LEFT_SHIFT,
     TOKEN_RIGHT_SHIFT,
+    TOKEN_RIGHT_SIN,
+    TOKEN_RIGHT_COS,
     TOKEN_LPAREN,
     TOKEN_RPAREN,
     TOKEN_REALDB,
@@ -224,6 +226,34 @@ u32 tokenizer(const char *input, Token *tokens)
                     pToken->str[0] = input[position];
                     pToken->str[1] = '\0';
                     break;
+                case 's':
+                    if (position < inputlen - 2 && input[position + 1] == 'i' && input[position + 2] == 'n')
+                    {
+                        pToken->type = TOKEN_RIGHT_SIN;
+                        strncpy(pToken->str, "sin", sizeof(pToken->str) - 1);
+                        position += 2;
+                    }
+                    else
+                    {
+                        printf("Invalid character: %c, position: %u\n", input[position], position);
+                        exit(1);
+                    }
+
+                    break;
+                case 'c':
+                    if (position < inputlen - 2 && input[position + 1] == 'o' && input[position + 2] == 's')
+                    {
+                        pToken->type = TOKEN_RIGHT_SIN;
+                        strncpy(pToken->str, "cos", sizeof(pToken->str) - 1);
+                        position += 2;
+                    }
+                    else
+                    {
+                        printf("Invalid character: %c, position: %u\n", input[position], position);
+                        exit(1);
+                    }
+
+                    break;
                 default:
                     printf("Invalid character: %c\n", input[position]);
                     exit(1);
@@ -410,7 +440,7 @@ pStackArray createStackArray(int capacity)
 
 void ariMain(void)
 {
-    char *input = "(2.5 + 3) * 4.2 - 10.1 / 2 + #1485548 >>  #6545 || 5 ^ 2 & 3<< 16.1235";
+    char *input = "(2.5 + 3) * 4.2 - 10.1 / 2 + #1485548 >>  #6545 || 5 ^ 2 & 3<< 16.1235 + sin(#45) / cos(123)";
 
     Token *tokens = calloc(strlen(input) + 1, sizeof(Token));
     size_t count = tokenizer(input, tokens);
@@ -440,19 +470,25 @@ void ariMain(void)
                 printf("type: TOKEN_DIVIDE\t");
                 break;
             case TOKEN_BIT_OR:
-                printf("type: TOKEN_OR\t");
+                printf("type: TOKEN_BIT_OR\t");
                 break;
             case TOKEN_BIT_AND:
-                printf("type: TOKEN_AND\t");
+                printf("type: TOKEN_BIT_AND\t");
                 break;
             case TOKEN_BIT_XOR:
-                printf("type: TOKEN_XOR\t");
+                printf("type: TOKEN_BIT_XOR\t");
                 break;
             case TOKEN_LEFT_SHIFT:
                 printf("type: TOKEN_LEFT_SHIFT\t");
                 break;
             case TOKEN_RIGHT_SHIFT:
                 printf("type: TOKEN_RIGHT_SHIFT\t");
+                break;
+            case TOKEN_RIGHT_SIN:
+                printf("type: TOKEN_RIGHT_SIN\t");
+                break;
+            case TOKEN_RIGHT_COS:
+                printf("type: TOKEN_RIGHT_COS\t");
                 break;
             case TOKEN_LPAREN:
                 printf("type: TOKEN_LPAREN\t");
@@ -472,7 +508,7 @@ void ariMain(void)
 
         if (tokens[i].type != TOKEN_END)
         {
-            printf("\tposition: %u, str: %s", tokens[i].pos, tokens[i].str);
+            printf("\tposition: %u\tstr: %s", tokens[i].pos, tokens[i].str);
             if (tokens[i].type == TOKEN_INTEGER)
             {
                 printf("\tvalue: %d\n", tokens[i].value.intValue);
