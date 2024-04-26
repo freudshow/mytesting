@@ -1,8 +1,10 @@
+#include "basedef.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-#define TOKEN_MAX_SIZE  128
+#define TOKEN_STRING_MAX_SIZE  128
+
 // Token types
 typedef enum {
     TOKEN_INTEGER,
@@ -25,7 +27,7 @@ typedef enum {
 // Token struct
 typedef struct {
     TokenType type;
-    char str[TOKEN_MAX_SIZE];
+    char str[TOKEN_STRING_MAX_SIZE];
     unsigned int pos;
     union {
         double numValue;
@@ -33,125 +35,65 @@ typedef struct {
     } value;
 } Token;
 
-// Global variables
-Token currentToken;
-char *input;
-int position = 0;
+#define EMPTY_TO_S              ( -1 )  //栈的初始指针索引
+#define MIN_STACK_ARRAY_SIZE    ( 32 )  //栈的最小容量
 
-// Function prototypes
-Token getNextToken();
-double parseExpression();
-double parseTerm();
-double parseFactor();
+typedef TokenType* elementType;
 
-Token getNextToken()
+struct stackArray;
+typedef struct stackArray stackArray_s;
+typedef stackArray_s* pStackArray;
+
+typedef int (*pIsEmptyArray_f)(pStackArray s);
+typedef int (*pIsFullArray_f)(pStackArray s);
+typedef void (*pDisposeStackArray_f)(pStackArray s);
+typedef void (*pMakeEmptyArray_f)(pStackArray s);
+typedef void (*pPushArray_f)(elementType e, pStackArray s);
+typedef elementType (*pTopArray_f)(pStackArray s);
+typedef elementType (*pPopArray_f)(pStackArray s);
+
+struct stackArray {
+    int capacity;
+    int topIdx;
+    elementType *array;
+
+    pIsEmptyArray_f isEmpty;
+    pIsFullArray_f isFull;
+    pDisposeStackArray_f dispose;
+    pMakeEmptyArray_f makeEmpty;
+    pPushArray_f push;
+    pTopArray_f top;
+    pPopArray_f pop;
+};
+
+Token getNextToken(const char *input, int *position)
 {
-    while (input[position] != '\0')
-    {
-        if (input[position] == ' ')
-        {
-            position++;
-            continue;
-        }
-
-        if (input[position] >= '0' && input[position] <= '9')
-        {
-            char *value = malloc(sizeof(char) * 100);
-            int i = 0;
-
-            while (input[position] >= '0' && input[position] <= '9')
-            {
-                value[i] = input[position];
-                position++;
-                i++;
-            }
-
-            if (input[position] == '.')
-            {
-                value[i] = input[position];
-                position++;
-                i++;
-
-                while (input[position] >= '0' && input[position] <= '9')
-                {
-                    value[i] = input[position];
-                    position++;
-                    i++;
-                }
-
-                value[i] = '\0';
-                currentToken.type = TOKEN_FLOAT;
-            }
-            else
-            {
-                value[i] = '\0';
-                currentToken.type = TOKEN_INTEGER;
-            }
-
-            strncpy(currentToken.str, value, sizeof(currentToken.str) - 1);
-            return currentToken;
-        }
-
-        switch (input[position])
-        {
-            case '+':
-                currentToken.type = TOKEN_PLUS;
-                break;
-            case '-':
-                currentToken.type = TOKEN_MINUS;
-                break;
-            case '*':
-                currentToken.type = TOKEN_MULTIPLY;
-                break;
-            case '/':
-                currentToken.type = TOKEN_DIVIDE;
-                break;
-            case '(':
-                currentToken.type = TOKEN_LPAREN;
-                break;
-            case ')':
-                currentToken.type = TOKEN_RPAREN;
-                break;
-            default:
-                printf("Invalid character: %c\n", input[position]);
-                exit(1);
-        }
-
-        position++;
-        return currentToken;
-    }
-
-    currentToken.type = TOKEN_END;
-    return currentToken;
-}
-
-Token getNextTokenMy()
-{
+    Token currentToken = { 0 };
     size_t inputlen = strlen(input);
-    while (input[position] != '\0')
+    while (input[*position] != '\0')
     {
-        if (input[position] == ' ' || input[position] == '\t' || input[position] == '\r' || input[position] == '\n')
+        if (input[*position] == ' ' || input[*position] == '\t' || input[*position] == '\r' || input[*position] == '\n')
         {
-            position++;
+            (*position)++;
             continue;
         }
 
-        if (input[position] == '#')
+        if (input[*position] == '#')
         {
-            if (position >= inputlen || input[position + 1] < '0' || input[position + 1] > '9')
+            if (*position >= inputlen || input[*position + 1] < '0' || input[*position + 1] > '9')
             {
-                printf("Invalid character: %c, position: %d\n", input[position], position);
+                printf("Invalid character: %c, position: %d\n", input[*position], *position);
                 exit(1);
             }
 
-            currentToken.pos = position;
-            position++;
+            currentToken.pos = *position;
+            (*position)++;
 
             int i = 0;
-            while (input[position] >= '0' && input[position] <= '9')
+            while (input[*position] >= '0' && input[*position] <= '9')
             {
-                currentToken.str[i] = input[position];
-                position++;
+                currentToken.str[i] = input[*position];
+                (*position)++;
                 i++;
             }
 
@@ -162,29 +104,29 @@ Token getNextTokenMy()
             return currentToken;
         }
 
-        if (input[position] >= '0' && input[position] <= '9')
+        if (input[*position] >= '0' && input[*position] <= '9')
         {
-            currentToken.pos = position;
+            currentToken.pos = *position;
 
             int i = 0;
 
-            while (input[position] >= '0' && input[position] <= '9')
+            while (input[*position] >= '0' && input[*position] <= '9')
             {
-                currentToken.str[i] = input[position];
-                position++;
+                currentToken.str[i] = input[*position];
+                (*position)++;
                 i++;
             }
 
-            if (input[position] == '.')
+            if (input[*position] == '.')
             {
-                currentToken.str[i] = input[position];
-                position++;
+                currentToken.str[i] = input[*position];
+                (*position)++;
                 i++;
 
-                while (input[position] >= '0' && input[position] <= '9')
+                while (input[*position] >= '0' && input[*position] <= '9')
                 {
-                    currentToken.str[i] = input[position];
-                    position++;
+                    currentToken.str[i] = input[*position];
+                    (*position)++;
                     i++;
                 }
 
@@ -202,87 +144,87 @@ Token getNextTokenMy()
             return currentToken;
         }
 
-        switch (input[position])
+        switch (input[*position])
         {
             case '+':
                 currentToken.type = TOKEN_PLUS;
-                currentToken.str[0] = input[position];
+                currentToken.str[0] = input[*position];
                 currentToken.str[1] = '\0';
                 break;
             case '-':
                 currentToken.type = TOKEN_MINUS;
-                currentToken.str[0] = input[position];
+                currentToken.str[0] = input[*position];
                 currentToken.str[1] = '\0';
                 break;
             case '*':
                 currentToken.type = TOKEN_MULTIPLY;
-                currentToken.str[0] = input[position];
+                currentToken.str[0] = input[*position];
                 currentToken.str[1] = '\0';
                 break;
             case '/':
                 currentToken.type = TOKEN_DIVIDE;
-                currentToken.str[0] = input[position];
+                currentToken.str[0] = input[*position];
                 currentToken.str[1] = '\0';
                 break;
             case '|':
                 currentToken.type = TOKEN_BIT_OR;
-                currentToken.str[0] = input[position];
+                currentToken.str[0] = input[*position];
                 currentToken.str[1] = '\0';
                 break;
             case '&':
                 currentToken.type = TOKEN_BIT_AND;
-                currentToken.str[0] = input[position];
+                currentToken.str[0] = input[*position];
                 currentToken.str[1] = '\0';
                 break;
             case '^':
                 currentToken.type = TOKEN_BIT_XOR;
-                currentToken.str[0] = input[position];
+                currentToken.str[0] = input[*position];
                 currentToken.str[1] = '\0';
                 break;
             case '<':
-                if (position < inputlen - 1 && input[position + 1] == '<')
+                if (*position < inputlen - 1 && input[*position + 1] == '<')
                 {
                     currentToken.type = TOKEN_LEFT_SHIFT;
                     strncpy(currentToken.str, "<<", sizeof(currentToken.str) - 1);
-                    position++;
+                    (*position)++;
                 }
                 else
                 {
-                    printf("Invalid character: %c, position: %d\n", input[position], position);
+                    printf("Invalid character: %c, position: %d\n", input[*position], *position);
                     exit(1);
                 }
 
                 break;
             case '>':
-                if (position < inputlen - 1 && input[position + 1] == '>')
+                if (*position < inputlen - 1 && input[*position + 1] == '>')
                 {
                     currentToken.type = TOKEN_RIGHT_SHIFT;
                     strncpy(currentToken.str, ">>", sizeof(currentToken.str) - 1);
-                    position++;
+                    (*position)++;
                 }
                 else
                 {
-                    printf("Invalid character: %c, position: %d\n", input[position], position);
+                    printf("Invalid character: %c, position: %d\n", input[*position], *position);
                     exit(1);
                 }
 
                 break;
             case '(':
                 currentToken.type = TOKEN_LPAREN;
-                currentToken.str[0] = input[position];
+                currentToken.str[0] = input[*position];
                 currentToken.str[1] = '\0';
                 break;
             case ')':
                 currentToken.type = TOKEN_RPAREN;
-                currentToken.str[0] = input[position];
+                currentToken.str[0] = input[*position];
                 currentToken.str[1] = '\0';
                 break;
             default:
-                printf("Invalid character: %c\n", input[position]);
+                printf("Invalid character: %c\n", input[*position]);
                 exit(1);
         }
 
-        position++;
+        (*position)++;
         return currentToken;
     }
 
@@ -290,93 +232,184 @@ Token getNextTokenMy()
     return currentToken;
 }
 
-double parseExpression()
+/******************************************************
+ * 函数功能: 判断栈是否为空
+ * ---------------------------------------------------
+ * @param - s, 栈指针
+ * ---------------------------------------------------
+ * @return - 空, 返回1;
+ *           非空, 返回0
+ ******************************************************/
+static int isEmptyArray(pStackArray s)
 {
-    double result = parseTerm();
-
-    while (currentToken.type == TOKEN_PLUS || currentToken.type == TOKEN_MINUS)
-    {
-        Token op = currentToken;
-        getNextToken();
-
-        double term = parseTerm();
-
-        if (op.type == TOKEN_PLUS)
-        {
-            result += term;
-        }
-        else
-        {
-            result -= term;
-        }
-    }
-
-    return result;
+    return s->topIdx == EMPTY_TO_S;
 }
 
-double parseTerm()
+/******************************************************
+ * 函数功能: 判断栈是否已满
+ * ---------------------------------------------------
+ * @param - s, 栈指针
+ * ---------------------------------------------------
+ * @return - 已满, 返回1;
+ *           不满, 返回0
+ ******************************************************/
+static int isFullArray(pStackArray s)
 {
-    double result = parseFactor();
-
-    while (currentToken.type == TOKEN_MULTIPLY || currentToken.type == TOKEN_DIVIDE)
-    {
-        Token op = currentToken;
-        getNextToken();
-
-        double factor = parseFactor();
-
-        if (op.type == TOKEN_MULTIPLY)
-        {
-            result *= factor;
-        }
-        else
-        {
-            result /= factor;
-        }
-    }
-
-    return result;
+    return s->topIdx == s->capacity - 1;
 }
 
-double parseFactor()
+/******************************************************
+ * 函数功能: 使栈归零
+ * ---------------------------------------------------
+ * @param - s, 栈指针
+ * ---------------------------------------------------
+ * @return - 无
+ ******************************************************/
+static void makeEmptyArray(pStackArray s)
 {
-    double result = 0;
+    s->topIdx = EMPTY_TO_S;
+}
 
-    if (currentToken.type == TOKEN_INTEGER || currentToken.type == TOKEN_FLOAT)
+/******************************************************
+ * 函数功能: 释放栈占用的内存
+ * ---------------------------------------------------
+ * @param - s, 栈指针
+ * ---------------------------------------------------
+ * @return - 无
+ ******************************************************/
+static void disposeStackArray(pStackArray s)
+{
+    if (s != NULL)
     {
-        result = atof(currentToken.str);
-        getNextToken();
-    }
-    else if (currentToken.type == TOKEN_LPAREN)
-    {
-        getNextToken();
-        result = parseExpression();
-
-        if (currentToken.type != TOKEN_RPAREN)
+        if (s->array != NULL)
         {
-            printf("Expected ')'\n");
-            exit(1);
+            free(s->array);
         }
 
-        getNextToken();
+        free(s);
     }
-    else
+}
+
+/******************************************************
+ * 函数功能: 向栈内压入1个元素
+ * ---------------------------------------------------
+ * @param - e, 被压入元素
+ * @param - s, 栈指针
+ * ---------------------------------------------------
+ * @return - 无
+ ******************************************************/
+static void pushArray(elementType e, pStackArray s)
+{
+    if (isFullArray(s))
     {
-        printf("Expected number or '('\n");
-        exit(1);
+        DEBUG_TIME_LINE("Full pStackArray");
+        return;
     }
 
-    return result;
+    s->topIdx++;
+    s->array[s->topIdx] = e;
 }
+
+/******************************************************
+ * 函数功能: 读取栈顶元素, 不弹出栈顶
+ * ---------------------------------------------------
+ * @param - s, 栈指针
+ * ---------------------------------------------------
+ * @return - 栈顶元素
+ ******************************************************/
+static elementType topArray(pStackArray s)
+{
+    if (!isEmptyArray(s))
+    {
+        return s->array[s->topIdx];
+    }
+
+    DEBUG_TIME_LINE("Empty pStackArray");
+
+    return NULL;
+}
+
+/******************************************************
+ * 函数功能: 弹出栈顶元素
+ * ---------------------------------------------------
+ * @param - s, 栈指针
+ * ---------------------------------------------------
+ * @return - 栈顶元素
+ ******************************************************/
+static elementType popArray(pStackArray s)
+{
+    if (isEmptyArray(s))
+    {
+        DEBUG_TIME_LINE("Empty pStackArray");
+        return NULL;
+    }
+
+    elementType tmp = s->array[s->topIdx];
+    s->topIdx--;
+
+    return tmp;
+}
+
+/******************************************************
+ * 函数功能: 创建1个栈
+ * ---------------------------------------------------
+ * @param - capacity, 栈的容量
+ * ---------------------------------------------------
+ * @return - 栈指针
+ ******************************************************/
+pStackArray createStackArray(int capacity)
+{
+    pStackArray s;
+
+    if (capacity < MIN_STACK_ARRAY_SIZE)
+    {
+        capacity = MIN_STACK_ARRAY_SIZE;
+        DEBUG_TIME_LINE("pStackArray size is too small, now set size to %d", MIN_STACK_ARRAY_SIZE);
+    }
+
+    s = malloc(sizeof(stackArray_s));
+    if (s == NULL)
+    {
+        DEBUG_TIME_LINE("Out of space!!!");
+        return NULL;
+    }
+
+    s->array = malloc(sizeof(elementType) * capacity);
+    if (s->array == NULL)
+    {
+        DEBUG_TIME_LINE("Out of space!!!");
+        free(s);
+        return NULL;
+    }
+
+    s->capacity = capacity;
+    makeEmptyArray(s);
+
+    s->makeEmpty = makeEmptyArray;
+    s->isEmpty = isEmptyArray;
+    s->isFull = isFullArray;
+    s->dispose = disposeStackArray;
+    s->push = pushArray;
+    s->top = topArray;
+    s->pop = popArray;
+
+    return s;
+}
+
 
 void ariMain(void)
 {
-    input = "(2.5 + 3) * 4.2 - 10.1 / 2 + #1485548 >>  #6545 || 5 ^ 2 & 3<< 16.1235";
+    char *input = "(2.5 + 3) * 4.2 - 10.1 / 2 + #1485548 >>  #6545 || 5 ^ 2 & 3<< 16.1235";
+    int position = 0;
 
-    do
+    Token *tokens = calloc(strlen(input), sizeof(Token));
+
+    int i = 0;
+    for (i = 0; i < strlen(input) && tokens[i].type != TOKEN_END; i++)
     {
-        currentToken = getNextTokenMy();
-        switch (currentToken.type)
+        tokens[i] = getNextToken(input, &position);
+
+        switch (tokens[i].type)
         {
             case TOKEN_INTEGER:
                 printf("type: TOKEN_INTEGER\t");
@@ -427,23 +460,23 @@ void ariMain(void)
                 break;
         }
 
-        if (currentToken.type != TOKEN_END)
+        if (tokens[i].type != TOKEN_END)
         {
-            printf("\tposition: %u, str: %s", currentToken.pos, currentToken.str);
-            if (currentToken.type == TOKEN_INTEGER)
+            printf("\tposition: %u, str: %s", tokens[i].pos, tokens[i].str);
+            if (tokens[i].type == TOKEN_INTEGER)
             {
-                printf("\tvalue: %d\n", currentToken.value.intValue);
+                printf("\tvalue: %d\n", tokens[i].value.intValue);
             }
-            else if (currentToken.type == TOKEN_FLOAT)
+            else if (tokens[i].type == TOKEN_FLOAT)
             {
-                printf("\tvalue: %f\n", currentToken.value.numValue);
+                printf("\tvalue: %f\n", tokens[i].value.numValue);
             }
             else
             {
                 printf("\n");
             }
         }
-    } while (currentToken.type != TOKEN_END);
+    }
 
 //    double result = parseExpression();
 //
