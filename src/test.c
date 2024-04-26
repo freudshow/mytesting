@@ -14,7 +14,7 @@
 //u32 crc32File(const char *fullname);
 //int getWeekByDate(int year, int month, int day);
 //void testAccum(void);
-//int expmain(int argc, char **argv);
+int expmain(int argc, char **argv);
 void ariMain(void);
 
 int main(int argc, char **argv)

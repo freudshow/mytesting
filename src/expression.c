@@ -174,7 +174,7 @@ int evaluate(char *postfix)
 
 int expmain(int argc, char **argv)
 {
-    char infix[25] = "1*(2+3)", postfix[25];
+    char infix[25] = "6*(2+3*9)", postfix[25];
     convert(infix, postfix);
     printf("Infix expression is: %s\n", infix);
     printf("Postfix expression is: %s\n", postfix);
