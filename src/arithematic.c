@@ -66,170 +66,181 @@ struct stackArray {
     pPopArray_f pop;
 };
 
-Token getNextToken(const char *input, int *position)
+u32 tokenizer(const char *input, Token *tokens)
 {
-    Token currentToken = { 0 };
-    size_t inputlen = strlen(input);
-    while (input[*position] != '\0')
+    u32 tokenCount = 0;
+    Token *pToken = tokens;
+    u32 inputlen = strlen(input);
+
+    u32 position = 0;
+    while (input[position] != '\0')
     {
-        if (input[*position] == ' ' || input[*position] == '\t' || input[*position] == '\r' || input[*position] == '\n')
+        if (input[position] == ' ' || input[position] == '\t' || input[position] == '\r' || input[position] == '\n')
         {
-            (*position)++;
+            position++;
             continue;
         }
 
-        if (input[*position] == '#')
+        if (input[position] == '#')         //read real database number
         {
-            if (*position >= inputlen || input[*position + 1] < '0' || input[*position + 1] > '9')
+            if (position >= inputlen || input[position + 1] < '0' || input[position + 1] > '9')
             {
-                printf("Invalid character: %c, position: %d\n", input[*position], *position);
+                printf("Invalid character: %c, position: %u\n", input[position], position);
                 exit(1);
             }
 
-            currentToken.pos = *position;
-            (*position)++;
+            pToken->pos = position;
+            position++;
 
             int i = 0;
-            while (input[*position] >= '0' && input[*position] <= '9')
+            while (input[position] >= '0' && input[position] <= '9')
             {
-                currentToken.str[i] = input[*position];
-                (*position)++;
+                pToken->str[i] = input[position];
+                position++;
                 i++;
             }
 
-            currentToken.str[i] = '\0';
-            currentToken.type = TOKEN_REALDB;
-            currentToken.value.intValue = atol(currentToken.str);
+            pToken->str[i] = '\0';
+            pToken->type = TOKEN_REALDB;
+            pToken->value.intValue = atol(pToken->str);
 
-            return currentToken;
+            tokenCount++;
+            pToken++;
         }
-
-        if (input[*position] >= '0' && input[*position] <= '9')
+        else if (input[position] >= '0' && input[position] <= '9') //read numbers, including integer and float
         {
-            currentToken.pos = *position;
+            pToken->pos = position;
 
             int i = 0;
 
-            while (input[*position] >= '0' && input[*position] <= '9')
+            while (input[position] >= '0' && input[position] <= '9')
             {
-                currentToken.str[i] = input[*position];
-                (*position)++;
+                pToken->str[i] = input[position];
+                position++;
                 i++;
             }
 
-            if (input[*position] == '.')
+            if (input[position] == '.')
             {
-                currentToken.str[i] = input[*position];
-                (*position)++;
+                pToken->str[i] = input[position];
+                position++;
                 i++;
 
-                while (input[*position] >= '0' && input[*position] <= '9')
+                while (input[position] >= '0' && input[position] <= '9')
                 {
-                    currentToken.str[i] = input[*position];
-                    (*position)++;
+                    pToken->str[i] = input[position];
+                    position++;
                     i++;
                 }
 
-                currentToken.str[i] = '\0';
-                currentToken.type = TOKEN_FLOAT;
-                currentToken.value.numValue = atof(currentToken.str);
+                pToken->str[i] = '\0';
+                pToken->type = TOKEN_FLOAT;
+                pToken->value.numValue = atof(pToken->str);
             }
             else
             {
-                currentToken.str[i] = '\0';
-                currentToken.type = TOKEN_INTEGER;
-                currentToken.value.intValue = atol(currentToken.str);
+                pToken->str[i] = '\0';
+                pToken->type = TOKEN_INTEGER;
+                pToken->value.intValue = atol(pToken->str);
             }
 
-            return currentToken;
+            tokenCount++;
+            pToken++;
         }
-
-        switch (input[*position])
+        else        //read operators
         {
-            case '+':
-                currentToken.type = TOKEN_PLUS;
-                currentToken.str[0] = input[*position];
-                currentToken.str[1] = '\0';
-                break;
-            case '-':
-                currentToken.type = TOKEN_MINUS;
-                currentToken.str[0] = input[*position];
-                currentToken.str[1] = '\0';
-                break;
-            case '*':
-                currentToken.type = TOKEN_MULTIPLY;
-                currentToken.str[0] = input[*position];
-                currentToken.str[1] = '\0';
-                break;
-            case '/':
-                currentToken.type = TOKEN_DIVIDE;
-                currentToken.str[0] = input[*position];
-                currentToken.str[1] = '\0';
-                break;
-            case '|':
-                currentToken.type = TOKEN_BIT_OR;
-                currentToken.str[0] = input[*position];
-                currentToken.str[1] = '\0';
-                break;
-            case '&':
-                currentToken.type = TOKEN_BIT_AND;
-                currentToken.str[0] = input[*position];
-                currentToken.str[1] = '\0';
-                break;
-            case '^':
-                currentToken.type = TOKEN_BIT_XOR;
-                currentToken.str[0] = input[*position];
-                currentToken.str[1] = '\0';
-                break;
-            case '<':
-                if (*position < inputlen - 1 && input[*position + 1] == '<')
-                {
-                    currentToken.type = TOKEN_LEFT_SHIFT;
-                    strncpy(currentToken.str, "<<", sizeof(currentToken.str) - 1);
-                    (*position)++;
-                }
-                else
-                {
-                    printf("Invalid character: %c, position: %d\n", input[*position], *position);
-                    exit(1);
-                }
+            switch (input[position])
+            {
+                case '+':
+                    pToken->type = TOKEN_PLUS;
+                    pToken->str[0] = input[position];
+                    pToken->str[1] = '\0';
+                    break;
+                case '-':
+                    pToken->type = TOKEN_MINUS;
+                    pToken->str[0] = input[position];
+                    pToken->str[1] = '\0';
+                    break;
+                case '*':
+                    pToken->type = TOKEN_MULTIPLY;
+                    pToken->str[0] = input[position];
+                    pToken->str[1] = '\0';
+                    break;
+                case '/':
+                    pToken->type = TOKEN_DIVIDE;
+                    pToken->str[0] = input[position];
+                    pToken->str[1] = '\0';
+                    break;
+                case '|':
+                    pToken->type = TOKEN_BIT_OR;
+                    pToken->str[0] = input[position];
+                    pToken->str[1] = '\0';
+                    break;
+                case '&':
+                    pToken->type = TOKEN_BIT_AND;
+                    pToken->str[0] = input[position];
+                    pToken->str[1] = '\0';
+                    break;
+                case '^':
+                    pToken->type = TOKEN_BIT_XOR;
+                    pToken->str[0] = input[position];
+                    pToken->str[1] = '\0';
+                    break;
+                case '<':
+                    if (position < inputlen - 1 && input[position + 1] == '<')
+                    {
+                        pToken->type = TOKEN_LEFT_SHIFT;
+                        strncpy(pToken->str, "<<", sizeof(pToken->str) - 1);
+                        position++;
+                    }
+                    else
+                    {
+                        printf("Invalid character: %c, position: %u\n", input[position], position);
+                        exit(1);
+                    }
 
-                break;
-            case '>':
-                if (*position < inputlen - 1 && input[*position + 1] == '>')
-                {
-                    currentToken.type = TOKEN_RIGHT_SHIFT;
-                    strncpy(currentToken.str, ">>", sizeof(currentToken.str) - 1);
-                    (*position)++;
-                }
-                else
-                {
-                    printf("Invalid character: %c, position: %d\n", input[*position], *position);
-                    exit(1);
-                }
+                    break;
+                case '>':
+                    if (position < inputlen - 1 && input[position + 1] == '>')
+                    {
+                        pToken->type = TOKEN_RIGHT_SHIFT;
+                        strncpy(pToken->str, ">>", sizeof(pToken->str) - 1);
+                        position++;
+                    }
+                    else
+                    {
+                        printf("Invalid character: %c, position: %u\n", input[position], position);
+                        exit(1);
+                    }
 
-                break;
-            case '(':
-                currentToken.type = TOKEN_LPAREN;
-                currentToken.str[0] = input[*position];
-                currentToken.str[1] = '\0';
-                break;
-            case ')':
-                currentToken.type = TOKEN_RPAREN;
-                currentToken.str[0] = input[*position];
-                currentToken.str[1] = '\0';
-                break;
-            default:
-                printf("Invalid character: %c\n", input[*position]);
-                exit(1);
+                    break;
+                case '(':
+                    pToken->type = TOKEN_LPAREN;
+                    pToken->str[0] = input[position];
+                    pToken->str[1] = '\0';
+                    break;
+                case ')':
+                    pToken->type = TOKEN_RPAREN;
+                    pToken->str[0] = input[position];
+                    pToken->str[1] = '\0';
+                    break;
+                default:
+                    printf("Invalid character: %c\n", input[position]);
+                    exit(1);
+            }
+
+            position++;
+
+            tokenCount++;
+            pToken++;
         }
-
-        (*position)++;
-        return currentToken;
     }
 
-    currentToken.type = TOKEN_END;
-    return currentToken;
+    pToken->type = TOKEN_END;
+
+    tokenCount++;
+    pToken++;
+    return tokenCount;
 }
 
 /******************************************************
@@ -400,15 +411,14 @@ pStackArray createStackArray(int capacity)
 void ariMain(void)
 {
     char *input = "(2.5 + 3) * 4.2 - 10.1 / 2 + #1485548 >>  #6545 || 5 ^ 2 & 3<< 16.1235";
-    int position = 0;
 
-    Token *tokens = calloc(strlen(input), sizeof(Token));
+    Token *tokens = calloc(strlen(input) + 1, sizeof(Token));
+    size_t count = tokenizer(input, tokens);
 
     int i = 0;
-    for (i = 0; i < strlen(input) && tokens[i].type != TOKEN_END; i++)
+    for (i = 0; i < count; i++)
     {
-        tokens[i] = getNextToken(input, &position);
-
+        printf("id: %d\t", i);
         switch (tokens[i].type)
         {
             case TOKEN_INTEGER:
@@ -454,7 +464,7 @@ void ariMain(void)
                 printf("type: TOKEN_REALDB\t");
                 break;
             case TOKEN_END:
-                printf("type: TOKEN_END\t");
+                printf("type: TOKEN_END\t\n");
                 break;
             default:
                 break;
@@ -477,8 +487,4 @@ void ariMain(void)
             }
         }
     }
-
-//    double result = parseExpression();
-//
-//    printf("Result of the expression: %.2f\n", result);
 }
