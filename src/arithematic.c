@@ -155,36 +155,43 @@ u32 tokenizer(const char *input, Token *tokens)
             {
                 case '+':
                     pToken->type = TOKEN_PLUS;
+                    pToken->pos = position;
                     pToken->str[0] = input[position];
                     pToken->str[1] = '\0';
                     break;
                 case '-':
                     pToken->type = TOKEN_MINUS;
+                    pToken->pos = position;
                     pToken->str[0] = input[position];
                     pToken->str[1] = '\0';
                     break;
                 case '*':
                     pToken->type = TOKEN_MULTIPLY;
+                    pToken->pos = position;
                     pToken->str[0] = input[position];
                     pToken->str[1] = '\0';
                     break;
                 case '/':
                     pToken->type = TOKEN_DIVIDE;
+                    pToken->pos = position;
                     pToken->str[0] = input[position];
                     pToken->str[1] = '\0';
                     break;
                 case '|':
                     pToken->type = TOKEN_BIT_OR;
+                    pToken->pos = position;
                     pToken->str[0] = input[position];
                     pToken->str[1] = '\0';
                     break;
                 case '&':
                     pToken->type = TOKEN_BIT_AND;
+                    pToken->pos = position;
                     pToken->str[0] = input[position];
                     pToken->str[1] = '\0';
                     break;
                 case '^':
                     pToken->type = TOKEN_BIT_XOR;
+                    pToken->pos = position;
                     pToken->str[0] = input[position];
                     pToken->str[1] = '\0';
                     break;
@@ -192,6 +199,7 @@ u32 tokenizer(const char *input, Token *tokens)
                     if (position < inputlen - 1 && input[position + 1] == '<')
                     {
                         pToken->type = TOKEN_LEFT_SHIFT;
+                        pToken->pos = position;
                         strncpy(pToken->str, "<<", sizeof(pToken->str) - 1);
                         position++;
                     }
@@ -206,6 +214,7 @@ u32 tokenizer(const char *input, Token *tokens)
                     if (position < inputlen - 1 && input[position + 1] == '>')
                     {
                         pToken->type = TOKEN_RIGHT_SHIFT;
+                        pToken->pos = position;
                         strncpy(pToken->str, ">>", sizeof(pToken->str) - 1);
                         position++;
                     }
@@ -218,11 +227,13 @@ u32 tokenizer(const char *input, Token *tokens)
                     break;
                 case '(':
                     pToken->type = TOKEN_LPAREN;
+                    pToken->pos = position;
                     pToken->str[0] = input[position];
                     pToken->str[1] = '\0';
                     break;
                 case ')':
                     pToken->type = TOKEN_RPAREN;
+                    pToken->pos = position;
                     pToken->str[0] = input[position];
                     pToken->str[1] = '\0';
                     break;
@@ -230,6 +241,7 @@ u32 tokenizer(const char *input, Token *tokens)
                     if (position < inputlen - 2 && input[position + 1] == 'i' && input[position + 2] == 'n')
                     {
                         pToken->type = TOKEN_RIGHT_SIN;
+                        pToken->pos = position;
                         strncpy(pToken->str, "sin", sizeof(pToken->str) - 1);
                         position += 2;
                     }
@@ -244,6 +256,7 @@ u32 tokenizer(const char *input, Token *tokens)
                     if (position < inputlen - 2 && input[position + 1] == 'o' && input[position + 2] == 's')
                     {
                         pToken->type = TOKEN_RIGHT_SIN;
+                        pToken->pos = position;
                         strncpy(pToken->str, "cos", sizeof(pToken->str) - 1);
                         position += 2;
                     }
@@ -508,7 +521,7 @@ void ariMain(void)
 
         if (tokens[i].type != TOKEN_END)
         {
-            printf("\tposition: %u\tstr: %s", tokens[i].pos, tokens[i].str);
+            printf("\tposition: %u\tstr: %s", tokens[i].pos + 1, tokens[i].str);
             if (tokens[i].type == TOKEN_INTEGER)
             {
                 printf("\tvalue: %d\n", tokens[i].value.intValue);
