@@ -7,24 +7,7 @@
 
 // Token types
 typedef enum {
-    TOKEN_START,
-    TOKEN_INTEGER,
-    TOKEN_FLOAT,
-    TOKEN_PLUS,
-    TOKEN_MINUS,
-    TOKEN_MULTIPLY,
-    TOKEN_DIVIDE,
-    TOKEN_BIT_OR,
-    TOKEN_BIT_AND,
-    TOKEN_BIT_XOR,
-    TOKEN_LEFT_SHIFT,
-    TOKEN_RIGHT_SHIFT,
-    TOKEN_SIN,
-    TOKEN_COS,
-    TOKEN_LPAREN,
-    TOKEN_RPAREN,
-    TOKEN_REALDB,
-    TOKEN_END
+    TOKEN_START, TOKEN_INTEGER, TOKEN_FLOAT, TOKEN_PLUS, TOKEN_MINUS, TOKEN_MULTIPLY, TOKEN_DIVIDE, TOKEN_BIT_OR, TOKEN_BIT_AND, TOKEN_BIT_XOR, TOKEN_LEFT_SHIFT, TOKEN_RIGHT_SHIFT, TOKEN_SIN, TOKEN_COS, TOKEN_EXPONENTIAL, TOKEN_LPAREN, TOKEN_RPAREN, TOKEN_REALDB, TOKEN_END
 } TokenType;
 
 // Token struct
@@ -41,11 +24,11 @@ typedef struct {
 #define EMPTY_TO_S              ( -1 )  //栈的初始指针索引
 #define MIN_STACK_ARRAY_SIZE    ( 32 )  //栈的最小容量
 
-typedef Token* elementType;
+typedef Token elementType;
 
 struct stackArray;
 typedef struct stackArray stackArray_s;
-typedef stackArray_s* pStackArray;
+typedef stackArray_s *pStackArray;
 
 typedef int (*pIsEmptyArray_f)(pStackArray s);
 typedef int (*pIsFullArray_f)(pStackArray s);
@@ -381,7 +364,7 @@ static elementType topArray(pStackArray s)
 
     DEBUG_TIME_LINE("Empty pStackArray");
 
-    return NULL;
+    exit(1);
 }
 
 /******************************************************
@@ -396,7 +379,7 @@ static elementType popArray(pStackArray s)
     if (isEmptyArray(s))
     {
         DEBUG_TIME_LINE("Empty pStackArray");
-        return NULL;
+        exit(1);
     }
 
     elementType tmp = s->array[s->topIdx];
@@ -452,9 +435,9 @@ pStackArray createStackArray(int capacity)
 }
 
 //check whether the symbol is operator?
-int isTokenOperator(Token t)
+int isTokenOperator(Token *t)
 {
-    switch (t.type)
+    switch (t->type)
     {
         case TOKEN_PLUS:
         case TOKEN_MINUS:
@@ -463,10 +446,12 @@ int isTokenOperator(Token t)
         case TOKEN_BIT_OR:
         case TOKEN_BIT_AND:
         case TOKEN_BIT_XOR:
-        case TOKEN_SIN:
-        case TOKEN_COS:
         case TOKEN_LEFT_SHIFT:
         case TOKEN_RIGHT_SHIFT:
+        case TOKEN_SIN:
+        case TOKEN_COS:
+        case TOKEN_LPAREN:
+        case TOKEN_RPAREN:
             return 1;
             break;
         default:
@@ -474,11 +459,15 @@ int isTokenOperator(Token t)
     }
 }
 
-//returns tokenPrecedence of operators
-int tokenPrecedence(Token t)
+int tokenPrecedence(Token *t)
 {
-    switch (t.type)
+    switch (t->type)
     {
+        case TOKEN_LPAREN:
+        case TOKEN_RPAREN:
+        case TOKEN_START:
+        case TOKEN_END:
+            return 1;
         case TOKEN_BIT_OR:
         case TOKEN_BIT_AND:
         case TOKEN_BIT_XOR:
@@ -492,13 +481,8 @@ int tokenPrecedence(Token t)
         case TOKEN_SIN:
         case TOKEN_COS:
             return 5;
-//        case '^':
-//            return 6;
-        case TOKEN_LPAREN:
-        case TOKEN_RPAREN:
-        case TOKEN_START:
-        case TOKEN_END:
-            return 1;
+        case TOKEN_EXPONENTIAL:
+            return 6;
         default:
             return 0;
     }
@@ -510,46 +494,53 @@ int tokenPrecedence(Token t)
 void tokenConvert(Token *infix, u32 inCount, Token *postfix, pStackArray stack)
 {
     int i, j = 0;
-    Token * t;
+    Token t;
 
     for (i = 0; i < inCount; i++)
     {
-        t = infix + i;
-        if (isTokenOperator(*t) == 0)
+        t = infix[i];
+        if (t.type == TOKEN_END)
         {
-            postfix[j] = *t;
+            break;
+        }
+
+        if (isTokenOperator(&t) == 0)
+        {
+            postfix[j] = t;
             j++;
         }
         else
         {
-            if (t->type == TOKEN_LPAREN)
+            if (t.type == TOKEN_LPAREN)
             {
                 stack->push(t, stack);
             }
             else
             {
-                if (t->type == TOKEN_RPAREN)
+                if (t.type == TOKEN_RPAREN)
                 {
-                    while (stack->top(stack)->type != TOKEN_LPAREN)
+                    while (stack->top(stack).type != TOKEN_LPAREN)
                     {
-                        postfix[j] = *stack->pop(stack);
+                        postfix[j] = stack->pop(stack);
                         j++;
                     }
 
-                    stack->pop(stack); //pop out '('.
+                    stack->pop(stack); //pop TOKEN_RPAREN
                 }
                 else
                 {
-                    if (tokenPrecedence(*t) > tokenPrecedence(*stack->top(stack)))
+                    Token s = stack->top(stack);
+                    if (tokenPrecedence(&t) > tokenPrecedence(&s))
                     {
                         stack->push(t, stack);
                     }
                     else
                     {
-                        while (tokenPrecedence(*t) <= tokenPrecedence(*stack->top(stack)))
+                        while (tokenPrecedence(&t) <= tokenPrecedence(&s))
                         {
-                            postfix[j] = *stack->pop(stack);
+                            postfix[j] = stack->pop(stack);
                             j++;
+                            s = stack->top(stack);
                         }
 
                         stack->push(t, stack);
@@ -559,13 +550,14 @@ void tokenConvert(Token *infix, u32 inCount, Token *postfix, pStackArray stack)
         }
     }
 
-    while (stack->top(stack)->type != TOKEN_START)
+    while (stack->top(stack).type != TOKEN_START)
     {
-        postfix[j] = *stack->pop(stack);
+        postfix[j] = stack->pop(stack);
         j++;
     }
 
-    postfix[j].type = TOKEN_END; //null terminate string.
+    stack->pop(stack);
+    postfix[j].type = TOKEN_END;
 }
 
 void printTokens(Token *tokens, u32 count)
@@ -576,6 +568,9 @@ void printTokens(Token *tokens, u32 count)
         printf("id: %d\t", i);
         switch (tokens[i].type)
         {
+            case TOKEN_START:
+                printf("type: TOKEN_START\t");
+                break;
             case TOKEN_INTEGER:
                 printf("type: TOKEN_INTEGER\t");
                 break;
@@ -650,9 +645,98 @@ void printTokens(Token *tokens, u32 count)
     }
 }
 
+double getRealDB(int realNo)
+{
+    return 11.12;
+}
+
+double tokenEvaluate(Token *postfix, pStackArray stack)
+{
+    Token t, o1, o2, result;
+    double operand1, operand2;
+
+    int i = 0;
+    for (i = 0, t = postfix[0]; t.type != TOKEN_END; i++, t = postfix[i])
+    {
+        if (t.type == TOKEN_INTEGER || t.type == TOKEN_FLOAT)
+        {
+            stack->push(t, stack);
+        }
+        else if (t.type == TOKEN_REALDB)
+        {
+            result.value.numValue = getRealDB(atol(t.str));
+            stack->push(result, stack);
+        }
+        else
+        {
+            o2 = stack->pop(stack);
+            if (t.type == TOKEN_INTEGER)
+            {
+                operand2 = (double) o2.value.intValue;
+            }
+            else
+            {
+                operand2 = o2.value.numValue;
+            }
+
+            o1 = stack->pop(stack);
+            if (t.type == TOKEN_INTEGER)
+            {
+                operand1 = (double) o1.value.intValue;
+            }
+            else
+            {
+                operand1 = o1.value.numValue;
+            }
+
+            switch (t.type)
+            {
+                case TOKEN_PLUS:
+                    result.type = TOKEN_FLOAT;
+                    result.value.numValue = operand1 + operand2;
+                    stack->push(result, stack);
+                    break;
+                case TOKEN_MINUS:
+                    result.type = TOKEN_FLOAT;
+                    result.value.numValue = operand1 - operand2;
+                    stack->push(result, stack);
+                    break;
+                case TOKEN_MULTIPLY:
+                    result.type = TOKEN_FLOAT;
+                    result.value.numValue = operand1 * operand2;
+                    stack->push(result, stack);
+                    break;
+                case TOKEN_DIVIDE:
+                    result.type = TOKEN_FLOAT;
+                    result.value.numValue = operand1 / operand2;
+                    stack->push(result, stack);
+                    break;
+                case TOKEN_BIT_OR:
+                    break;
+                case TOKEN_BIT_AND:
+                    break;
+                case TOKEN_BIT_XOR:
+                    break;
+                case TOKEN_LEFT_SHIFT:
+                    break;
+                case TOKEN_RIGHT_SHIFT:
+                    break;
+                case TOKEN_SIN:
+                    break;
+                case TOKEN_COS:
+                    break;
+                default:
+                    break;
+            }
+        }
+    }
+
+    return stack->top(stack).value.numValue;
+}
+
 void ariMain(void)
 {
-    char *input = "(2.5 + 3) * 4.2 - 10.1 / 2 + #1485548 >>  #6545 || 5 ^ 2 & 3<< 16.1235 + sin(#45) / cos(123)";
+    char *input = "(2.5 + 3) * 4.2 - 10.1 / #201 ";
 
     Token *tokens = calloc(strlen(input) + 1, sizeof(Token));
     u32 count = tokenizer(input, tokens);
@@ -661,10 +745,13 @@ void ariMain(void)
     Token *postfix = calloc(count + 1, sizeof(Token));
     pStackArray stack = createStackArray(count + 1);
 
-    Token start = {.type = TOKEN_START};
-    stack->push(&start, stack);
+    Token start = { .type = TOKEN_START };
+    stack->push(start, stack);
 
     tokenConvert(tokens, count, postfix, stack);
 
-    printTokens(tokens, count);
+    printf("-----------------after convertion:--------------------\n");
+    printTokens(postfix, count);
+
+    printf("result: %f\n", tokenEvaluate(postfix, stack));
 }

@@ -120,7 +120,7 @@ void convert(char infix[], char postfix[])
 }
 
 //int stack
-int stack_int[25];
+int stack_int[100];
 int top_int = -1;
 
 void push_int(int item)
@@ -170,11 +170,9 @@ int evaluate(char *postfix)
     return stack_int[top_int];
 }
 
-#define E9361_D0_MAX(a, b, c)       ((a) > (b)) ? (((a) > (c)) ? (a) : (c)) : (((b) > (c)) ? (b) : (c))
-
 int expmain(int argc, char **argv)
 {
-    char infix[25] = "6*(2+3*9)", postfix[25];
+    char infix[25] = "(2+3)*4-8/2", postfix[25];
     convert(infix, postfix);
     printf("Infix expression is: %s\n", infix);
     printf("Postfix expression is: %s\n", postfix);
