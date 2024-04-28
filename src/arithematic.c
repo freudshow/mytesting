@@ -8,7 +8,25 @@
 
 // Token types
 typedef enum {
-    TOKEN_START = 1, TOKEN_INTEGER, TOKEN_FLOAT, TOKEN_PLUS, TOKEN_MINUS, TOKEN_MULTIPLY, TOKEN_DIVIDE, TOKEN_BIT_OR, TOKEN_BIT_AND, TOKEN_BIT_XOR, TOKEN_LEFT_SHIFT, TOKEN_RIGHT_SHIFT, TOKEN_SIN, TOKEN_COS, TOKEN_EXPONENTIAL, TOKEN_LPAREN, TOKEN_RPAREN, TOKEN_REALDB, TOKEN_END
+    TOKEN_START,
+    TOKEN_INTEGER,
+    TOKEN_FLOAT,
+    TOKEN_PLUS,
+    TOKEN_MINUS,
+    TOKEN_MULTIPLY,
+    TOKEN_DIVIDE,
+    TOKEN_BIT_OR,
+    TOKEN_BIT_AND,
+    TOKEN_BIT_XOR,
+    TOKEN_LEFT_SHIFT,
+    TOKEN_RIGHT_SHIFT,
+    TOKEN_SIN,
+    TOKEN_COS,
+    TOKEN_EXPONENTIAL,
+    TOKEN_LPAREN,
+    TOKEN_RPAREN,
+    TOKEN_REALDB,
+    TOKEN_END
 } TokenType;
 
 // Token struct
@@ -364,7 +382,6 @@ static elementType topArray(pStackArray s)
     }
 
     DEBUG_TIME_LINE("Empty pStackArray");
-
     exit(1);
 }
 
@@ -473,6 +490,8 @@ int tokenPrecedence(Token *t)
         case TOKEN_BIT_OR:
         case TOKEN_BIT_AND:
         case TOKEN_BIT_XOR:
+        case TOKEN_LEFT_SHIFT:
+        case TOKEN_RIGHT_SHIFT:
             return 2;
         case TOKEN_PLUS:
         case TOKEN_MINUS:
@@ -606,7 +625,7 @@ const char* getTokenType(TokenType t)
             break;
     }
 
-	return "";
+    return "";
 }
 
 void printTokens(Token *tokens, u32 count)
@@ -657,6 +676,7 @@ double tokenEvaluate(Token *postfix, pStackArray stack)
         }
         else if (t.type == TOKEN_REALDB)
         {
+            result.type = TOKEN_FLOAT;
             result.value.numValue = getRealDB(atol(t.str));
             stack->push(result, stack);
         }
@@ -711,7 +731,7 @@ double tokenEvaluate(Token *postfix, pStackArray stack)
                     stack->push(result, stack);
                     break;
                 case TOKEN_BIT_OR:
-                    result.type = TOKEN_FLOAT;
+                    result.type = TOKEN_INTEGER;
                     result.value.intValue = operandInt1 | operandInt2;
                     DEBUG_TIME_LINE("operand1: %f, operand2: %f, result: %d", operandDouble1, operandDouble2, result.value.intValue);
                     stack->push(result, stack);
@@ -755,22 +775,24 @@ double tokenEvaluate(Token *postfix, pStackArray stack)
 
 void ariMain(void)
 {
-    char *input = "(2.5 + 3) * 4.2 - 10.1 / #201 + (8  | 4)";
+    char *input = "(2.5 + 3) * 4.2 - 10.1 / #201 + (8  | 4) + (1<<3) + (16 >> 2) + (7&3)";
 
     Token *tokens = calloc(strlen(input) + 1, sizeof(Token));
     u32 count = tokenizer(input, tokens);
+
+    DEBUG_TIME_LINE("-----------------after tokenizer:--------------------\n");
     printTokens(tokens, count);
 
     Token *postfix = calloc(count + 1, sizeof(Token));
-    pStackArray stack = createStackArray(count + 1);
+    pStackArray stack = createStackArray(count + 1); //allocate one more for TOKEN_START
 
     Token start = { .type = TOKEN_START };
     stack->push(start, stack);
 
     tokenConvert(tokens, count, postfix, stack);
 
-    printf("-----------------after convertion:--------------------\n");
+    DEBUG_TIME_LINE("-----------------after convertion:--------------------\n");
     printTokens(postfix, count);
 
-    printf("result: %f\n", tokenEvaluate(postfix, stack));
+    DEBUG_TIME_LINE("result: %f\n", tokenEvaluate(postfix, stack));
 }
