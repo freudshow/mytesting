@@ -69,6 +69,11 @@ void convert(char infix[], char postfix[])
     stack[++top] = '#';
     for (i = 0; i < strlen(infix); i++)
     {
+        if (infix[i] == ' ' || infix[i] == '\t' || infix[i] == '\r' || infix[i] == '\n')
+        {
+            continue;
+        }
+
         symbol = infix[i];
         if (isOperator(symbol) == 0)
         {
@@ -172,7 +177,7 @@ int evaluate(char *postfix)
 
 int expmain(int argc, char **argv)
 {
-    char infix[25] = "(2+3)*4-8/2", postfix[25];
+    char infix[25] = "(2 + 3 )* 4 -8/ 2", postfix[25];
     convert(infix, postfix);
     printf("Infix expression is: %s\n", infix);
     printf("Postfix expression is: %s\n", postfix);
