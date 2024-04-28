@@ -560,6 +560,53 @@ void tokenConvert(Token *infix, u32 inCount, Token *postfix, pStackArray stack)
     postfix[j].type = TOKEN_END;
 }
 
+const char* getTokenType(TokenType t)
+{
+    switch (t)
+    {
+        case TOKEN_START:
+            return ("TOKEN_START\t");
+        case TOKEN_INTEGER:
+            return ("TOKEN_INTEGER\t");
+        case TOKEN_FLOAT:
+            return ("TOKEN_FLOAT\t");
+        case TOKEN_PLUS:
+            return ("TOKEN_PLUS\t");
+        case TOKEN_MINUS:
+            return ("TOKEN_MINUS\t");
+        case TOKEN_MULTIPLY:
+            return ("TOKEN_MULTIPLY\t");
+        case TOKEN_DIVIDE:
+            return ("TOKEN_DIVIDE\t");
+        case TOKEN_BIT_OR:
+            return ("TOKEN_BIT_OR\t");
+        case TOKEN_BIT_AND:
+            return ("TOKEN_BIT_AND\t");
+        case TOKEN_BIT_XOR:
+            return ("TOKEN_BIT_XOR\t");
+        case TOKEN_LEFT_SHIFT:
+            return ("TOKEN_LEFT_SHIFT\t");
+        case TOKEN_RIGHT_SHIFT:
+            return ("TOKEN_RIGHT_SHIFT\t");
+        case TOKEN_SIN:
+            return ("TOKEN_SIN\t");
+        case TOKEN_COS:
+            return ("TOKEN_COS\t");
+        case TOKEN_LPAREN:
+            return ("TOKEN_LPAREN\t");
+        case TOKEN_RPAREN:
+            return ("TOKEN_RPAREN\t");
+        case TOKEN_REALDB:
+            return ("TOKEN_REALDB\t");
+        case TOKEN_END:
+            return ("TOKEN_END\t\n");
+        default:
+            break;
+    }
+
+	return NULL;
+}
+
 void printTokens(Token *tokens, u32 count)
 {
     int i = 0;
@@ -658,6 +705,8 @@ double tokenEvaluate(Token *postfix, pStackArray stack)
     int i = 0;
     for (i = 0, t = postfix[0]; t.type != TOKEN_END; i++, t = postfix[i])
     {
+        t = postfix[i];
+        DEBUG_TIME_LINE("token: type-%s, str-%s", getTokenType(t.type), t.str);
         if (t.type == TOKEN_INTEGER || t.type == TOKEN_FLOAT)
         {
             stack->push(t, stack);
@@ -670,7 +719,7 @@ double tokenEvaluate(Token *postfix, pStackArray stack)
         else
         {
             o2 = stack->pop(stack);
-            if (t.type == TOKEN_INTEGER)
+            if (o2.type == TOKEN_INTEGER)
             {
                 operand2 = (double) o2.value.intValue;
             }
@@ -680,7 +729,7 @@ double tokenEvaluate(Token *postfix, pStackArray stack)
             }
 
             o1 = stack->pop(stack);
-            if (t.type == TOKEN_INTEGER)
+            if (o1.type == TOKEN_INTEGER)
             {
                 operand1 = (double) o1.value.intValue;
             }
@@ -694,21 +743,25 @@ double tokenEvaluate(Token *postfix, pStackArray stack)
                 case TOKEN_PLUS:
                     result.type = TOKEN_FLOAT;
                     result.value.numValue = operand1 + operand2;
+                    DEBUG_TIME_LINE("operand1: %f, operand2: %f, result: %f", operand1, operand2, result.value.numValue);
                     stack->push(result, stack);
                     break;
                 case TOKEN_MINUS:
                     result.type = TOKEN_FLOAT;
                     result.value.numValue = operand1 - operand2;
+                    DEBUG_TIME_LINE("operand1: %f, operand2: %f, result: %f", operand1, operand2, result.value.numValue);
                     stack->push(result, stack);
                     break;
                 case TOKEN_MULTIPLY:
                     result.type = TOKEN_FLOAT;
                     result.value.numValue = operand1 * operand2;
+                    DEBUG_TIME_LINE("operand1: %f, operand2: %f, result: %f", operand1, operand2, result.value.numValue);
                     stack->push(result, stack);
                     break;
                 case TOKEN_DIVIDE:
                     result.type = TOKEN_FLOAT;
                     result.value.numValue = operand1 / operand2;
+                    DEBUG_TIME_LINE("operand1: %f, operand2: %f, result: %f", operand1, operand2, result.value.numValue);
                     stack->push(result, stack);
                     break;
                 case TOKEN_BIT_OR:
