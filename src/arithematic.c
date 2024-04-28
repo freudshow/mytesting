@@ -71,6 +71,177 @@ struct stackArray {
     pPopArray_f pop;
 };
 
+/******************************************************
+ * 函数功能: 判断栈是否为空
+ * ---------------------------------------------------
+ * @param - s, 栈指针
+ * ---------------------------------------------------
+ * @return - 空, 返回1;
+ *           非空, 返回0
+ ******************************************************/
+static int isEmptyArray(pStackArray s)
+{
+    return s->topIdx == EMPTY_TO_S;
+}
+
+/******************************************************
+ * 函数功能: 判断栈是否已满
+ * ---------------------------------------------------
+ * @param - s, 栈指针
+ * ---------------------------------------------------
+ * @return - 已满, 返回1;
+ *           不满, 返回0
+ ******************************************************/
+static int isFullArray(pStackArray s)
+{
+    return s->topIdx == s->capacity - 1;
+}
+
+/******************************************************
+ * 函数功能: 使栈归零
+ * ---------------------------------------------------
+ * @param - s, 栈指针
+ * ---------------------------------------------------
+ * @return - 无
+ ******************************************************/
+static void makeEmptyArray(pStackArray s)
+{
+    s->topIdx = EMPTY_TO_S;
+}
+
+/******************************************************
+ * 函数功能: 释放栈占用的内存
+ * ---------------------------------------------------
+ * @param - s, 栈指针
+ * ---------------------------------------------------
+ * @return - 无
+ ******************************************************/
+static void disposeStackArray(pStackArray s)
+{
+    if (s != NULL)
+    {
+        if (s->array != NULL)
+        {
+            free(s->array);
+        }
+
+        free(s);
+    }
+}
+
+/******************************************************
+ * 函数功能: 向栈内压入1个元素
+ * ---------------------------------------------------
+ * @param - e, 被压入元素
+ * @param - s, 栈指针
+ * ---------------------------------------------------
+ * @return - 无
+ ******************************************************/
+static void pushArray(elementType e, pStackArray s)
+{
+    if (isFullArray(s))
+    {
+        DEBUG_TIME_LINE("Full pStackArray");
+        return;
+    }
+
+    s->topIdx++;
+    s->array[s->topIdx] = e;
+}
+
+/******************************************************
+ * 函数功能: 读取栈顶元素, 不弹出栈顶
+ * ---------------------------------------------------
+ * @param - s, 栈指针
+ * ---------------------------------------------------
+ * @return - 栈顶元素
+ ******************************************************/
+static elementType topArray(pStackArray s)
+{
+    if (!isEmptyArray(s))
+    {
+        return s->array[s->topIdx];
+    }
+
+    DEBUG_TIME_LINE("Empty pStackArray");
+    exit(1);
+}
+
+/******************************************************
+ * 函数功能: 弹出栈顶元素
+ * ---------------------------------------------------
+ * @param - s, 栈指针
+ * ---------------------------------------------------
+ * @return - 栈顶元素
+ ******************************************************/
+static elementType popArray(pStackArray s)
+{
+    if (isEmptyArray(s))
+    {
+        DEBUG_TIME_LINE("Empty pStackArray");
+        exit(1);
+    }
+
+    elementType tmp = s->array[s->topIdx];
+    s->topIdx--;
+
+    return tmp;
+}
+
+/******************************************************
+ * 函数功能: 创建1个栈
+ * ---------------------------------------------------
+ * @param - capacity, 栈的容量
+ * ---------------------------------------------------
+ * @return - 栈指针
+ ******************************************************/
+pStackArray createStackArray(int capacity)
+{
+    pStackArray s;
+
+    if (capacity < MIN_STACK_ARRAY_SIZE)
+    {
+        capacity = MIN_STACK_ARRAY_SIZE;
+        DEBUG_TIME_LINE("pStackArray size is too small, now set size to %d", MIN_STACK_ARRAY_SIZE);
+    }
+
+    s = malloc(sizeof(stackArray_s));
+    if (s == NULL)
+    {
+        DEBUG_TIME_LINE("Out of space!!!");
+        return NULL;
+    }
+
+    s->array = malloc(sizeof(elementType) * capacity);
+    if (s->array == NULL)
+    {
+        DEBUG_TIME_LINE("Out of space!!!");
+        free(s);
+        return NULL;
+    }
+
+    s->capacity = capacity;
+    makeEmptyArray(s);
+
+    s->makeEmpty = makeEmptyArray;
+    s->isEmpty = isEmptyArray;
+    s->isFull = isFullArray;
+    s->dispose = disposeStackArray;
+    s->push = pushArray;
+    s->top = topArray;
+    s->pop = popArray;
+
+    return s;
+}
+
+/******************************************************
+ * 函数功能: 将算术表达式转换为符号序列
+ * ---------------------------------------------------
+ * @param[in] - input, 算术表达式字符串, 以'\0'结尾
+ * @param[out] - tokens, 输出的符号序列
+ * ---------------------------------------------------
+ * @return - 输出的符号的个数
+ ******************************************************/
 u32 tokenizer(const char *input, Token *tokens)
 {
     u32 tokenCount = 0;
@@ -285,174 +456,16 @@ u32 tokenizer(const char *input, Token *tokens)
     pToken->type = TOKEN_END;
 
     tokenCount++;
-    pToken++;
     return tokenCount;
 }
 
 /******************************************************
- * 函数功能: 判断栈是否为空
+ * 函数功能: 判断一个符号是不是操作符
  * ---------------------------------------------------
- * @param - s, 栈指针
+ * @param[in] - t, 符号
  * ---------------------------------------------------
- * @return - 空, 返回1;
- *           非空, 返回0
+ * @return - 是操作符, 返回1; 否则返回0
  ******************************************************/
-static int isEmptyArray(pStackArray s)
-{
-    return s->topIdx == EMPTY_TO_S;
-}
-
-/******************************************************
- * 函数功能: 判断栈是否已满
- * ---------------------------------------------------
- * @param - s, 栈指针
- * ---------------------------------------------------
- * @return - 已满, 返回1;
- *           不满, 返回0
- ******************************************************/
-static int isFullArray(pStackArray s)
-{
-    return s->topIdx == s->capacity - 1;
-}
-
-/******************************************************
- * 函数功能: 使栈归零
- * ---------------------------------------------------
- * @param - s, 栈指针
- * ---------------------------------------------------
- * @return - 无
- ******************************************************/
-static void makeEmptyArray(pStackArray s)
-{
-    s->topIdx = EMPTY_TO_S;
-}
-
-/******************************************************
- * 函数功能: 释放栈占用的内存
- * ---------------------------------------------------
- * @param - s, 栈指针
- * ---------------------------------------------------
- * @return - 无
- ******************************************************/
-static void disposeStackArray(pStackArray s)
-{
-    if (s != NULL)
-    {
-        if (s->array != NULL)
-        {
-            free(s->array);
-        }
-
-        free(s);
-    }
-}
-
-/******************************************************
- * 函数功能: 向栈内压入1个元素
- * ---------------------------------------------------
- * @param - e, 被压入元素
- * @param - s, 栈指针
- * ---------------------------------------------------
- * @return - 无
- ******************************************************/
-static void pushArray(elementType e, pStackArray s)
-{
-    if (isFullArray(s))
-    {
-        DEBUG_TIME_LINE("Full pStackArray");
-        return;
-    }
-
-    s->topIdx++;
-    s->array[s->topIdx] = e;
-}
-
-/******************************************************
- * 函数功能: 读取栈顶元素, 不弹出栈顶
- * ---------------------------------------------------
- * @param - s, 栈指针
- * ---------------------------------------------------
- * @return - 栈顶元素
- ******************************************************/
-static elementType topArray(pStackArray s)
-{
-    if (!isEmptyArray(s))
-    {
-        return s->array[s->topIdx];
-    }
-
-    DEBUG_TIME_LINE("Empty pStackArray");
-    exit(1);
-}
-
-/******************************************************
- * 函数功能: 弹出栈顶元素
- * ---------------------------------------------------
- * @param - s, 栈指针
- * ---------------------------------------------------
- * @return - 栈顶元素
- ******************************************************/
-static elementType popArray(pStackArray s)
-{
-    if (isEmptyArray(s))
-    {
-        DEBUG_TIME_LINE("Empty pStackArray");
-        exit(1);
-    }
-
-    elementType tmp = s->array[s->topIdx];
-    s->topIdx--;
-
-    return tmp;
-}
-
-/******************************************************
- * 函数功能: 创建1个栈
- * ---------------------------------------------------
- * @param - capacity, 栈的容量
- * ---------------------------------------------------
- * @return - 栈指针
- ******************************************************/
-pStackArray createStackArray(int capacity)
-{
-    pStackArray s;
-
-    if (capacity < MIN_STACK_ARRAY_SIZE)
-    {
-        capacity = MIN_STACK_ARRAY_SIZE;
-        DEBUG_TIME_LINE("pStackArray size is too small, now set size to %d", MIN_STACK_ARRAY_SIZE);
-    }
-
-    s = malloc(sizeof(stackArray_s));
-    if (s == NULL)
-    {
-        DEBUG_TIME_LINE("Out of space!!!");
-        return NULL;
-    }
-
-    s->array = malloc(sizeof(elementType) * capacity);
-    if (s->array == NULL)
-    {
-        DEBUG_TIME_LINE("Out of space!!!");
-        free(s);
-        return NULL;
-    }
-
-    s->capacity = capacity;
-    makeEmptyArray(s);
-
-    s->makeEmpty = makeEmptyArray;
-    s->isEmpty = isEmptyArray;
-    s->isFull = isFullArray;
-    s->dispose = disposeStackArray;
-    s->push = pushArray;
-    s->top = topArray;
-    s->pop = popArray;
-
-    return s;
-}
-
-//check whether the symbol is operator?
 int isTokenOperator(Token *t)
 {
     switch (t->type)
@@ -477,6 +490,13 @@ int isTokenOperator(Token *t)
     }
 }
 
+/******************************************************
+ * 函数功能: 输出一个操作符的优先级
+ * ---------------------------------------------------
+ * @param[in] - t, 符号
+ * ---------------------------------------------------
+ * @return - 操作符的优先级
+ ******************************************************/
 int tokenPrecedence(Token *t)
 {
     switch (t->type)
@@ -511,7 +531,17 @@ int tokenPrecedence(Token *t)
     return 0;
 }
 
-//converts infix expression to postfix
+/******************************************************
+ * 函数功能: 将算术表达式转换为逆波兰表达式(即后缀表达式)
+ * ---------------------------------------------------
+ * @param[in] - infix, 中缀算术表达式序列,
+ *              以(TOKEN_END)结尾
+ * @param[in] - inCount, 中缀算术表达式序列的长度
+ * @param[out] - postfix, 输出的逆波兰表达式
+ * @param[in] - stack, 计算过程中用到的栈
+ * ---------------------------------------------------
+ * @return - 无
+ ******************************************************/
 void tokenConvert(Token *infix, u32 inCount, Token *postfix, pStackArray stack)
 {
     int i, j = 0;
@@ -581,6 +611,13 @@ void tokenConvert(Token *infix, u32 inCount, Token *postfix, pStackArray stack)
     postfix[j].type = TOKEN_END;
 }
 
+/******************************************************
+ * 函数功能: 输出一个符号的类型字符串
+ * ---------------------------------------------------
+ * @param[in] - t, 符号的类型
+ * ---------------------------------------------------
+ * @return - 符号的类型字符串
+ ******************************************************/
 const char* getTokenType(TokenType t)
 {
     switch (t)
@@ -628,6 +665,14 @@ const char* getTokenType(TokenType t)
     return "";
 }
 
+/******************************************************
+ * 函数功能: 打印符号序列
+ * ---------------------------------------------------
+ * @param[in] - tokens, 符号序列
+ * @param[in] - count, 符号序列的长度
+ * ---------------------------------------------------
+ * @return - 无
+ ******************************************************/
 void printTokens(Token *tokens, u32 count)
 {
     int i = 0;
@@ -654,11 +699,26 @@ void printTokens(Token *tokens, u32 count)
     }
 }
 
+/******************************************************
+ * 函数功能: 获取实时库的值
+ * ---------------------------------------------------
+ * @param[in] - realNo, 实时库号
+ * ---------------------------------------------------
+ * @return - 实时库的值
+ ******************************************************/
 double getRealDB(int realNo)
 {
     return 11.12;
 }
 
+/******************************************************
+ * 函数功能: 对逆波兰表达式求值
+ * ---------------------------------------------------
+ * @param[in] - postfix, 逆波兰表达式
+ * @param[in] - stack, 计算用到的临时栈
+ * ---------------------------------------------------
+ * @return - 求值结果
+ ******************************************************/
 double tokenEvaluate(Token *postfix, pStackArray stack)
 {
     Token t, o1, o2, result;
@@ -800,6 +860,13 @@ double tokenEvaluate(Token *postfix, pStackArray stack)
     return stack->top(stack).value.numValue;
 }
 
+/******************************************************
+ * 函数功能: 测试逆波兰表达式求值
+ * ---------------------------------------------------
+ * @param[in] - 无
+ * ---------------------------------------------------
+ * @return - 无
+ ******************************************************/
 void ariMain(void)
 {
     char *input = "(2.5 + 3) * 4.2 - 10.1 / #201 + (8  | 4) + (1<<3) + (16 >> 2) + (7&3) + sin(12) + cos(20)";
