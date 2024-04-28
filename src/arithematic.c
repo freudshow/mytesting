@@ -2,12 +2,13 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 
 #define TOKEN_STRING_MAX_SIZE  128
 
 // Token types
 typedef enum {
-    TOKEN_START, TOKEN_INTEGER, TOKEN_FLOAT, TOKEN_PLUS, TOKEN_MINUS, TOKEN_MULTIPLY, TOKEN_DIVIDE, TOKEN_BIT_OR, TOKEN_BIT_AND, TOKEN_BIT_XOR, TOKEN_LEFT_SHIFT, TOKEN_RIGHT_SHIFT, TOKEN_SIN, TOKEN_COS, TOKEN_EXPONENTIAL, TOKEN_LPAREN, TOKEN_RPAREN, TOKEN_REALDB, TOKEN_END
+    TOKEN_START = 1, TOKEN_INTEGER, TOKEN_FLOAT, TOKEN_PLUS, TOKEN_MINUS, TOKEN_MULTIPLY, TOKEN_DIVIDE, TOKEN_BIT_OR, TOKEN_BIT_AND, TOKEN_BIT_XOR, TOKEN_LEFT_SHIFT, TOKEN_RIGHT_SHIFT, TOKEN_SIN, TOKEN_COS, TOKEN_EXPONENTIAL, TOKEN_LPAREN, TOKEN_RPAREN, TOKEN_REALDB, TOKEN_END
 } TokenType;
 
 // Token struct
@@ -463,10 +464,11 @@ int tokenPrecedence(Token *t)
 {
     switch (t->type)
     {
-        case TOKEN_LPAREN:
-        case TOKEN_RPAREN:
         case TOKEN_START:
         case TOKEN_END:
+            return 0;
+        case TOKEN_LPAREN:
+        case TOKEN_RPAREN:
             return 1;
         case TOKEN_BIT_OR:
         case TOKEN_BIT_AND:
@@ -604,7 +606,7 @@ const char* getTokenType(TokenType t)
             break;
     }
 
-	return NULL;
+	return "";
 }
 
 void printTokens(Token *tokens, u32 count)
@@ -612,83 +614,24 @@ void printTokens(Token *tokens, u32 count)
     int i = 0;
     for (i = 0; i < count; i++)
     {
-        printf("id: %d\t", i);
-        switch (tokens[i].type)
+        printf("id: %d\t, type: %s", i, getTokenType(tokens[i].type));
+
+        if (tokens[i].type == TOKEN_END)
         {
-            case TOKEN_START:
-                printf("type: TOKEN_START\t");
-                break;
-            case TOKEN_INTEGER:
-                printf("type: TOKEN_INTEGER\t");
-                break;
-            case TOKEN_FLOAT:
-                printf("type: TOKEN_FLOAT\t");
-                break;
-            case TOKEN_PLUS:
-                printf("type: TOKEN_PLUS\t");
-                break;
-            case TOKEN_MINUS:
-                printf("type: TOKEN_MINUS\t");
-                break;
-            case TOKEN_MULTIPLY:
-                printf("type: TOKEN_MULTIPLY\t");
-                break;
-            case TOKEN_DIVIDE:
-                printf("type: TOKEN_DIVIDE\t");
-                break;
-            case TOKEN_BIT_OR:
-                printf("type: TOKEN_BIT_OR\t");
-                break;
-            case TOKEN_BIT_AND:
-                printf("type: TOKEN_BIT_AND\t");
-                break;
-            case TOKEN_BIT_XOR:
-                printf("type: TOKEN_BIT_XOR\t");
-                break;
-            case TOKEN_LEFT_SHIFT:
-                printf("type: TOKEN_LEFT_SHIFT\t");
-                break;
-            case TOKEN_RIGHT_SHIFT:
-                printf("type: TOKEN_RIGHT_SHIFT\t");
-                break;
-            case TOKEN_SIN:
-                printf("type: TOKEN_SIN\t");
-                break;
-            case TOKEN_COS:
-                printf("type: TOKEN_COS\t");
-                break;
-            case TOKEN_LPAREN:
-                printf("type: TOKEN_LPAREN\t");
-                break;
-            case TOKEN_RPAREN:
-                printf("type: TOKEN_RPAREN\t");
-                break;
-            case TOKEN_REALDB:
-                printf("type: TOKEN_REALDB\t");
-                break;
-            case TOKEN_END:
-                printf("type: TOKEN_END\t\n");
-                break;
-            default:
-                break;
+            break;
         }
 
-        if (tokens[i].type != TOKEN_END)
+        printf("\tposition: %u\tstr: %s", tokens[i].pos + 1, tokens[i].str);
+        if (tokens[i].type == TOKEN_INTEGER)
         {
-            printf("\tposition: %u\tstr: %s", tokens[i].pos + 1, tokens[i].str);
-            if (tokens[i].type == TOKEN_INTEGER)
-            {
-                printf("\tvalue: %d\n", tokens[i].value.intValue);
-            }
-            else if (tokens[i].type == TOKEN_FLOAT)
-            {
-                printf("\tvalue: %f\n", tokens[i].value.numValue);
-            }
-            else
-            {
-                printf("\n");
-            }
+            printf("\tvalue: %d", tokens[i].value.intValue);
         }
+        else if (tokens[i].type == TOKEN_FLOAT)
+        {
+            printf("\tvalue: %f", tokens[i].value.numValue);
+        }
+
+        printf("\n");
     }
 }
 
@@ -700,7 +643,8 @@ double getRealDB(int realNo)
 double tokenEvaluate(Token *postfix, pStackArray stack)
 {
     Token t, o1, o2, result;
-    double operand1, operand2;
+    double operandDouble1, operandDouble2;
+    int operandInt1, operandInt2;
 
     int i = 0;
     for (i = 0, t = postfix[0]; t.type != TOKEN_END; i++, t = postfix[i])
@@ -721,58 +665,80 @@ double tokenEvaluate(Token *postfix, pStackArray stack)
             o2 = stack->pop(stack);
             if (o2.type == TOKEN_INTEGER)
             {
-                operand2 = (double) o2.value.intValue;
+                operandInt2 = o2.value.intValue;
+                operandDouble2 = (double) o2.value.intValue;
             }
             else
             {
-                operand2 = o2.value.numValue;
+                operandDouble2 = o2.value.numValue;
             }
 
             o1 = stack->pop(stack);
             if (o1.type == TOKEN_INTEGER)
             {
-                operand1 = (double) o1.value.intValue;
+                operandInt1 = o1.value.intValue;
+                operandDouble1 = (double) o1.value.intValue;
             }
             else
             {
-                operand1 = o1.value.numValue;
+                operandDouble1 = o1.value.numValue;
             }
 
             switch (t.type)
             {
                 case TOKEN_PLUS:
                     result.type = TOKEN_FLOAT;
-                    result.value.numValue = operand1 + operand2;
-                    DEBUG_TIME_LINE("operand1: %f, operand2: %f, result: %f", operand1, operand2, result.value.numValue);
+                    result.value.numValue = operandDouble1 + operandDouble2;
+                    DEBUG_TIME_LINE("operand1: %f, operand2: %f, result: %f", operandDouble1, operandDouble2, result.value.numValue);
                     stack->push(result, stack);
                     break;
                 case TOKEN_MINUS:
                     result.type = TOKEN_FLOAT;
-                    result.value.numValue = operand1 - operand2;
-                    DEBUG_TIME_LINE("operand1: %f, operand2: %f, result: %f", operand1, operand2, result.value.numValue);
+                    result.value.numValue = operandDouble1 - operandDouble2;
+                    DEBUG_TIME_LINE("operand1: %f, operand2: %f, result: %f", operandDouble1, operandDouble2, result.value.numValue);
                     stack->push(result, stack);
                     break;
                 case TOKEN_MULTIPLY:
                     result.type = TOKEN_FLOAT;
-                    result.value.numValue = operand1 * operand2;
-                    DEBUG_TIME_LINE("operand1: %f, operand2: %f, result: %f", operand1, operand2, result.value.numValue);
+                    result.value.numValue = operandDouble1 * operandDouble2;
+                    DEBUG_TIME_LINE("operand1: %f, operand2: %f, result: %f", operandDouble1, operandDouble2, result.value.numValue);
                     stack->push(result, stack);
                     break;
                 case TOKEN_DIVIDE:
                     result.type = TOKEN_FLOAT;
-                    result.value.numValue = operand1 / operand2;
-                    DEBUG_TIME_LINE("operand1: %f, operand2: %f, result: %f", operand1, operand2, result.value.numValue);
+                    result.value.numValue = operandDouble1 / operandDouble2;
+                    DEBUG_TIME_LINE("operand1: %f, operand2: %f, result: %f", operandDouble1, operandDouble2, result.value.numValue);
                     stack->push(result, stack);
                     break;
                 case TOKEN_BIT_OR:
+                    result.type = TOKEN_FLOAT;
+                    result.value.intValue = operandInt1 | operandInt2;
+                    DEBUG_TIME_LINE("operand1: %f, operand2: %f, result: %d", operandDouble1, operandDouble2, result.value.intValue);
+                    stack->push(result, stack);
                     break;
                 case TOKEN_BIT_AND:
+                    result.type = TOKEN_INTEGER;
+                    result.value.intValue = operandInt1 & operandInt2;
+                    DEBUG_TIME_LINE("operand1: %f, operand2: %f, result: %d", operandDouble1, operandDouble2, result.value.intValue);
+                    stack->push(result, stack);
                     break;
                 case TOKEN_BIT_XOR:
+                    result.type = TOKEN_INTEGER;
+                    result.value.intValue = operandInt1 ^ operandInt2;
+                    DEBUG_TIME_LINE("operand1: %f, operand2: %f, result: %d", operandDouble1, operandDouble2, result.value.intValue);
+                    stack->push(result, stack);
                     break;
                 case TOKEN_LEFT_SHIFT:
+                    result.type = TOKEN_INTEGER;
+                    result.value.intValue = operandInt1 << operandInt2;
+                    DEBUG_TIME_LINE("operand1: %f, operand2: %f, result: %d", operandDouble1, operandDouble2, result.value.intValue);
+                    stack->push(result, stack);
                     break;
                 case TOKEN_RIGHT_SHIFT:
+                    result.type = TOKEN_INTEGER;
+                    result.value.intValue = operandInt1 >> operandInt2;
+                    DEBUG_TIME_LINE("operand1: %f, operand2: %f, result: %d", operandDouble1, operandDouble2, result.value.intValue);
+                    stack->push(result, stack);
                     break;
                 case TOKEN_SIN:
                     break;
@@ -789,7 +755,7 @@ double tokenEvaluate(Token *postfix, pStackArray stack)
 
 void ariMain(void)
 {
-    char *input = "(2.5 + 3) * 4.2 - 10.1 / #201 ";
+    char *input = "(2.5 + 3) * 4.2 - 10.1 / #201 + (8  | 4)";
 
     Token *tokens = calloc(strlen(input) + 1, sizeof(Token));
     u32 count = tokenizer(input, tokens);
