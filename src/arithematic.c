@@ -680,6 +680,37 @@ double tokenEvaluate(Token *postfix, pStackArray stack)
             result.value.numValue = getRealDB(atol(t.str));
             stack->push(result, stack);
         }
+        else if (t.type == TOKEN_SIN || t.type == TOKEN_COS)
+        {
+            o1 = stack->pop(stack);
+            if (o1.type == TOKEN_INTEGER)
+            {
+                operandInt1 = o1.value.intValue;
+                operandDouble1 = (double) o1.value.intValue;
+            }
+            else
+            {
+                operandDouble1 = o1.value.numValue;
+            }
+
+            switch (t.type)
+            {
+                case TOKEN_SIN:
+                    result.type = TOKEN_FLOAT;
+                    result.value.numValue = sin(operandDouble1);
+                    DEBUG_TIME_LINE("operand1: %f, result: %f", operandDouble1, result.value.numValue);
+                    stack->push(result, stack);
+                    break;
+                case TOKEN_COS:
+                    result.type = TOKEN_FLOAT;
+                    result.value.numValue = cos(operandDouble1);
+                    DEBUG_TIME_LINE("operand1: %f, result: %f", operandDouble1, result.value.numValue);
+                    stack->push(result, stack);
+                    break;
+                default:
+                    break;
+            }
+        }
         else
         {
             o2 = stack->pop(stack);
@@ -760,10 +791,6 @@ double tokenEvaluate(Token *postfix, pStackArray stack)
                     DEBUG_TIME_LINE("operand1: %f, operand2: %f, result: %d", operandDouble1, operandDouble2, result.value.intValue);
                     stack->push(result, stack);
                     break;
-                case TOKEN_SIN:
-                    break;
-                case TOKEN_COS:
-                    break;
                 default:
                     break;
             }
@@ -775,7 +802,7 @@ double tokenEvaluate(Token *postfix, pStackArray stack)
 
 void ariMain(void)
 {
-    char *input = "(2.5 + 3) * 4.2 - 10.1 / #201 + (8  | 4) + (1<<3) + (16 >> 2) + (7&3)";
+    char *input = "(2.5 + 3) * 4.2 - 10.1 / #201 + (8  | 4) + (1<<3) + (16 >> 2) + (7&3) + sin(12) + cos(20)";
 
     Token *tokens = calloc(strlen(input) + 1, sizeof(Token));
     u32 count = tokenizer(input, tokens);
