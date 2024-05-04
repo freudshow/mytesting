@@ -3,7 +3,7 @@
 #include <ctype.h>
 
 //char stack
-char stack[25];
+static char stack[25];
 int top = -1;
 
 void push(char item)
