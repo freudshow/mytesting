@@ -117,9 +117,9 @@ json_token* parse_json(const char* filename) {
     while (1) {
         const char* line = NULL;
         size_t length = 0;
-        while ((line = fgets(file, MAX_TOKEN_LENGTH)) != NULL && *line <= ' ') {
-            // Skip over whitespace
-        }
+//        while ((line = fgets(file, MAX_TOKEN_LENGTH)) != NULL && *line <= ' ') {
+//            // Skip over whitespace
+//        }
 
         if (!line) {
             break;  // End of file
