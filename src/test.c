@@ -18,6 +18,7 @@
 //void ariMain(void);
 int xcmain(int argc, char **argv);
 void testSort(void);
+int getTokens(int argc, char *argv[]);
 
 int main(int argc, char **argv)
 {
@@ -34,7 +35,7 @@ int main(int argc, char **argv)
 //    expmain(argc, argv);
 //    ariMain();
 
-	testSort();
+    getTokens(argc, argv);
 
     return 0;
 }
