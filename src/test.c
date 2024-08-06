@@ -34,8 +34,8 @@ int main(int argc, char **argv)
 
 //    expmain(argc, argv);
 //    ariMain();
-
-    getTokens(argc, argv);
+    testSort();
+//    getTokens(argc, argv);
 
     return 0;
 }
