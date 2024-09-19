@@ -23,8 +23,6 @@ int dlt64507_is645Frame(u8 *pbuf, u16 len, u16 *frmLen, u16 *start)
         return -1;
     }
 
-    DEBUG_BUFF_FORMAT(pbuf, len, "645Frame: ");
-
     u16 i = 0;
     u16 j = 0;
     u16 opLen = 0;
@@ -264,4 +262,69 @@ int dlt64507_getOne645Frame(u8 *buf, u16 bufSize, u16 *pLen)
     }
 
     return preCount;
+}
+
+int getLastDlt645Frame(u8 *buf, u16 bufSize, u16 *start, u16 *framelen)
+{
+    if (start == NULL || framelen == NULL)
+    {
+        return -1;
+    }
+
+    u16 minlen = DLT645_07_MIN_FRAME_LEN;
+    u16 endpos = bufSize - 1;
+
+    while (buf[endpos] != DLT645_07_END_CODE && (endpos + 1) >= minlen)
+    {
+        endpos--;
+    }
+
+    u16 startpos = 0;
+
+    for (; (endpos + 1) >= minlen; endpos--)
+    {
+        for (startpos = endpos + 1 - minlen; startpos >= 0 && startpos < bufSize; startpos--)
+        {
+            if (dlt64507_is645Frame(&buf[startpos], endpos - startpos + 1, NULL, NULL) == 0)
+            {
+                *start = startpos;
+                *framelen = endpos - startpos + 1;
+                return 0;
+            }
+        }
+    }
+
+    return -1;
+}
+
+void test645(void)
+{
+    u8 buf[] = { 0x68, 0x06, 0x05, 0x04, 0x03, 0x02, 0x01, 0x68, 0x91, 0x04, 0x34, 0x38, 0x33, 0x37, 0x50, 0x16 };
+    u16 len = sizeof(buf);
+
+    u16 start = 0;
+    u16 framelen = 0;
+    int res = getLastDlt645Frame(buf, len, &start, &framelen);
+    printf("res: %d, start: %u, framelen: %u\n", res, start, framelen);
+    if (res >= 0)
+    {
+        DEBUG_BUFF_FORMAT(&buf[start], framelen, "get frame: --->>> ");
+    }
+    else
+    {
+        DEBUG_TIME_LINE("no 645 frame found");
+    }
+
+    u8 buferror[] = { 0x01, 0x68, 0x91, 0x68, 0x06, 0x05, 0x16, 0x03, 0x02, 0x01, 0x68, 0x91, 0x04, 0x34, 0x38, 0x33, 0x37, 0x50, 0x33, 0x37, 0x50 };
+    len = sizeof(buferror);
+    res = getLastDlt645Frame(buferror, len, &start, &framelen);
+    printf("res: %d, start: %u, framelen: %u\n", res, start, framelen);
+    if (res >= 0)
+    {
+        DEBUG_BUFF_FORMAT(&buferror[start], framelen, "get frame: --->>> ");
+    }
+    else
+    {
+        DEBUG_TIME_LINE("no 645 frame found");
+    }
 }

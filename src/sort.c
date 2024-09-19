@@ -44,7 +44,7 @@ void insertSort(int *array, int count)
 
     for (i = 1; i < count; i++)
     {
-        key = array[i];
+        key = array[i];//array[i] may be replaced by an element in array[0...i-1]
         j = i - 1;
         while (j >= 0 && array[j] > key)
         {
@@ -53,6 +53,8 @@ void insertSort(int *array, int count)
         }
 
         array[j + 1] = key;
+
+        printArray(array, count);
     }
 }
 

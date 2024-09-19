@@ -19,6 +19,8 @@
 int xcmain(int argc, char **argv);
 void testSort(void);
 int getTokens(int argc, char *argv[]);
+int testmydb(void);
+void test645(void);
 
 int main(int argc, char **argv)
 {
@@ -34,8 +36,8 @@ int main(int argc, char **argv)
 
 //    expmain(argc, argv);
 //    ariMain();
-    testSort();
+//    testSort();
 //    getTokens(argc, argv);
-
+    test645();
     return 0;
 }
