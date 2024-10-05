@@ -16,28 +16,16 @@
 //void testAccum(void);
 //int expmain(int argc, char **argv);
 //void ariMain(void);
-int xcmain(int argc, char **argv);
-void testSort(void);
-int getTokens(int argc, char *argv[]);
-int testmydb(void);
-void test645(void);
+//int xcmain(int argc, char **argv);
+//void testSort(void);
+//int getTokens(int argc, char *argv[]);
+//int testmydb(void);
+//void test645(void);
+//void testMatch(void);
+void testmisc(void);
 
 int main(int argc, char **argv)
 {
-//    testjansson();
-//    testbase64();
-//    testInitDataList();
-//    testtcp();
-//    OLED_test();
-//	  testmydb();
-//    testjson();
-
-//    testAccum();
-
-//    expmain(argc, argv);
-//    ariMain();
-//    testSort();
-//    getTokens(argc, argv);
-    test645();
+    testmisc();
     return 0;
 }
