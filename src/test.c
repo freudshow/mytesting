@@ -22,10 +22,10 @@
 //int testmydb(void);
 //void test645(void);
 //void testMatch(void);
-void testmisc(void);
+void testTLV(int argc, char **argv);
 
 int main(int argc, char **argv)
 {
-    testmisc();
+    testTLV(argc, argv);
     return 0;
 }
