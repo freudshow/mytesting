@@ -263,7 +263,7 @@ int tlv_box_get_double(tlv_box_t *box, int type, double *value)
 
 int tlv_box_get_string(tlv_box_t *box, int type, char *value, int *length)
 {
-    return tlv_box_get_bytes(box, type, value, length);
+    return tlv_box_get_bytes(box, type, (unsigned char *)value, length);
 }
 
 int tlv_box_get_bytes(tlv_box_t *box, int type, unsigned char *value, int *length)

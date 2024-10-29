@@ -25,8 +25,9 @@ typedef void (*value_releaser)(value_t value);
 #define key_compare(a, b) ((a==b)?1:0)
 
 typedef struct key_list_node {
-    key_t key;
-    value_t value;
+    key_t key;                      //type's code
+    int vLen;                       //length of value
+    value_t value;                  //pointer to value
     struct key_list_node *prev;
     struct key_list_node *next;
 } key_list_node_t;
