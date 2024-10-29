@@ -37,12 +37,15 @@ tlv_box_t* tlv_box_parse(unsigned char *buffer, int buffersize)
     unsigned char *cached = (unsigned char*) malloc(buffersize);
     memcpy(cached, buffer, buffersize);
 
-    int offset = 0, length = 0;
+    int offset = 0;
+    int length = 0;
+    int type = 0;
+
     while (offset < buffersize)
     {
-        int type = (*(int*) (cached + offset));
+        type = (*(int*) (cached + offset));
         offset += sizeof(int);
-        int length = (*(int*) (cached + offset));
+        length = (*(int*) (cached + offset));
         offset += sizeof(int);
         tlv_box_putobject(box, type, cached + offset, length);
         offset += length;

@@ -60,7 +60,7 @@ int testTLV(int argc, char const *argv[])
     }
 
     LOG("boxes serialize success, %d bytes \n", tlv_box_get_size(boxes));
-    DEBUG_BUFF_FORMAT(box->m_serialized_buffer, box->m_serialized_bytes, "serialized buff: ");
+    DEBUG_BUFF_FORMAT(boxes->m_serialized_buffer, boxes->m_serialized_bytes, "serialized buff: ");
 
     tlv_box_t *parsedBoxes = tlv_box_parse(tlv_box_get_buffer(boxes), tlv_box_get_size(boxes));
 

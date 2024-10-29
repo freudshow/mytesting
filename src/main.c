@@ -3,10 +3,8 @@
 #include <unistd.h>
 #include <string.h>
 
-void testTLV(int argc, char **argv);
-
 int main(int argc, char **argv)
 {
-    testTLV(argc, argv);
+    testhash();
     return 0;
 }
