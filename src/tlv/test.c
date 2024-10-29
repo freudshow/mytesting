@@ -13,6 +13,7 @@
 #include <stdio.h>
 #include <string.h>
 #include "tlv_box.h"
+#include "basedef.h"
 
 #define TEST_TYPE_0 0x00
 #define TEST_TYPE_1 0x01
@@ -47,6 +48,7 @@ int testTLV(int argc, char const *argv[])
     }
 
     LOG("box serialize success, %d bytes \n", tlv_box_get_size(box));
+    DEBUG_BUFF_FORMAT(box->m_serialized_buffer, box->m_serialized_bytes, "serialized buff: ");
 
     tlv_box_t *boxes = tlv_box_create();
     tlv_box_put_object(boxes, TEST_TYPE_9, box);
@@ -58,6 +60,7 @@ int testTLV(int argc, char const *argv[])
     }
 
     LOG("boxes serialize success, %d bytes \n", tlv_box_get_size(boxes));
+    DEBUG_BUFF_FORMAT(box->m_serialized_buffer, box->m_serialized_bytes, "serialized buff: ");
 
     tlv_box_t *parsedBoxes = tlv_box_parse(tlv_box_get_buffer(boxes), tlv_box_get_size(boxes));
 

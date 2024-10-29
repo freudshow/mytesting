@@ -26,7 +26,6 @@ void testTLV(int argc, char **argv);
 
 int main(int argc, char **argv)
 {
-//    testTLV(argc, argv);
-    testTimer();
+    testTLV(argc, argv);
     return 0;
 }
