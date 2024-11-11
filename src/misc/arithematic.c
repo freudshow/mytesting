@@ -8,25 +8,39 @@
 
 // Token types
 typedef enum {
-    TOKEN_START,
-    TOKEN_INTEGER,
-    TOKEN_FLOAT,
-    TOKEN_PLUS,
-    TOKEN_MINUS,
-    TOKEN_MULTIPLY,
-    TOKEN_DIVIDE,
-    TOKEN_BIT_OR,
-    TOKEN_BIT_AND,
-    TOKEN_BIT_XOR,
-    TOKEN_LEFT_SHIFT,
-    TOKEN_RIGHT_SHIFT,
-    TOKEN_SIN,
-    TOKEN_COS,
-    TOKEN_EXPONENTIAL,
-    TOKEN_LPAREN,
-    TOKEN_RPAREN,
-    TOKEN_REALDB,
-    TOKEN_END
+    TOKEN_START,            //开始标记
+    TOKEN_INTEGER,          //整数
+    TOKEN_FLOAT,            //浮点数
+    TOKEN_PLUS,             //'+', 加号
+    TOKEN_MINUS,            //'-', 减号
+    TOKEN_MULTIPLY,         //'*', 乘号
+    TOKEN_DIVIDE,           //'/', 除号
+    TOKEN_BIT_OR,           //'|', 按位或
+    TOKEN_BIT_AND,          //'&', 按位与
+    TOKEN_BIT_XOR,          //'^', 按位异或
+    TOKEN_BIT_NOT,          //'~', 按位取反
+    TOKEN_LEFT_SHIFT,       //"<<", 左移
+    TOKEN_RIGHT_SHIFT,      //">>", 右移
+    TOKEN_SIN,              //"sin", 正弦
+    TOKEN_COS,              //"cos", 余弦
+    TOKEN_EXPONENTIAL,      //"exp", 指数
+    TOKEN_LPAREN,           //'(', 左括号
+    TOKEN_RPAREN,           //')', 右括号
+    TOKEN_REALDB,           //实时库值
+    TOKEN_STRING,           //字符串
+    TOKEN_LOGICAL_AND,      //"&&", 逻辑与
+    TOKEN_LOGICAL_OR,       //"||", 逻辑或
+    TOKEN_LOGICAL_NOT,      //"!", 逻辑非
+    TOKEN_LOGICA_EQUAL,     //"==", 等于
+    TOKEN_LOGICA_NOT_EQUAL, //"!=", 不等于
+    TOKEN_GREATER,          //">", 大于
+    TOKEN_LESS,             //"<", 小于
+    TOKEN_GREATER_EQUAL,    //">=", 大于等于
+    TOKEN_LESS_EQUAL,       //"<=", 小于等于
+    TOKEN_COMMA,            //","
+    TOKEN_ASSIGN,           //"=", 赋值
+    TOKEN_SEMICOLON,        //";"
+    TOKEN_END               //结束标记
 } TokenType;
 
 // Token struct
@@ -352,50 +366,144 @@ u32 tokenizer(const char *input, Token *tokens)
                     pToken->str[1] = '\0';
                     break;
                 case '|':
-                    pToken->type = TOKEN_BIT_OR;
-                    pToken->pos = position;
-                    pToken->str[0] = input[position];
-                    pToken->str[1] = '\0';
+                    if (position < inputlen - 1 && input[position + 1] == '|')
+                    {
+                        pToken->type = TOKEN_LOGICAL_OR;
+                        pToken->pos = position;
+                        strncpy(pToken->str, "||", sizeof(pToken->str) - 1);
+                        position++;
+                    }
+                    else
+                    {
+                        pToken->type = TOKEN_BIT_OR;
+                        pToken->pos = position;
+                        pToken->str[0] = input[position];
+                        pToken->str[1] = '\0';
+                    }
+
                     break;
                 case '&':
-                    pToken->type = TOKEN_BIT_AND;
-                    pToken->pos = position;
-                    pToken->str[0] = input[position];
-                    pToken->str[1] = '\0';
+                    if (position < inputlen - 1 && input[position + 1] == '&')
+                    {
+                        pToken->type = TOKEN_LOGICAL_AND;
+                        pToken->pos = position;
+                        strncpy(pToken->str, "&&", sizeof(pToken->str) - 1);
+                        position++;
+                    }
+                    else
+                    {
+                        pToken->type = TOKEN_BIT_AND;
+                        pToken->pos = position;
+                        pToken->str[0] = input[position];
+                        pToken->str[1] = '\0';
+                    }
                     break;
                 case '^':
                     pToken->type = TOKEN_BIT_XOR;
                     pToken->pos = position;
                     pToken->str[0] = input[position];
                     pToken->str[1] = '\0';
+
                     break;
                 case '<':
-                    if (position < inputlen - 1 && input[position + 1] == '<')
+                    if (position < inputlen - 1)
                     {
-                        pToken->type = TOKEN_LEFT_SHIFT;
-                        pToken->pos = position;
-                        strncpy(pToken->str, "<<", sizeof(pToken->str) - 1);
-                        position++;
+                        if (input[position + 1] == '<')
+                        {
+                            pToken->type = TOKEN_LEFT_SHIFT;
+                            pToken->pos = position;
+                            strncpy(pToken->str, "<<", sizeof(pToken->str) - 1);
+                            position++;
+                        }
+                        else if (input[position + 1] == '=')
+                        {
+                            pToken->type = TOKEN_LESS_EQUAL;
+                            pToken->pos = position;
+                            strncpy(pToken->str, "<=", sizeof(pToken->str) - 1);
+                            position++;
+                        }
+                        else
+                        {
+                            pToken->type = TOKEN_LESS;
+                            pToken->pos = position;
+                            pToken->str[0] = input[position];
+                            pToken->str[1] = '\0';
+                        }
                     }
                     else
                     {
-                        printf("Invalid character: %c, position: %u\n", input[position], position);
-                        exit(1);
+                        pToken->type = TOKEN_LESS;
+                        pToken->pos = position;
+                        pToken->str[0] = input[position];
+                        pToken->str[1] = '\0';
                     }
 
                     break;
                 case '>':
-                    if (position < inputlen - 1 && input[position + 1] == '>')
+                    if (position < inputlen - 1)
                     {
-                        pToken->type = TOKEN_RIGHT_SHIFT;
+                        if (input[position + 1] == '>')
+                        {
+                            pToken->type = TOKEN_RIGHT_SHIFT;
+                            pToken->pos = position;
+                            strncpy(pToken->str, ">>", sizeof(pToken->str) - 1);
+                            position++;
+                        }
+                        else if (input[position + 1] == '=')
+                        {
+                            pToken->type = TOKEN_GREATER_EQUAL;
+                            pToken->pos = position;
+                            strncpy(pToken->str, ">=", sizeof(pToken->str) - 1);
+                            position++;
+                        }
+                        else
+                        {
+                            pToken->type = TOKEN_GREATER;
+                            pToken->pos = position;
+                            pToken->str[0] = input[position];
+                            pToken->str[1] = '\0';
+                        }
+                    }
+                    else
+                    {
+                        pToken->type = TOKEN_GREATER;
                         pToken->pos = position;
-                        strncpy(pToken->str, ">>", sizeof(pToken->str) - 1);
+                        pToken->str[0] = input[position];
+                        pToken->str[1] = '\0';
+                    }
+
+                    break;
+                case '=':
+                    if (position < inputlen - 1 && input[position + 1] == '=')
+                    {
+                        pToken->type = TOKEN_LOGICA_EQUAL;
+                        pToken->pos = position;
+                        strncpy(pToken->str, "==", sizeof(pToken->str) - 1);
                         position++;
                     }
                     else
                     {
-                        printf("Invalid character: %c, position: %u\n", input[position], position);
-                        exit(1);
+                        pToken->type = TOKEN_ASSIGN;
+                        pToken->pos = position;
+                        pToken->str[0] = input[position];
+                        pToken->str[1] = '\0';
+                    }
+
+                    break;
+                case '!':
+                    if (position < inputlen - 1 && input[position + 1] == '=')
+                    {
+                        pToken->type = TOKEN_LOGICA_NOT_EQUAL;
+                        pToken->pos = position;
+                        strncpy(pToken->str, "!=", sizeof(pToken->str) - 1);
+                        position++;
+                    }
+                    else
+                    {
+                        pToken->type = TOKEN_LOGICAL_NOT;
+                        pToken->pos = position;
+                        pToken->str[0] = input[position];
+                        pToken->str[1] = '\0';
                     }
 
                     break;
@@ -432,6 +540,21 @@ u32 tokenizer(const char *input, Token *tokens)
                         pToken->type = TOKEN_COS;
                         pToken->pos = position;
                         strncpy(pToken->str, "cos", sizeof(pToken->str) - 1);
+                        position += 2;
+                    }
+                    else
+                    {
+                        printf("Invalid character: %c, position: %u\n", input[position], position);
+                        exit(1);
+                    }
+
+                    break;
+                case 'e':
+                    if (position < inputlen - 2 && input[position + 1] == 'x' && input[position + 2] == 'p')
+                    {
+                        pToken->type = TOKEN_EXPONENTIAL;
+                        pToken->pos = position;
+                        strncpy(pToken->str, "exp", sizeof(pToken->str) - 1);
                         position += 2;
                     }
                     else
