@@ -606,6 +606,19 @@ int isTokenOperator(Token *t)
         case TOKEN_COS:
         case TOKEN_LPAREN:
         case TOKEN_RPAREN:
+        case TOKEN_EXPONENTIAL:
+        case TOKEN_LOGICAL_AND:
+        case TOKEN_LOGICAL_OR:
+        case TOKEN_LOGICAL_NOT:
+        case TOKEN_LOGICA_EQUAL:
+        case TOKEN_LOGICA_NOT_EQUAL:
+        case TOKEN_GREATER:
+        case TOKEN_LESS:
+        case TOKEN_GREATER_EQUAL:
+		case TOKEN_LESS_EQUAL:
+		case TOKEN_ASSIGN:
+		case TOKEN_COMMA:
+		case TOKEN_SEMICOLON:
             return 1;
             break;
         default:
