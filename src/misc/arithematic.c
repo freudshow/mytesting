@@ -773,12 +773,40 @@ const char* getTokenType(TokenType t)
             return ("TOKEN_SIN\t");
         case TOKEN_COS:
             return ("TOKEN_COS\t");
+        case TOKEN_EXPONENTIAL:
+			return ("TOKEN_EXPONENTIAL\t");
         case TOKEN_LPAREN:
             return ("TOKEN_LPAREN\t");
         case TOKEN_RPAREN:
             return ("TOKEN_RPAREN\t");
         case TOKEN_REALDB:
             return ("TOKEN_REALDB\t");
+        case TOKEN_STRING:
+			return ("TOKEN_STRING\t");
+		case TOKEN_LOGICAL_AND:
+			return ("TOKEN_LOGICAL_AND\t");
+		case TOKEN_LOGICAL_OR:
+			return ("TOKEN_LOGICAL_OR\t");
+		case TOKEN_LOGICAL_NOT:
+			return ("TOKEN_LOGICAL_NOT\t");
+		case TOKEN_LOGICA_EQUAL:
+			return ("TOKEN_LOGICA_EQUAL\t");
+		case TOKEN_LOGICA_NOT_EQUAL:
+			return ("TOKEN_LOGICA_NOT_EQUAL\t");
+		case TOKEN_GREATER:
+			return ("TOKEN_GREATER\t");
+		case TOKEN_LESS:
+			return ("TOKEN_LESS\t");
+		case TOKEN_GREATER_EQUAL:
+			return ("TOKEN_GREATER_EQUAL\t");
+		case TOKEN_LESS_EQUAL:
+			return ("TOKEN_LESS_EQUAL\t");
+		case TOKEN_COMMA:
+			return ("TOKEN_COMMA\t");
+		case TOKEN_ASSIGN:
+			return ("TOKEN_ASSIGN\t");
+		case TOKEN_SEMICOLON:
+			return ("TOKEN_SEMICOLON\t");
         case TOKEN_END:
             return ("TOKEN_END\t\n");
         default:
@@ -992,7 +1020,9 @@ double tokenEvaluate(Token *postfix, pStackArray stack)
  ******************************************************/
 void ariMain(void)
 {
-    char *input = "(2.5 + 3) * 4.2 - 10.1 / #201 + (8  | 4) + (1<<3) + (16 >> 2) + (7&3) + sin(12) + cos(20)";
+    char *input = "(2.5 + 3) * 4.2 - 10.1 / #201 + (8  | 4) + (#1<<3) + "
+            "(16 >> 2) + (7&3) + sin(12) + cos(20) + 2exp(30)+(1==2)+"
+            "(1!=2)+(1<2)+(1>2)+(1<=2)+(1>=2)=";
 
     Token *tokens = calloc(strlen(input) + 1, sizeof(Token));
     u32 count = tokenizer(input, tokens);
