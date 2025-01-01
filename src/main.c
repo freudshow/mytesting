@@ -5,6 +5,6 @@
 
 int main(int argc, char **argv)
 {
-    ariMain();
+    filename();
     return 0;
 }
