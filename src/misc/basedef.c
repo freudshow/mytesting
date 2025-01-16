@@ -8,6 +8,7 @@
 #include <string.h>
 #include <error.h>
 #include <errno.h>
+#include <libgen.h>
 
 /**************************************************
  * 功能描述: 获得当前时间字符串
@@ -212,7 +213,7 @@ void debugBufFormat2fp(FILE *fp, const char *file, const char *func, int line, c
     if (fp != NULL)
     {
         get_local_time(bufTime, sizeof(bufTime));
-        fprintf(fp, "[%s][%s][%s()][%d]: ", bufTime, file, func, line);
+        fprintf(fp, "[%s][%s][%s()][%d]: ", bufTime, basename(file), func, line);
         va_start(ap, fmt);
         vfprintf(fp, fmt, ap);
         va_end(ap);

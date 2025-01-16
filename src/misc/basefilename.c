@@ -62,6 +62,7 @@ int filename(void)
 //        free(filename); // Free the allocated memory
 //    }
 
+    printf("fullname: %s\n", __FILE__);
     printf("basename: %s\n", basename(__FILE__));
 
     u32 a = 0;
@@ -80,6 +81,8 @@ int filename(void)
         printf("%04X, \t", a);
         print_binary(a);
     }
+
+    DEBUG_TIME_LINE("print done");
 
     return 0;
 }
