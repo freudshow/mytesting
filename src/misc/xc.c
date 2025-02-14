@@ -2,6 +2,9 @@
 #include <stdlib.h>
 #include <memory.h>
 #include <string.h>
+#include <fcntl.h>
+#include <unistd.h>
+
 #define int long long // to work with 64bit address
 
 int debug;    // print the executed instructions
@@ -79,7 +82,7 @@ void next()
             if (assembly)
             {
                 // print compile info
-                printf("%d: %.*s", line, src - old_src, old_src);
+                printf("%lld: %.*s", line, (int)(src - old_src), old_src);
                 old_src = src;
 
                 while (old_text < text)
@@ -387,7 +390,7 @@ void match(int tk)
     }
     else
     {
-        printf("%d: expected token: %d\n", line, tk);
+        printf("%lld: expected token: %lld\n", line, tk);
         exit(-1);
     }
 }
@@ -414,7 +417,7 @@ void expression(int level)
     {
         if (!token)
         {
-            printf("%d: unexpected token EOF of expression\n", line);
+            printf("%lld: unexpected token EOF of expression\n", line);
             exit(-1);
         }
         if (token == Num)
@@ -525,7 +528,7 @@ void expression(int level)
                 }
                 else
                 {
-                    printf("%d: bad function call\n", line);
+                    printf("%lld: bad function call\n", line);
                     exit(-1);
                 }
 
@@ -559,7 +562,7 @@ void expression(int level)
                 }
                 else
                 {
-                    printf("%d: undefined variable\n", line);
+                    printf("%lld: undefined variable\n", line);
                     exit(-1);
                 }
 
@@ -608,7 +611,7 @@ void expression(int level)
             }
             else
             {
-                printf("%d: bad dereference\n", line);
+                printf("%lld: bad dereference\n", line);
                 exit(-1);
             }
 
@@ -625,7 +628,7 @@ void expression(int level)
             }
             else
             {
-                printf("%d: bad address of\n", line);
+                printf("%lld: bad address of\n", line);
                 exit(-1);
             }
 
@@ -707,7 +710,7 @@ void expression(int level)
             }
             else
             {
-                printf("%d: bad lvalue of pre-increment\n", line);
+                printf("%lld: bad lvalue of pre-increment\n", line);
                 exit(-1);
             }
             *++text = PUSH;
@@ -718,7 +721,7 @@ void expression(int level)
         }
         else
         {
-            printf("%d: bad expression\n", line);
+            printf("%lld: bad expression\n", line);
             exit(-1);
         }
     }
@@ -739,7 +742,7 @@ void expression(int level)
                 }
                 else
                 {
-                    printf("%d: bad lvalue in assignment\n", line);
+                    printf("%lld: bad lvalue in assignment\n", line);
                     exit(-1);
                 }
                 expression(Assign);
@@ -760,7 +763,7 @@ void expression(int level)
                 }
                 else
                 {
-                    printf("%d: missing colon in conditional\n", line);
+                    printf("%lld: missing colon in conditional\n", line);
                     exit(-1);
                 }
                 *addr = (int) (text + 3);
@@ -983,7 +986,7 @@ void expression(int level)
                 }
                 else
                 {
-                    printf("%d: bad value in increment\n", line);
+                    printf("%lld: bad value in increment\n", line);
                     exit(-1);
                 }
 
@@ -1016,7 +1019,7 @@ void expression(int level)
                 }
                 else if (tmp < PTR)
                 {
-                    printf("%d: pointer type expected\n", line);
+                    printf("%lld: pointer type expected\n", line);
                     exit(-1);
                 }
                 expr_type = tmp - PTR;
@@ -1025,7 +1028,7 @@ void expression(int level)
             }
             else
             {
-                printf("%d: compiler error, token = %d\n", line, token);
+                printf("%lld: compiler error, token = %lld\n", line, token);
                 exit(-1);
             }
         }
@@ -1156,7 +1159,7 @@ void enum_declaration()
     {
         if (token != Id)
         {
-            printf("%d: bad enum identifier %d\n", line, token);
+            printf("%lld: bad enum identifier %lld\n", line, token);
             exit(-1);
         }
         next();
@@ -1166,7 +1169,7 @@ void enum_declaration()
             next();
             if (token != Num)
             {
-                printf("%d: bad enum initializer\n", line);
+                printf("%lld: bad enum initializer\n", line);
                 exit(-1);
             }
             i = token_val;
@@ -1213,12 +1216,12 @@ void function_parameter()
         // parameter name
         if (token != Id)
         {
-            printf("%d: bad parameter declaration\n", line);
+            printf("%lld: bad parameter declaration\n", line);
             exit(-1);
         }
         if (current_id[Class] == Loc)
         {
-            printf("%d: duplicate parameter declaration\n", line);
+            printf("%lld: duplicate parameter declaration\n", line);
             exit(-1);
         }
 
@@ -1271,13 +1274,13 @@ void function_body()
             if (token != Id)
             {
                 // invalid declaration
-                printf("%d: bad local declaration\n", line);
+                printf("%lld: bad local declaration\n", line);
                 exit(-1);
             }
             if (current_id[Class] == Loc)
             {
                 // identifier exists
-                printf("%d: duplicate local declaration\n", line);
+                printf("%lld: duplicate local declaration\n", line);
                 exit(-1);
             }
             match(Id);
@@ -1343,7 +1346,6 @@ void global_declaration()
     // int [*]id [; | (...) {...}]
 
     int type; // tmp, actual type for variable
-    int i; // tmp
 
     basetype = INT;
 
@@ -1393,13 +1395,13 @@ void global_declaration()
         if (token != Id)
         {
             // invalid declaration
-            printf("%d: bad global declaration\n", line);
+            printf("%lld: bad global declaration\n", line);
             exit(-1);
         }
         if (current_id[Class])
         {
             // identifier exists
-            printf("%d: duplicate global declaration\n", line);
+            printf("%lld: duplicate global declaration\n", line);
             exit(-1);
         }
         match(Id);
@@ -1449,11 +1451,11 @@ int eval()
         // print debug info
         if (debug)
         {
-            printf("%d> %.4s", cycle, &"LEA ,IMM ,JMP ,CALL,JZ  ,JNZ ,ENT ,ADJ ,LEV ,LI  ,LC  ,SI  ,SC  ,PUSH,"
+            printf("%lld> %.4s", cycle, &"LEA ,IMM ,JMP ,CALL,JZ  ,JNZ ,ENT ,ADJ ,LEV ,LI  ,LC  ,SI  ,SC  ,PUSH,"
                     "OR  ,XOR ,AND ,EQ  ,NE  ,LT  ,GT  ,LE  ,GE  ,SHL ,SHR ,ADD ,SUB ,MUL ,DIV ,MOD ,"
                     "OPEN,READ,CLOS,PRTF,MALC,MSET,MCMP,EXIT"[op * 5]);
             if (op <= ADJ)
-                printf(" %d\n", *pc);
+                printf(" %lld\n", *pc);
             else
                 printf("\n");
         }
@@ -1555,7 +1557,7 @@ int eval()
 
         else if (op == EXIT)
         {
-            printf("exit(%d)", *sp);
+            printf("exit(%lld)", *sp);
             return *sp;
         }
         else if (op == OPEN)
@@ -1589,7 +1591,7 @@ int eval()
         }
         else
         {
-            printf("unknown instruction:%d\n", op);
+            printf("unknown instruction:%lld\n", op);
             return -1;
         }
     }
@@ -1638,22 +1640,22 @@ int xcmain(int argc, char **argv)
     // allocate memory
     if (!(text = malloc(poolsize)))
     {
-        printf("could not malloc(%d) for text area\n", poolsize);
+        printf("could not malloc(%lld) for text area\n", poolsize);
         return -1;
     }
     if (!(data = malloc(poolsize)))
     {
-        printf("could not malloc(%d) for data area\n", poolsize);
+        printf("could not malloc(%lld) for data area\n", poolsize);
         return -1;
     }
     if (!(stack = malloc(poolsize)))
     {
-        printf("could not malloc(%d) for stack area\n", poolsize);
+        printf("could not malloc(%lld) for stack area\n", poolsize);
         return -1;
     }
     if (!(symbols = malloc(poolsize)))
     {
-        printf("could not malloc(%d) for symbol table\n", poolsize);
+        printf("could not malloc(%lld) for symbol table\n", poolsize);
         return -1;
     }
 
@@ -1692,13 +1694,13 @@ int xcmain(int argc, char **argv)
 
     if (!(src = old_src = malloc(poolsize)))
     {
-        printf("could not malloc(%d) for source area\n", poolsize);
+        printf("could not malloc(%lld) for source area\n", poolsize);
         return -1;
     }
     // read the source file
     if ((i = read(fd, src, poolsize - 1)) <= 0)
     {
-        printf("read() returned %d\n", i);
+        printf("read() returned %lld\n", i);
         return -1;
     }
     src[i] = 0; // add EOF character
