@@ -3,6 +3,7 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include "basedef.h"
 
 int createDir(const char *s)
 {
@@ -33,6 +34,23 @@ int createDir(const char *s)
     }
 
     return 0;
+}
+
+void sscanftest(void)
+{
+    char *pattern = "%04d.%[dat]";
+    char *patternJson = "c%02d%02d.%[json]";
+
+    u32 fileno = 0;
+    char surfix[256] = { 0 };
+    int count = sscanf("134.dat", pattern, &fileno, surfix);
+    printf("count: %d, fileno: %d, surfix: %s\n", count, fileno, surfix);
+
+    int linkno = 0;
+    int prono = 0;
+
+    count = sscanf("c0305.json", patternJson, &linkno, &prono, surfix);
+    printf("count: %d, linkno: %d, prono: %d, surfix: %s\n", count, linkno, prono, surfix);
 }
 
 void testmisc(void)

@@ -69,7 +69,7 @@ int filename(void)
     for (int i = 0; i < 32; i++)
     {
         a = CLEAR_BIT(b, i);
-        printf("%04X, \t", a);
+        printf("CLEAR_BIT: %04X, \t", a);
         print_binary(a);
     }
 
@@ -77,7 +77,7 @@ int filename(void)
     for (int i = 0; i < 32; i++)
     {
         a = SET_BIT(b, i);
-        printf("%04X, \t", a);
+        printf("SET_BIT: %04X, \t", a);
         print_binary(a);
     }
 
