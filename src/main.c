@@ -5,6 +5,6 @@
 
 int main(int argc, char **argv)
 {
-	sscanftest();
+    testmisc();
     return 0;
 }

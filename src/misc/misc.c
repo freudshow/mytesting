@@ -53,9 +53,65 @@ void sscanftest(void)
     printf("count: %d, linkno: %d, prono: %d, surfix: %s\n", count, linkno, prono, surfix);
 }
 
+int getBaseFileName(const char *appname, int len, int *namestart)
+{
+    int pos = len - 1;
+
+    while (appname[pos] == '/' && pos >= 0)
+    {
+        pos--;
+    }
+
+    if (pos < 0)
+    {
+        DEBUG_TIME_LINE("pos: %d\n", pos);
+        return -1;
+    }
+
+    if (appname[pos] == '.')
+    {
+        if (pos == 1 && appname[0] == '.')
+        {
+            *namestart = 0;
+            return 2;
+        }
+        else if (pos == 0)
+        {
+            *namestart = 0;
+            return 1;
+        }
+
+        return -1;
+    }
+
+    int endPos = pos;
+    DEBUG_TIME_LINE("endPos: %d, char: %c\n", endPos, appname[endPos]);
+    while (appname[pos] != '/' && pos >= 0)
+    {
+        DEBUG_TIME_LINE("start: %d, char: %c\n", pos, appname[pos]);
+        pos--;
+    }
+
+    int namelen = endPos - pos;
+    *namestart = pos + 1;
+    DEBUG_TIME_LINE("namestart: %d, namelen: %d\n", *namestart, namelen);
+
+    return namelen;
+}
+
 void testmisc(void)
 {
-    int res = createDir("/home/floyd/temp/mkdir/test/subdir/subdir1/subdir2/subdir3");
+    char *path = "////";
 
-    printf("res: %d\n", res);
+    int start = 0;
+    int len = getBaseFileName(path, strlen(path), &start);
+
+    DEBUG_TIME_LINE("start: %d, name len: %d\n", start, len);
+
+    if (len >= 0)
+    {
+        char name[1024] = { 0 };
+        memcpy(name, &path[start], len);
+        DEBUG_TIME_LINE("name: %s\n", name);
+    }
 }
