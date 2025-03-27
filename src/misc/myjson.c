@@ -6,12 +6,12 @@
 #define MAX_OBJECT_DEPTH 16
 
 typedef enum {
-    JSON_NULL,
-    JSON_BOOLEAN,
-    JSON_NUMBER,
-    JSON_STRING,
-    JSON_OBJECT,
-    JSON_ARRAY
+    MYJSON_NULL,
+    MYJSON_BOOLEAN,
+    MYJSON_NUMBER,
+    MYJSON_STRING,
+    MYJSON_OBJECT,
+    MYJSON_ARRAY
 } json_type;
 
 // Token structure to represent a parsed JSON token (e.g., string, object key)
