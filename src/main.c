@@ -5,6 +5,6 @@
 
 int main(int argc, char **argv)
 {
-    testmisc();
+	kmpmain();
     return 0;
 }
