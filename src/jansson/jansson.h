@@ -187,7 +187,7 @@ static JSON_INLINE enum json_error_code json_error_code(const json_error_t *e) {
 
 void json_object_seed(size_t seed);
 size_t json_object_size(const json_t *object);
-json_t *json_object_get(const json_t *object, const char *key)
+json_t *jansson_object_get(const json_t *object, const char *key)
     JANSSON_ATTRS((warn_unused_result));
 json_t *json_object_getn(const json_t *object, const char *key, size_t key_len)
     JANSSON_ATTRS((warn_unused_result));

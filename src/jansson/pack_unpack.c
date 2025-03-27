@@ -533,7 +533,7 @@ static int unpack_object(scanner_t *s, json_t *root, va_list *ap) {
             /* skipping */
             value = NULL;
         } else {
-            value = json_object_get(root, key);
+            value = jansson_object_get(root, key);
             if (!value && !opt) {
                 set_error(s, "<validation>", json_error_item_not_found,
                           "Object item not found: %s", key);

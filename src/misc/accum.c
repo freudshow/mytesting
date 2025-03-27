@@ -171,18 +171,18 @@ accumEnergyConfig_s* parse_accumulate_config(const char *configFileName)
     p_accumEnergyConfig->resultType = e_accumulate_result_total;
 
     //读取头部信息 start
-    object_tmp = json_object_get(root, "acqPeriod");
+    object_tmp = jansson_object_get(root, "acqPeriod");
     p_accumEnergyConfig->acqPeriod = json_integer_value(object_tmp);
 
-    object_tmp = json_object_get(root, "resultStoreType");
+    object_tmp = jansson_object_get(root, "resultStoreType");
     p_accumEnergyConfig->resultType = (accumResultType_e) json_integer_value(object_tmp);
 
-    object_tmp = json_object_get(root, "startRealDbNo");
+    object_tmp = jansson_object_get(root, "startRealDbNo");
     p_accumEnergyConfig->startRealDbNo = json_integer_value(object_tmp);
     //读取头部信息 end
 
     //读取分相电能的数据源实时库号 start
-    arrayList = json_object_get(root, "dataSourceList");
+    arrayList = jansson_object_get(root, "dataSourceList");
     size_t count = json_array_size(arrayList);
     if (count == 0)
     {
@@ -208,10 +208,10 @@ accumEnergyConfig_s* parse_accumulate_config(const char *configFileName)
     {
         arrayItem = json_array_get(arrayList, i);
 
-        object_tmp = json_object_get(arrayItem, "realDbNo");
+        object_tmp = jansson_object_get(arrayItem, "realDbNo");
         p_accumEnergyConfig->accumItemList.list[i].realDbNo = json_integer_value(object_tmp);
 
-        object_tmp = json_object_get(arrayItem, "description");
+        object_tmp = jansson_object_get(arrayItem, "description");
         strncpy(p_accumEnergyConfig->accumItemList.list[i].description,
                 json_string_value(object_tmp),
                 sizeof(p_accumEnergyConfig->accumItemList.list[i].description) - 1);
@@ -220,7 +220,7 @@ accumEnergyConfig_s* parse_accumulate_config(const char *configFileName)
     //读取分相电能的数据源实时库号 end
 
     //读取冻结类型项目 start
-    arrayList = json_object_get(root, "freezeDataList");
+    arrayList = jansson_object_get(root, "freezeDataList");
     count = json_array_size(arrayList);
     if (count == 0)
     {
@@ -248,10 +248,10 @@ accumEnergyConfig_s* parse_accumulate_config(const char *configFileName)
     {
         arrayItem = json_array_get(arrayList, i);
 
-        object_tmp = json_object_get(arrayItem, "type");
+        object_tmp = jansson_object_get(arrayItem, "type");
         p_accumEnergyConfig->freezeItemList.list[i].type = (accumEnergyType_e)json_integer_value(object_tmp);
 
-        object_tmp = json_object_get(arrayItem, "depth");
+        object_tmp = jansson_object_get(arrayItem, "depth");
         p_accumEnergyConfig->freezeItemList.list[i].depth = json_integer_value(object_tmp);
     }
 

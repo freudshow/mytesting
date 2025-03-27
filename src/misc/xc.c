@@ -82,7 +82,7 @@ void next()
             if (assembly)
             {
                 // print compile info
-                printf("%lld: %.*s", line, (int)(src - old_src), old_src);
+                printf("%lld: %lld", line, (int)(src - old_src));
                 old_src = src;
 
                 while (old_text < text)

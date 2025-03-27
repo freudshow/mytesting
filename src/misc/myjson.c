@@ -70,7 +70,7 @@ json_token* parse_token(const char* input) {
 // Function to parse the next object key-value pair
 json_token* parse_object(const char* input) {
     // Parse the key
-    json_token* key_token = parse_token(input);
+//    json_token* key_token = parse_token(input);
 
     // Skip over the colon and whitespace
     while (*input <= ' ') {
@@ -116,7 +116,7 @@ json_token* parse_json(const char* filename) {
 
     while (1) {
         const char* line = NULL;
-        size_t length = 0;
+//        size_t length = 0;
 //        while ((line = fgets(file, MAX_TOKEN_LENGTH)) != NULL && *line <= ' ') {
 //            // Skip over whitespace
 //        }

@@ -59,7 +59,6 @@ void testTimer()
     clock_t prevClock;
     int maxSigs; /* Number of signals to catch before exiting */
     int sigCnt; /* Number of signals so far caught */
-    struct sigaction sa;
 
     sigCnt = 0;
 

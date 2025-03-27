@@ -31,7 +31,7 @@
 #define ICMP_ECHO   /*Echo请求*/
 
 #define BUFSIZE 1500    /*发送缓存最大值*/
-#define DEFAULT_LEN 56  /**ping消息数据默认大小/
+#define DEFAULT_LEN 56  /*ping消息数据默认大小*/
 
 /*数据类型别名*/
 typedef unsigned char u8;
@@ -201,7 +201,7 @@ void send_ping(void)
 void recv_reply()
 {
     int n;
-    int len;
+    socklen_t len;
     int errno;
 
     n = 0;

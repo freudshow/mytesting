@@ -96,7 +96,7 @@ size_t json_object_size(const json_t *json) {
     return object->hashtable.size;
 }
 
-json_t *json_object_get(const json_t *json, const char *key) {
+json_t *jansson_object_get(const json_t *json, const char *key) {
     if (!key)
         return NULL;
 
@@ -228,7 +228,7 @@ int json_object_update_missing(json_t *object, json_t *other) {
         return -1;
 
     json_object_foreach(other, key, value) {
-        if (!json_object_get(object, key))
+        if (!jansson_object_get(object, key))
             json_object_set_nocheck(object, key, value);
     }
 
@@ -250,7 +250,7 @@ int do_object_update_recursive(json_t *object, json_t *other, hashtable_t *paren
         return -1;
 
     json_object_keylen_foreach(other, key, key_len, value) {
-        json_t *v = json_object_get(object, key);
+        json_t *v = jansson_object_get(object, key);
 
         if (json_is_object(v) && json_is_object(value)) {
             if (do_object_update_recursive(v, value, parents)) {
@@ -358,7 +358,7 @@ static int json_object_equal(const json_t *object1, const json_t *object2) {
         return 0;
 
     json_object_foreach((json_t *)object1, key, value1) {
-        value2 = json_object_get(object2, key);
+        value2 = jansson_object_get(object2, key);
 
         if (!json_equal(value1, value2))
             return 0;
