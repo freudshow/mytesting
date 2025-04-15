@@ -5,6 +5,6 @@
 
 int main(int argc, char **argv)
 {
-	kmpmain();
+    visitormain();
     return 0;
 }
