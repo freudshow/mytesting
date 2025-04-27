@@ -5,6 +5,6 @@
 
 int main(int argc, char **argv)
 {
-    visitormain();
+    testLinkedList();
     return 0;
 }
