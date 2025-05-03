@@ -640,26 +640,42 @@ int tokenPrecedence(Token *t)
         case TOKEN_START:
         case TOKEN_END:
             return 0;
-        case TOKEN_LPAREN:
-        case TOKEN_RPAREN:
+        case TOKEN_ASSIGN:
             return 1;
+        case TOKEN_LOGICAL_OR:
+            return 2;
+        case TOKEN_LOGICAL_AND:
+            return 3;
         case TOKEN_BIT_OR:
-        case TOKEN_BIT_AND:
+            return 4;
         case TOKEN_BIT_XOR:
+            return 5;
+        case TOKEN_BIT_AND:
+            return 6;
+        case TOKEN_LOGICA_NOT_EQUAL:
+        case TOKEN_LOGICA_EQUAL:
+            return 7;
+        case TOKEN_GREATER:
+        case TOKEN_LESS:
+        case TOKEN_GREATER_EQUAL:
+        case TOKEN_LESS_EQUAL:
+            return 8;
         case TOKEN_LEFT_SHIFT:
         case TOKEN_RIGHT_SHIFT:
-            return 2;
+            return 9;
         case TOKEN_PLUS:
         case TOKEN_MINUS:
-            return 3;
+            return 10;
         case TOKEN_MULTIPLY:
         case TOKEN_DIVIDE:
-            return 4;
+            return 11;
+        case TOKEN_LOGICAL_NOT:
+            return 12;
         case TOKEN_SIN:
         case TOKEN_COS:
-            return 5;
+            return 13;
         case TOKEN_EXPONENTIAL:
-            return 6;
+            return 14;
         default:
             return 0;
     }
