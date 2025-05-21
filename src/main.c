@@ -5,6 +5,6 @@
 
 int main(int argc, char **argv)
 {
-    setlongmain();
+    coroutinemain();
     return 0;
 }
