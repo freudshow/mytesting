@@ -3,8 +3,10 @@
 #include <unistd.h>
 #include <string.h>
 
+void testtinyexpr(void);
+
 int main(int argc, char **argv)
 {
-    coroutinemain();
+    testtinyexpr();
     return 0;
 }

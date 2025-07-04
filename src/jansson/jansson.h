@@ -130,6 +130,7 @@ static JSON_INLINE json_t *json_incref(json_t *json) {
 void json_delete(json_t *json);
 
 static JSON_INLINE void json_decref(json_t *json) {
+    printf("type: %d, refcont: %lu\n", json->type, json->refcount);
     if (json && json->refcount != (size_t)-1 && JSON_INTERNAL_DECREF(json) == 0)
         json_delete(json);
 }
