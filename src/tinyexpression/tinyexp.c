@@ -21,6 +21,7 @@ void testtinyexpr(void)
     te_expr *n = te_compile(expression, vars, 1, &err);
 
     if (n) {
+        te_print(n);
         const double r = te_eval(n);
         printf("Result:\n\t%f\n", r);
         te_free(n);
