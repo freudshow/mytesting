@@ -1,13 +1,19 @@
 /*
  *  rdp.c
- *  recursive descent parser,
+ * This is a simple implementation of a recursive descent parser
  *  for the grammar:
  *  E -> T E'
- *  E' -> + T E' | $
+ *  E' -> + T E' | ε
  *  T -> F T'
- *  T' -> * F T' | $
+ *  T' -> * F T' | ε
  *  F -> ( E ) | i
- *  This is a simple implementation of a recursive descent parser
+ *  Important points about recursive descent parsers
+ *  1. Top-Down Parsing: It starts from the start symbol and recursively applies grammar rules to break down the input.
+ *  2. One Function per Non-Terminal: Each grammar rule has a corresponding function in the parser, making the implementation straightforward.
+ *  3. Uses Recursion: The parser calls functions within themselves to process different parts of the input, matching the recursive nature of grammar rules.
+ *  4. Works Best with LL(1) Grammars: It’s most effective for grammars that can be parsed with a single token lookahead, typically simple, non-left-recursive grammars.
+ *  5. Easy to Implement: The structure is easy to follow and implement, making it a good choice for small compilers or interpreters.
+ *  6. Error Handling: It can detect syntax errors and report them, making it useful for debugging input strings.
  *  Created on: Jul 14, 2025
  *      Author: floyd
  */
@@ -96,7 +102,7 @@ int Edash()
     }
     else
     {
-        printf("%-16s E' -> $\n", cursor);
+        printf("%-16s E' -> ε\n", cursor);
         return SUCCESS;
     }
 }
@@ -149,7 +155,7 @@ int Tdash()
     }
     else
     {
-        printf("%-16s T' -> $\n", cursor);
+        printf("%-16s T' -> ε\n", cursor);
         return SUCCESS;
     }
 }
