@@ -3,10 +3,10 @@
 #include <unistd.h>
 #include <string.h>
 
-void rdpmain(void);
+void testtinyexpr(void);
 
 int main(int argc, char **argv)
 {
-    rdpmain();
+    testtinyexpr();
     return 0;
 }
