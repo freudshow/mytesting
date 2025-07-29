@@ -3,10 +3,10 @@
 #include <unistd.h>
 #include <string.h>
 
-void testtinyexpr(void);
+void axdrtest(void);
 
 int main(int argc, char **argv)
 {
-    testtinyexpr();
+    axdrtest();
     return 0;
 }
