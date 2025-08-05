@@ -9,11 +9,15 @@
 // --- 1. 内存缓冲区和辅助函数 ---
 
 // 用于编码和解码的缓冲区结构
-typedef struct {
+typedef struct AxdrBufferStruct {
     uint8_t *data;
     size_t size; //data的長度
     size_t pos; // 当前读写位置
+    size_t deepth; // 当前嵌套深度
     bool error; // 标记操作是否出错
+    bool isEncodeTag; // 标记是否正在编码类型标签
+    bool isEncodeLength; // 标记是否正在编码长度
+    struct AxdrBufferStruct *children; // 子缓冲区指针，用于嵌套结构
 } AxdrBuffer;
 
 // 初始化编码缓冲区
@@ -93,43 +97,89 @@ static bool ensure_capacity(AxdrBuffer *buf, size_t needed)
 
 // --- 2. 基本类型编解码 ---
 
-// 整型编码 (固定长度)
+// Helper function to check if a value fits in the given number of bytes
+static bool check_integer_range(int64_t value, int byte_size) {
+    switch (byte_size) {
+        case 1: return (value >= -128 && value <= 127);
+        case 2: return (value >= -32768 && value <= 32767);
+        case 3: return (value >= -8388608 && value <= 8388607);
+        case 4: return (value >= -2147483648LL && value <= 2147483647LL);
+        case 5: return (value >= -549755813888LL && value <= 549755813887LL);
+        case 6: return (value >= -140737488355328LL && value <= 140737488355327LL);
+        case 7: return (value >= -36028797018963968LL && value <= 36028797018963967LL);
+        case 8: return true; // 8 bytes can hold any int64_t value
+        default: return false;
+    }
+}
+
+/*********************************************************************************************
+ * 有符号整型编码 (固定长度)
+ *********************************************************************************************
+ * @param buf - 编码缓冲区
+ * @param value - 要编码的整数值
+ * @param byte_size - 指定整数的字节大小 (1-8)
+ * @return true if successful, false if error occurs
+ *********************************************************************************************/
 bool axdr_encode_integer_fixed(AxdrBuffer *buf, int64_t value, int byte_size)
 {
     if (buf->error || byte_size <= 0 || byte_size > 8)
         return false;
+
+    // Check if the value fits in the specified number of bytes
+    if (!check_integer_range(value, byte_size)) {
+        buf->error = true;
+        return false;
+    }
+
     if (!ensure_capacity(buf, byte_size))
         return false;
 
-    for (int i = byte_size - 1; i >= 0; i--)
-    {
+    // Write bytes in big-endian order
+    for (int i = byte_size - 1; i >= 0; i--) {
         buf->data[buf->pos++] = (value >> (i * 8)) & 0xFF;
     }
     return true;
 }
 
-// 整型解码 (固定长度)
+/*********************************************************************************************
+ * 有符号整型解码 (固定长度)
+ *********************************************************************************************
+ * @param buf - 解码缓冲区
+ * @param value - 指向存储解码结果的整数指针
+ * @param byte_size - 指定整数的字节大小 (1-8)
+ * @return true if successful, false if error occurs
+ *********************************************************************************************/
 bool axdr_decode_integer_fixed(AxdrBuffer *buf, int64_t *value, int byte_size)
 {
     if (buf->error || !value || byte_size <= 0 || byte_size > 8)
         return false;
-    if (buf->pos + byte_size > buf->size)
-    {
+
+    if (buf->pos + byte_size > buf->size) {
         buf->error = true;
         return false;
     }
 
-    *value = 0;
-    for (int i = 0; i < byte_size; i++)
-    {
-        *value = (*value << 8) | buf->data[buf->pos++];
+    // Read bytes in big-endian order
+    int64_t result = 0;
+    uint8_t first_byte = buf->data[buf->pos];
+    bool is_negative = (first_byte & 0x80) != 0;
+
+    // Handle sign extension properly based on byte_size
+    if (is_negative) {
+        result = -1LL; // Start with all bits set for negative numbers
     }
 
-    // 符号扩展 (如果最高位是1)
-    if (byte_size < 8 && (*value & (1ULL << (byte_size * 8 - 1))))
-    {
-        *value |= ~((1ULL << (byte_size * 8)) - 1);
+    for (int i = 0; i < byte_size; i++) {
+        result = (result << 8) | buf->data[buf->pos++];
     }
+
+    // Verify the decoded value is within range for the given byte size
+    if (!check_integer_range(result, byte_size)) {
+        buf->error = true;
+        return false;
+    }
+
+    *value = result;
     return true;
 }
 
@@ -167,54 +217,79 @@ bool axdr_decode_unsigned_fixed(AxdrBuffer *buf, uint64_t *value, int byte_size)
     return true;
 }
 
-// 可变长度整型编码 (7-bit 编码)
+// 可变长度整型编码 (A-XDR规则)
 bool axdr_encode_integer_var(AxdrBuffer *buf, int64_t value)
 {
     if (buf->error)
         return false;
-    uint64_t uvalue = (value << 1) ^ (value >> 63); // ZigZag 编码
 
-    do
-    {
+    // Case 1: Values 0-127 encoded directly in one byte
+    if (value >= 0 && value <= 127) {
         if (!ensure_capacity(buf, 1))
             return false;
-        uint8_t byte = uvalue & 0x7F;
-        uvalue >>= 7;
-        if (uvalue != 0)
-            byte |= 0x80; // 设置继续位
-        buf->data[buf->pos++] = byte;
-    } while (uvalue != 0);
+        buf->data[buf->pos++] = (uint8_t)value;
+        return true;
+    }
+
+    // Case 2: Other values need length byte + value bytes
+    // First determine minimum bytes needed for value in 2's complement
+    uint8_t needed_bytes = 1;
+    int64_t temp = (value < 0) ? ~value : value;
+    
+    while (temp > 127 || temp < -128) {
+        needed_bytes++;
+        temp >>= 8;
+    }
+
+    // Ensure we have enough space for length byte + value bytes
+    if (!ensure_capacity(buf, needed_bytes + 1))
+        return false;
+
+    // Write length byte (MSB=1 to indicate length byte)
+    buf->data[buf->pos++] = 0x80 | needed_bytes;
+
+    // Write value bytes in big-endian order
+    for (int i = needed_bytes - 1; i >= 0; i--) {
+        buf->data[buf->pos++] = (value >> (i * 8)) & 0xFF;
+    }
+
     return true;
 }
 
-// 可变长度整型解码 (7-bit 编码)
+// 可变长度整型解码 (A-XDR规则)
 bool axdr_decode_integer_var(AxdrBuffer *buf, int64_t *value)
 {
-    if (buf->error || !value)
+    if (buf->error || !value || buf->pos >= buf->size)
         return false;
-        
-    uint64_t uvalue = 0;
-    int shift = 0;
-    uint8_t byte;
 
-    do {
-        if (buf->pos >= buf->size)
-        {
-            buf->error = true;
-            return false;
-        }
-        byte = buf->data[buf->pos++];
-        uvalue |= (uint64_t)(byte & 0x7F) << shift;
-        shift += 7;
-        if (shift >= 64)
-        {
-            buf->error = true;
-            return false;
-        }
-    } while (byte & 0x80);
+    // Read first byte
+    uint8_t first_byte = buf->data[buf->pos++];
+    
+    // Case 1: Values 0-127 are encoded directly
+    if ((first_byte & 0x80) == 0) {
+        *value = first_byte;
+        return true;
+    }
+    
+    // Case 2: First byte with MSB=1 indicates length
+    uint8_t length = first_byte & 0x7F;
+    if (length > 8 || buf->pos + length > buf->size) {
+        buf->error = true;
+        return false;
+    }
 
-    // ZigZag decode
-    *value = (uvalue >> 1) ^ (-(uvalue & 1));
+    // Read the value bytes in big-endian order
+    int64_t result = 0;
+    for (int i = 0; i < length; i++) {
+        result = (result << 8) | buf->data[buf->pos++];
+    }
+
+    // Handle sign extension if needed
+    if (length < 8 && (result & (1LL << ((length * 8) - 1)))) {
+        result |= ~((1LL << (length * 8)) - 1);
+    }
+
+    *value = result;
     return true;
 }
 
@@ -265,40 +340,76 @@ bool axdr_encode_bitstring_fixed(AxdrBuffer *buf, const uint8_t *bits, int bit_c
 {
     if (buf->error || !bits || bit_count < 0)
         return false;
+
+    int byte_count = (bit_count + 7) / 8;  // Round up to nearest byte
+    int unused_bits = (8 - (bit_count % 8)) % 8;
+
+    if (!ensure_capacity(buf, 1 + byte_count))
+        return false;
+
+    // Write unused bits count first
+    buf->data[buf->pos++] = unused_bits;
+
+    // Write bit string bytes
+    if (byte_count > 0) {
+        memcpy(buf->data + buf->pos, bits, byte_count);
+        buf->pos += byte_count;
+    }
+
+    return true;
+}
+
+/*********************************************************************************************
+ * 位串解码 (固定长度)
+ * *******************************************************************************************
+ * @param buf - 解码缓冲区
+ * @param bits - 指向存储解码结果的位串缓冲区
+ * @param bit_count - 指向存储实际位数的整数指针
+ * @param max_bits - bits 缓冲区的最大位数
+ * @return true if successful, false if error occurs
+ ********************************************************************************************/
+bool axdr_decode_bitstring_fixed(AxdrBuffer *buf, uint8_t *bits, int *bit_count, int max_bits)
+{
+    if (buf->error || !bits || !bit_count || buf->pos + 1 > buf->size)
+        return false;
+
+    // Read unused bits count first
+    int unused_bits = buf->data[buf->pos++];
+    if (unused_bits > 7) {
+        buf->error = true;
+        return false;
+    }
+
+    int byte_count = (max_bits + 7) / 8;  // Round up to nearest byte
+    
+    // Read bit string bytes
+    if (byte_count > 0) {
+        if (buf->pos + byte_count > buf->size) {
+            buf->error = true;
+            return false;
+        }
+        memcpy(bits, buf->data + buf->pos, byte_count);
+        buf->pos += byte_count;
+    }
+
+    *bit_count = max_bits - unused_bits;
+    return true;
+}
+
+// 位串编码 (可变长度)
+bool axdr_encode_bitstring_var(AxdrBuffer *buf, const uint8_t *bits, int bit_count)
+{
+    if (buf->error || !bits || bit_count < 0)
+        return false;
     int byte_count = (bit_count + 7) / 8;
     int unused_bits = (8 - (bit_count % 8)) % 8;
+    if (!axdr_encode_integer_fixed(buf, bit_count, 4)) // 使用4字节编码长度
+        return false;
     if (!ensure_capacity(buf, 1 + byte_count))
         return false;
     buf->data[buf->pos++] = unused_bits; // 第一个字节是未使用位数
     memcpy(buf->data + buf->pos, bits, byte_count);
     buf->pos += byte_count;
-    return true;
-}
-
-// 位串解码 (固定长度)
-bool axdr_decode_bitstring_fixed(AxdrBuffer *buf, uint8_t *bits, int *bit_count, int max_bits)
-{
-    if (buf->error || !bits || !bit_count || buf->pos + 1 > buf->size)
-    {
-        if (buf->pos + 1 > buf->size)
-            buf->error = true;
-        return false;
-    }
-    int unused_bits = buf->data[buf->pos++];
-    if (unused_bits > 7)
-    {
-        buf->error = true;
-        return false;
-    }
-    int byte_count = (max_bits + 7) / 8;
-    if (buf->pos + byte_count > buf->size)
-    {
-        buf->error = true;
-        return false;
-    }
-    memcpy(bits, buf->data + buf->pos, byte_count);
-    buf->pos += byte_count;
-    *bit_count = max_bits - unused_bits; // 或者从编码中推断
     return true;
 }
 
@@ -774,9 +885,9 @@ void axdrtest(void)
     printf("--- A-XDR Codec Test ---\n");
 
     // 1. 准备测试数据
-    TestStruct original_data = { .int16_val = -12345, .uint16_val = 54321, .bool_val = true, .enum_val = 2, .bitstring_val = { 0xAB, 0xCD }, // 例如表示 10101011 11001101
-            .octetstring_val = { 0x11, 0x22, 0x33, 0x44 }, .octetstring_len = 4, .visiblestring_val = strdup("Hello, A-XDR!"), .time_val = time(NULL), // 当前时间
-            .seq_of_count = 3, .seq_of_vals = NULL // 初始化为 NULL
+    TestStruct original_data = { .int16_val = -12345, .uint16_val = 54321, .bool_val = true, .enum_val = 2, .bitstring_val = { 0xAB, 0xCD },
+            .octetstring_val = { 0x11, 0x22, 0x33, 0x44 }, .octetstring_len = 4, .visiblestring_val = strdup("Hello, A-XDR!"), .time_val = time(NULL),
+            .seq_of_count = 3, .seq_of_vals = NULL
                     };
     original_data.seq_of_vals = malloc(3 * sizeof(int32_t));
     if (!original_data.seq_of_vals)
