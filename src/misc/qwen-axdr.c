@@ -335,7 +335,14 @@ bool axdr_decode_enumerated(AxdrBuffer *buf, int32_t *value)
     return res;
 }
 
-// 位串编码 (固定长度)
+/**********************************************************************************************
+ * 编码固定长度的位串
+ * ********************************************************************************************
+ * @param buf - 编码缓冲区
+ * @param bits - 指向位串数据的指针
+ * @param bit_count - 位数
+ * @return true if successful, false if error occurs
+ *********************************************************************************************/
 bool axdr_encode_bitstring_fixed(AxdrBuffer *buf, const uint8_t *bits, int bit_count)
 {
     if (buf->error || !bits || bit_count < 0)
@@ -344,15 +351,21 @@ bool axdr_encode_bitstring_fixed(AxdrBuffer *buf, const uint8_t *bits, int bit_c
     int byte_count = (bit_count + 7) / 8;  // Round up to nearest byte
     int unused_bits = (8 - (bit_count % 8)) % 8;
 
-    if (!ensure_capacity(buf, 1 + byte_count))
+    if (!ensure_capacity(buf, byte_count + 1))
         return false;
-
-    // Write unused bits count first
-    buf->data[buf->pos++] = unused_bits;
 
     // Write bit string bytes
     if (byte_count > 0) {
+        // Copy the bytes directly since we want MSB to LSB order
         memcpy(buf->data + buf->pos, bits, byte_count);
+
+        // If we have a partial byte at the end, mask off unused bits
+        // The bits should be right-aligned in the last byte
+        if (bit_count % 8 != 0) {
+            uint8_t mask = 0xFF << unused_bits;
+            buf->data[buf->pos + byte_count - 1] &= mask;
+        }
+
         buf->pos += byte_count;
     }
 
@@ -370,29 +383,41 @@ bool axdr_encode_bitstring_fixed(AxdrBuffer *buf, const uint8_t *bits, int bit_c
  ********************************************************************************************/
 bool axdr_decode_bitstring_fixed(AxdrBuffer *buf, uint8_t *bits, int *bit_count, int max_bits)
 {
-    if (buf->error || !bits || !bit_count || buf->pos + 1 > buf->size)
+    if (buf->error || !bits || !bit_count || max_bits < 0 || buf->pos + 1 > buf->size)
         return false;
 
-    // Read unused bits count first
+    // Read unused bits count
     int unused_bits = buf->data[buf->pos++];
     if (unused_bits > 7) {
         buf->error = true;
         return false;
     }
 
-    int byte_count = (max_bits + 7) / 8;  // Round up to nearest byte
-    
-    // Read bit string bytes
+    // Calculate number of bytes needed
+    int byte_count = (max_bits + 7) / 8;
+    if (buf->pos + byte_count > buf->size) {
+        buf->error = true;
+        return false;
+    }
+
+    // Clear output buffer
+    memset(bits, 0, (max_bits + 7) / 8);
+
+    // Read the data
     if (byte_count > 0) {
-        if (buf->pos + byte_count > buf->size) {
-            buf->error = true;
-            return false;
-        }
+        // Copy the bytes directly since we maintain MSB to LSB order
         memcpy(bits, buf->data + buf->pos, byte_count);
+        
+        // If we have a partial byte, ensure unused bits are cleared
+        if (max_bits % 8 != 0) {
+            uint8_t mask = 0xFF << unused_bits;
+            bits[byte_count - 1] &= mask;
+        }
+        
         buf->pos += byte_count;
     }
 
-    *bit_count = max_bits - unused_bits;
+    *bit_count = max_bits;
     return true;
 }
 
@@ -880,9 +905,139 @@ void free_test_struct(TestStruct *ts)
     }
 }
 
+// Test bitstring encoding and decoding
+void test_bitstring_codec(void)
+{
+    printf("\n--- Testing BitString Codec ---\n");
+
+    // Test cases with different bit lengths
+    struct {
+        uint8_t bits[3];     // Input bits
+        int bit_count;       // Number of bits to encode
+        bool should_pass;    // Whether test should pass
+        const char *desc;    // Test description
+    } tests[] = {
+        // 测试1：单个字节，8位全部使用 (10000001)
+        {{0x81, 0x00, 0x00}, 8, true, "Single byte (10000001)"},
+        
+        // 测试2：单个位在最左侧 (10000000)
+        {{0x80, 0x00, 0x00}, 1, true, "Single bit at MSB (1)"},
+        
+        // 测试3：12位跨两个字节 (101010101010)
+        {{0xAA, 0xA0, 0x00}, 12, true, "12 bits across two bytes (101010101010)"},
+        
+        // 测试4：16位完整两个字节 (1010010110100101)
+        {{0xA5, 0xA5, 0x00}, 16, true, "16 bits full two bytes (1010010110100101)"},
+        
+        // 测试5：24位三个字节 (111111110000000011111111)
+        {{0xFF, 0x00, 0xFF}, 24, true, "24 bits three bytes (111111110000000011111111)"},
+        
+        // 测试6：无效位数
+        {{0x00, 0x00, 0x00}, -1, false, "Invalid bit count"}
+    };
+
+    for (size_t i = 0; i < sizeof(tests)/sizeof(tests[0]); i++) {
+        printf("\nTest Case %zu: %s\n", i + 1, tests[i].desc);
+        
+        // Create encoder buffer
+        AxdrBuffer *enc_buf = axdr_buffer_new_encoder(32);
+        if (!enc_buf) {
+            printf("Failed to create encoder buffer\n");
+            continue;
+        }
+
+        // Encode
+        bool enc_result = axdr_encode_bitstring_fixed(enc_buf, tests[i].bits, tests[i].bit_count);
+        printf("Encoding %s\n", enc_result ? "succeeded" : "failed");
+        
+        if (enc_result != tests[i].should_pass) {
+            printf("Unexpected encoding result!\n");
+            axdr_buffer_free(enc_buf);
+            continue;
+        }
+
+        if (!enc_result) {
+            axdr_buffer_free(enc_buf);
+            continue;
+        }
+
+        // Print encoded data
+        printf("Encoded data (%zu bytes): ", enc_buf->pos);
+        for (size_t j = 0; j < enc_buf->pos; j++) {
+            printf("%02X ", enc_buf->data[j]);
+        }
+        printf("\n");
+
+        // Print bit pattern for verification
+        if (tests[i].bit_count > 0) {
+            printf("Bit pattern: ");
+            for (int j = 0; j < tests[i].bit_count; j++) {
+                int byte_index = j / 8;
+                int bit_index = 7 - (j % 8);  // Start from MSB
+                printf("%d", (tests[i].bits[byte_index] >> bit_index) & 0x01);
+                if ((j + 1) % 8 == 0) printf(" ");
+            }
+            printf("\n");
+        }
+
+        // Create decoder buffer
+        AxdrBuffer *dec_buf = axdr_buffer_new_decoder(enc_buf->data, enc_buf->pos);
+        if (!dec_buf) {
+            printf("Failed to create decoder buffer\n");
+            axdr_buffer_free(enc_buf);
+            continue;
+        }
+
+        // Decode
+        uint8_t decoded_bits[3] = {0};
+        int decoded_bit_count = 0;
+        bool dec_result = axdr_decode_bitstring_fixed(dec_buf, decoded_bits, &decoded_bit_count, tests[i].bit_count);
+        printf("Decoding %s\n", dec_result ? "succeeded" : "failed");
+
+        if (dec_result) {
+            // Print decoded bit pattern
+            printf("Decoded pattern: ");
+            for (int j = 0; j < decoded_bit_count; j++) {
+                int byte_index = j / 8;
+                int bit_index = 7 - (j % 8);  // Start from MSB
+                printf("%d", (decoded_bits[byte_index] >> bit_index) & 0x01);
+                if ((j + 1) % 8 == 0) printf(" ");
+            }
+            printf("\n");
+
+            // Verify results
+            bool match = true;
+            if (decoded_bit_count != tests[i].bit_count) {
+                match = false;
+            } else {
+                for (int j = 0; j < (decoded_bit_count + 7) / 8; j++) {
+                    uint8_t mask = 0xFF;
+                    if (j == (decoded_bit_count + 7) / 8 - 1) {
+                        int remaining_bits = decoded_bit_count % 8;
+                        if (remaining_bits != 0) {
+                            mask = 0xFF << (8 - remaining_bits);
+                        }
+                    }
+                    if ((decoded_bits[j] & mask) != (tests[i].bits[j] & mask)) {
+                        match = false;
+                        break;
+                    }
+                }
+            }
+            printf("Test %s\n", match ? "PASSED" : "FAILED");
+        }
+
+        axdr_buffer_free(enc_buf);
+        axdr_buffer_free(dec_buf);
+    }
+}
+
 void axdrtest(void)
 {
     printf("--- A-XDR Codec Test ---\n");
+
+    // Test bitstring codec first
+    test_bitstring_codec();
 
     // 1. 准备测试数据
     TestStruct original_data = { .int16_val = -12345, .uint16_val = 54321, .bool_val = true, .enum_val = 2, .bitstring_val = { 0xAB, 0xCD },
