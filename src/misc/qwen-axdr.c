@@ -381,43 +381,43 @@ bool axdr_encode_bitstring_fixed(AxdrBuffer *buf, const uint8_t *bits, int bit_c
  * @param max_bits - bits 缓冲区的最大位数
  * @return true if successful, false if error occurs
  ********************************************************************************************/
-bool axdr_decode_bitstring_fixed(AxdrBuffer *buf, uint8_t *bits, int *bit_count, int max_bits)
+bool axdr_decode_bitstring_fixed(AxdrBuffer *buf, uint8_t *bits, int *bit_count, int bitLengh)
 {
-    if (buf->error || !bits || !bit_count || max_bits < 0 || buf->pos + 1 > buf->size)
+    if (buf->error || !bits || !bit_count || bitLengh < 0 || buf->pos + 1 > buf->size)
         return false;
-
-    // Read unused bits count
-    int unused_bits = buf->data[buf->pos++];
-    if (unused_bits > 7) {
-        buf->error = true;
-        return false;
-    }
 
     // Calculate number of bytes needed
-    int byte_count = (max_bits + 7) / 8;
+    int byte_count = (bitLengh + 7) / 8;
     if (buf->pos + byte_count > buf->size) {
         buf->error = true;
         return false;
     }
 
     // Clear output buffer
-    memset(bits, 0, (max_bits + 7) / 8);
+    memset(bits, 0, (bitLengh + 7) / 8);
+
+    // Read unused bits count
+    int unused_bits = byte_count * 8 - bitLengh;
+    if (unused_bits > 7) {
+        buf->error = true;
+        return false;
+    }
 
     // Read the data
     if (byte_count > 0) {
         // Copy the bytes directly since we maintain MSB to LSB order
         memcpy(bits, buf->data + buf->pos, byte_count);
-        
+
         // If we have a partial byte, ensure unused bits are cleared
-        if (max_bits % 8 != 0) {
+        if (bitLengh % 8 != 0) {
             uint8_t mask = 0xFF << unused_bits;
             bits[byte_count - 1] &= mask;
         }
-        
+
         buf->pos += byte_count;
     }
 
-    *bit_count = max_bits;
+    *bit_count = bitLengh;
     return true;
 }
 

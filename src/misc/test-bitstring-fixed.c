@@ -46,7 +46,7 @@ void test_bitstring_fixed(void) {
     
     // Define test values
     TestValue test_values[] = {
-        {{0x80}, 1, "Single bit (1)"},                    // Just one bit set
+        {{0x80}, 1, "Single bit (1)"},                   // Just one bit set
         {{0x01}, 1, "Single bit (1 at end)"},            // Just one bit set at end
         {{0xFF}, 8, "All 8 bits set"},                   // All bits set
         {{0x00}, 8, "All 8 bits clear"},                 // All bits clear
@@ -94,25 +94,31 @@ void test_bitstring_fixed(void) {
             axdr_buffer_free(enc_buf);
             continue;
         }
-        
+
         // Decode value
         uint8_t decoded_bits[8] = {0};  // Clear output buffer
         int decoded_bit_count = 0;
         bool decode_result = axdr_decode_bitstring_fixed(dec_buf, decoded_bits, &decoded_bit_count, test_values[i].bit_count);
-        
+
         if (!decode_result) {
             printf("  FAILED: Decoding failed\n");
         } else {
             printf("  Decoded bits: ");
             print_bits(decoded_bits, (decoded_bit_count + 7) / 8);
             printf("(%d bits)\n", decoded_bit_count);
-            
+
             // Compare results
             bool match = (decoded_bit_count == test_values[i].bit_count);
             if (match) {
                 // Compare only the bytes that contain valid bits
-                int bytes_to_compare = (decoded_bit_count + 7) / 8;
-                match = (memcmp(decoded_bits, test_values[i].bits, bytes_to_compare) == 0);
+                for (int j = 0; j < test_values[i].bit_count; j++) {
+                    int byte_index = j / 8;
+                    int bit_index = 7 - (j % 8);  // MSB to LSB
+                    if (((decoded_bits[byte_index] >> bit_index) & 0x01) != ((test_values[i].bits[byte_index] >> bit_index) & 0x01)) {
+                        match = false;
+                        break;
+                    }
+                }
             }
             
             if (!match) {
@@ -133,9 +139,4 @@ void test_bitstring_fixed(void) {
     printf("Total tests: %d\n", test_count);
     printf("Passed: %d\n", passed);
     printf("Failed: %d\n", test_count - passed);
-}
-
-int main() {
-    test_bitstring_fixed();
-    return 0;
 }
