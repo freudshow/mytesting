@@ -25,16 +25,21 @@ AxdrBuffer* axdr_buffer_new_encoder(size_t initial_size)
 {
     AxdrBuffer *buf = malloc(sizeof(AxdrBuffer));
     if (!buf)
+    {
         return NULL;
+    }
+
     buf->data = malloc(initial_size);
     if (!buf->data)
     {
         free(buf);
         return NULL;
     }
+
     buf->size = initial_size;
     buf->pos = 0;
     buf->error = false;
+
     return buf;
 }
 
@@ -43,17 +48,22 @@ AxdrBuffer* axdr_buffer_new_decoder(uint8_t *data, size_t size)
 {
     AxdrBuffer *buf = malloc(sizeof(AxdrBuffer));
     if (!buf)
+    {
         return NULL;
+    }
+
     buf->data = malloc(size); // Create a copy of the data
     if (!buf->data)
     {
         free(buf);
         return NULL;
     }
+
     memcpy(buf->data, data, size); // Copy the data
     buf->size = size;
     buf->pos = 0;
     buf->error = false;
+
     return buf;
 }
 
@@ -68,6 +78,7 @@ void axdr_buffer_free(AxdrBuffer *buf)
             free(buf->data);
             buf->data = NULL; // 防止重复释放
         }
+
         free(buf);
     }
 }
@@ -76,13 +87,20 @@ void axdr_buffer_free(AxdrBuffer *buf)
 static bool ensure_capacity(AxdrBuffer *buf, size_t needed)
 {
     if (buf->error)
+    {
         return false;
+    }
+
     if (buf->pos + needed <= buf->size)
+    {
         return true;
+    }
 
     size_t new_size = buf->size * 2;
     while (new_size < buf->pos + needed)
+    {
         new_size *= 2;
+    }
 
     uint8_t *new_data = realloc(buf->data, new_size);
     if (!new_data)
@@ -90,8 +108,10 @@ static bool ensure_capacity(AxdrBuffer *buf, size_t needed)
         buf->error = true;
         return false;
     }
+
     buf->data = new_data;
     buf->size = new_size;
+
     return true;
 }
 
@@ -123,7 +143,9 @@ static bool check_integer_range(int64_t value, int byte_size) {
 bool axdr_encode_integer_fixed(AxdrBuffer *buf, int64_t value, int byte_size)
 {
     if (buf->error || byte_size <= 0 || byte_size > 8)
+    {
         return false;
+    }
 
     // Check if the value fits in the specified number of bytes
     if (!check_integer_range(value, byte_size)) {
@@ -343,7 +365,7 @@ bool axdr_decode_enumerated(AxdrBuffer *buf, int32_t *value)
  * @param bit_count - 位数
  * @return true if successful, false if error occurs
  *********************************************************************************************/
-bool axdr_encode_bitstring_fixed(AxdrBuffer *buf, const uint8_t *bits, int bit_count)
+bool axdr_encode_bitstring_fixed(AxdrBuffer *buf, const uint8_t *bits, int64_t bit_count)
 {
     if (buf->error || !bits || bit_count < 0)
         return false;
@@ -381,13 +403,13 @@ bool axdr_encode_bitstring_fixed(AxdrBuffer *buf, const uint8_t *bits, int bit_c
  * @param max_bits - bits 缓冲区的最大位数
  * @return true if successful, false if error occurs
  ********************************************************************************************/
-bool axdr_decode_bitstring_fixed(AxdrBuffer *buf, uint8_t *bits, int *bit_count, int bitLengh)
+bool axdr_decode_bitstring_fixed(AxdrBuffer *buf, uint8_t *bits, int64_t *bit_count, int64_t bitLengh)
 {
     if (buf->error || !bits || !bit_count || bitLengh < 0 || buf->pos + 1 > buf->size)
         return false;
 
     // Calculate number of bytes needed
-    int byte_count = (bitLengh + 7) / 8;
+    int64_t byte_count = (bitLengh + 7) / 8;
     if (buf->pos + byte_count > buf->size) {
         buf->error = true;
         return false;
@@ -422,19 +444,48 @@ bool axdr_decode_bitstring_fixed(AxdrBuffer *buf, uint8_t *bits, int *bit_count,
 }
 
 // 位串编码 (可变长度)
-bool axdr_encode_bitstring_var(AxdrBuffer *buf, const uint8_t *bits, int bit_count)
+bool axdr_encode_bitstring_var(AxdrBuffer *buf, const uint8_t *bits, int64_t bit_count)
 {
     if (buf->error || !bits || bit_count < 0)
         return false;
-    int byte_count = (bit_count + 7) / 8;
-    int unused_bits = (8 - (bit_count % 8)) % 8;
-    if (!axdr_encode_integer_fixed(buf, bit_count, 4)) // 使用4字节编码长度
+
+    int64_t byte_count = (bit_count + 7) / 8;
+    if (!axdr_encode_integer_var(buf, bit_count)) // 编码长度
         return false;
+
     if (!ensure_capacity(buf, 1 + byte_count))
         return false;
-    buf->data[buf->pos++] = unused_bits; // 第一个字节是未使用位数
-    memcpy(buf->data + buf->pos, bits, byte_count);
-    buf->pos += byte_count;
+
+    return axdr_encode_bitstring_fixed(buf, bits, bit_count);
+}
+
+bool axdr_decode_bitstring_var(AxdrBuffer *buf, const uint8_t *bits, uint64_t bits_buffer_size, int64_t *bit_count)
+{
+    if (buf->error || !bits || bits_buffer_size <= 0 || !bit_count)
+        return false;
+
+    int64_t len;
+    if (!axdr_decode_integer_var(buf, &len) || len < 0)
+    {
+        buf->error = true;
+        return false;
+    }
+
+    if (len > bits_buffer_size)
+    {
+        buf->error = true;
+        return false;
+    }
+
+    *bit_count = len;
+    bool result =  axdr_decode_bitstring_fixed(buf, (uint8_t*) bits, bit_count, len);
+
+    if (!result || len != *bit_count)
+    {
+        *bit_count = 0;
+        return false;
+    }
+
     return true;
 }
 
@@ -450,6 +501,8 @@ bool axdr_encode_octetstring_fixed(AxdrBuffer *buf, const uint8_t *octets, int o
     return true;
 }
 
+
+
 // 字节串编码 (可变长度)
 bool axdr_encode_octetstring_var(AxdrBuffer *buf, const uint8_t *octets, int octet_count)
 {
@@ -464,7 +517,14 @@ bool axdr_encode_octetstring_var(AxdrBuffer *buf, const uint8_t *octets, int oct
     return true;
 }
 
-// 字节串解码 (固定长度)
+/*********************************************************************************************
+ * 字节串解码 (固定长度)
+ *********************************************************************************************
+ * @param buf - 解码缓冲区
+ * @param octets - 指向存储解码结果的字节串缓冲区
+ * @param octet_count - 字节串长度
+ * @return true if successful, false if error occurs
+ *********************************************************************************************/
 bool axdr_decode_octetstring_fixed(AxdrBuffer *buf, uint8_t *octets, int octet_count)
 {
     if (buf->error || !octets || buf->pos + octet_count > buf->size)

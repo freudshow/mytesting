@@ -3,10 +3,10 @@
 #include <unistd.h>
 #include <string.h>
 
-void test_bitstring_fixed(void);
+void test_bitstring_var(void);
 
 int main(int argc, char **argv)
 {
-    test_bitstring_fixed();
+    test_bitstring_var();
     return 0;
 }
