@@ -6,8 +6,6 @@
 #include <assert.h>
 #include <time.h>
 
-// --- 1. 内存缓冲区和辅助函数 ---
-
 // 用于编码和解码的缓冲区结构
 typedef struct AxdrBufferStruct {
     uint8_t *data;
@@ -20,7 +18,13 @@ typedef struct AxdrBufferStruct {
     struct AxdrBufferStruct *children; // 子缓冲区指针，用于嵌套结构
 } AxdrBuffer;
 
-// 初始化编码缓冲区
+/*********************************************************************************************
+ * 初始化编码缓冲区
+ * -------------------------------------------------------------------------------------------
+ * @param [in] initial_size - 编码缓冲区的初始大小
+ * -------------------------------------------------------------------------------------------
+ * @return 成功 - 返回编码缓冲区指针; 失败 - 返回NULL
+ *********************************************************************************************/
 AxdrBuffer* axdr_buffer_new_encoder(size_t initial_size)
 {
     AxdrBuffer *buf = malloc(sizeof(AxdrBuffer));
@@ -43,7 +47,14 @@ AxdrBuffer* axdr_buffer_new_encoder(size_t initial_size)
     return buf;
 }
 
-// 初始化解码缓冲区
+/*********************************************************************************************
+ * 初始化解码缓冲区
+ * -------------------------------------------------------------------------------------------
+ * @param [in] data - 待解码的缓冲区指针
+ * @param [in] size - 待解码的缓冲区的大小
+ * -------------------------------------------------------------------------------------------
+ * @return 成功 - 返回解码缓冲区指针; 失败 - 返回NULL
+ *********************************************************************************************/
 AxdrBuffer* axdr_buffer_new_decoder(uint8_t *data, size_t size)
 {
     AxdrBuffer *buf = malloc(sizeof(AxdrBuffer));
@@ -52,14 +63,14 @@ AxdrBuffer* axdr_buffer_new_decoder(uint8_t *data, size_t size)
         return NULL;
     }
 
-    buf->data = malloc(size); // Create a copy of the data
+    buf->data = malloc(size);
     if (!buf->data)
     {
         free(buf);
         return NULL;
     }
 
-    memcpy(buf->data, data, size); // Copy the data
+    memcpy(buf->data, data, size); // 复制数据到新的缓冲区
     buf->size = size;
     buf->pos = 0;
     buf->error = false;
@@ -67,7 +78,13 @@ AxdrBuffer* axdr_buffer_new_decoder(uint8_t *data, size_t size)
     return buf;
 }
 
-// 释放缓冲区
+/*********************************************************************************************
+ * 释放缓冲区
+ * -------------------------------------------------------------------------------------------
+ * @param [in] buf - 编/解码器的指针
+ * -------------------------------------------------------------------------------------------
+ * @return 无
+ *********************************************************************************************/
 void axdr_buffer_free(AxdrBuffer *buf)
 {
     if (buf)
@@ -83,7 +100,14 @@ void axdr_buffer_free(AxdrBuffer *buf)
     }
 }
 
-// 确保编码缓冲区有足够的空间
+/*********************************************************************************************
+ * 确保编码缓冲区有足够的空间
+ * -------------------------------------------------------------------------------------------
+ * @param [in] buf - 编码缓冲区
+ * @param [out] needed - 需要的缓冲区大小
+ * -------------------------------------------------------------------------------------------
+ * @return 成功 - 返回 true; 失败 - 返回 false
+ *********************************************************************************************/
 static bool ensure_capacity(AxdrBuffer *buf, size_t needed)
 {
     if (buf->error)
@@ -115,30 +139,47 @@ static bool ensure_capacity(AxdrBuffer *buf, size_t needed)
     return true;
 }
 
-// --- 2. 基本类型编解码 ---
-
-// Helper function to check if a value fits in the given number of bytes
-static bool check_integer_range(int64_t value, int byte_size) {
-    switch (byte_size) {
-        case 1: return (value >= -128 && value <= 127);
-        case 2: return (value >= -32768 && value <= 32767);
-        case 3: return (value >= -8388608 && value <= 8388607);
-        case 4: return (value >= -2147483648LL && value <= 2147483647LL);
-        case 5: return (value >= -549755813888LL && value <= 549755813887LL);
-        case 6: return (value >= -140737488355328LL && value <= 140737488355327LL);
-        case 7: return (value >= -36028797018963968LL && value <= 36028797018963967LL);
-        case 8: return true; // 8 bytes can hold any int64_t value
-        default: return false;
+/*********************************************************************************************
+ * 检查整数值是否在指定字节范围内
+ * -------------------------------------------------------------------------------------------
+ * @param [in] value - 整数值
+ * @param [out] byte_size - 整数占用的字节数
+ * -------------------------------------------------------------------------------------------
+ * @return 在指定字节范围内 - 返回 true; 不在指定字节范围内 - 返回 false
+ *********************************************************************************************/
+static bool check_integer_range(int64_t value, int byte_size)
+{
+    switch (byte_size)
+    {
+        case 1:
+            return (value >= -128 && value <= 127);
+        case 2:
+            return (value >= -32768 && value <= 32767);
+        case 3:
+            return (value >= -8388608 && value <= 8388607);
+        case 4:
+            return (value >= -2147483648LL && value <= 2147483647LL);
+        case 5:
+            return (value >= -549755813888LL && value <= 549755813887LL);
+        case 6:
+            return (value >= -140737488355328LL && value <= 140737488355327LL);
+        case 7:
+            return (value >= -36028797018963968LL && value <= 36028797018963967LL);
+        case 8:
+            return true; // 8 字节可以表示所有 int64_t 值
+        default:
+            return false;
     }
 }
 
 /*********************************************************************************************
  * 有符号整型编码 (固定长度)
- *********************************************************************************************
- * @param buf - 编码缓冲区
- * @param value - 要编码的整数值
- * @param byte_size - 指定整数的字节大小 (1-8)
- * @return true if successful, false if error occurs
+ * -------------------------------------------------------------------------------------------
+ * @param [in] buf - 编码缓冲区
+ * @param [in] value - 要编码的整数值
+ * @param [in] byte_size - 指定整数的字节大小 (1-8)
+ * -------------------------------------------------------------------------------------------
+ * @return 成功 - 返回 true; 失败 - 返回 false
  *********************************************************************************************/
 bool axdr_encode_integer_fixed(AxdrBuffer *buf, int64_t value, int byte_size)
 {
@@ -148,35 +189,44 @@ bool axdr_encode_integer_fixed(AxdrBuffer *buf, int64_t value, int byte_size)
     }
 
     // Check if the value fits in the specified number of bytes
-    if (!check_integer_range(value, byte_size)) {
+    if (!check_integer_range(value, byte_size))
+    {
         buf->error = true;
         return false;
     }
 
     if (!ensure_capacity(buf, byte_size))
+    {
         return false;
+    }
 
     // Write bytes in big-endian order
-    for (int i = byte_size - 1; i >= 0; i--) {
+    for (int i = byte_size - 1; i >= 0; i--)
+    {
         buf->data[buf->pos++] = (value >> (i * 8)) & 0xFF;
     }
+
     return true;
 }
 
 /*********************************************************************************************
  * 有符号整型解码 (固定长度)
- *********************************************************************************************
- * @param buf - 解码缓冲区
- * @param value - 指向存储解码结果的整数指针
- * @param byte_size - 指定整数的字节大小 (1-8)
- * @return true if successful, false if error occurs
+ * -------------------------------------------------------------------------------------------
+ * @param [in] buf - 解码缓冲区
+ * @param [out] value - 指向存储解码结果的整数指针
+ * @param [in] byte_size - 指定整数的字节大小 (1-8)
+ * -------------------------------------------------------------------------------------------
+ * @return 成功 - 返回 true; 失败 - 返回 false
  *********************************************************************************************/
 bool axdr_decode_integer_fixed(AxdrBuffer *buf, int64_t *value, int byte_size)
 {
     if (buf->error || !value || byte_size <= 0 || byte_size > 8)
+    {
         return false;
+    }
 
-    if (buf->pos + byte_size > buf->size) {
+    if (buf->pos + byte_size > buf->size)
+    {
         buf->error = true;
         return false;
     }
@@ -187,44 +237,73 @@ bool axdr_decode_integer_fixed(AxdrBuffer *buf, int64_t *value, int byte_size)
     bool is_negative = (first_byte & 0x80) != 0;
 
     // Handle sign extension properly based on byte_size
-    if (is_negative) {
+    if (is_negative)
+    {
         result = -1LL; // Start with all bits set for negative numbers
     }
 
-    for (int i = 0; i < byte_size; i++) {
+    for (int i = 0; i < byte_size; i++)
+    {
         result = (result << 8) | buf->data[buf->pos++];
     }
 
     // Verify the decoded value is within range for the given byte size
-    if (!check_integer_range(result, byte_size)) {
+    if (!check_integer_range(result, byte_size))
+    {
         buf->error = true;
         return false;
     }
 
     *value = result;
+
     return true;
 }
 
-// 无符号整型编码 (固定长度)
+/*********************************************************************************************
+ * 无符号整型编码 (固定长度)
+ * -------------------------------------------------------------------------------------------
+ * @param [in] buf - 解码缓冲区
+ * @param [in] value - 要编码的整数值
+ * @param [in] byte_size - 指定整数的字节大小 (1-8)
+ * -------------------------------------------------------------------------------------------
+ * @return 成功 - 返回 true; 失败 - 返回 false
+ *********************************************************************************************/
 bool axdr_encode_unsigned_fixed(AxdrBuffer *buf, uint64_t value, int byte_size)
 {
     if (buf->error || byte_size <= 0 || byte_size > 8)
+    {
         return false;
+    }
+
     if (!ensure_capacity(buf, byte_size))
+    {
         return false;
+    }
 
     for (int i = byte_size - 1; i >= 0; i--)
     {
         buf->data[buf->pos++] = (value >> (i * 8)) & 0xFF;
     }
+
     return true;
 }
 
-// 无符号整型解码 (固定长度)
+/*********************************************************************************************
+ * 无符号整型解码 (固定长度)
+ * -------------------------------------------------------------------------------------------
+ * @param [in] buf - 解码缓冲区
+ * @param [out] value - 指向存储解码结果的整数指针
+ * @param [in] byte_size - 指定整数的字节大小 (1-8)
+ * -------------------------------------------------------------------------------------------
+ * @return 成功 - 返回 true; 失败 - 返回 false
+ *********************************************************************************************/
 bool axdr_decode_unsigned_fixed(AxdrBuffer *buf, uint64_t *value, int byte_size)
 {
     if (buf->error || !value || byte_size <= 0 || byte_size > 8)
+    {
         return false;
+    }
+
     if (buf->pos + byte_size > buf->size)
     {
         buf->error = true;
@@ -236,20 +315,31 @@ bool axdr_decode_unsigned_fixed(AxdrBuffer *buf, uint64_t *value, int byte_size)
     {
         *value = (*value << 8) | buf->data[buf->pos++];
     }
+
     return true;
 }
 
-// 可变长度整型编码 (A-XDR规则)
+/*********************************************************************************************
+ * 可变长度整型编码 (A-XDR规则, 使用2's补码)
+ * -------------------------------------------------------------------------------------------
+ * @param [in] buf - 编码缓冲区
+ * @param [in] value - 要编码的整数值
+ * -------------------------------------------------------------------------------------------
+ * @return 成功 - 返回 true; 失败 - 返回 false
+ *********************************************************************************************/
 bool axdr_encode_integer_var(AxdrBuffer *buf, int64_t value)
 {
     if (buf->error)
+    {
         return false;
+    }
 
     // Case 1: Values 0-127 encoded directly in one byte
-    if (value >= 0 && value <= 127) {
+    if (value >= 0 && value <= 127)
+    {
         if (!ensure_capacity(buf, 1))
             return false;
-        buf->data[buf->pos++] = (uint8_t)value;
+        buf->data[buf->pos++] = (uint8_t) value;
         return true;
     }
 
@@ -257,57 +347,74 @@ bool axdr_encode_integer_var(AxdrBuffer *buf, int64_t value)
     // First determine minimum bytes needed for value in 2's complement
     uint8_t needed_bytes = 1;
     int64_t temp = (value < 0) ? ~value : value;
-    
-    while (temp > 127 || temp < -128) {
+
+    while (temp > 127 || temp < -128)
+    {
         needed_bytes++;
         temp >>= 8;
     }
 
     // Ensure we have enough space for length byte + value bytes
     if (!ensure_capacity(buf, needed_bytes + 1))
+    {
         return false;
+    }
 
     // Write length byte (MSB=1 to indicate length byte)
     buf->data[buf->pos++] = 0x80 | needed_bytes;
 
     // Write value bytes in big-endian order
-    for (int i = needed_bytes - 1; i >= 0; i--) {
+    for (int i = needed_bytes - 1; i >= 0; i--)
+    {
         buf->data[buf->pos++] = (value >> (i * 8)) & 0xFF;
     }
 
     return true;
 }
 
-// 可变长度整型解码 (A-XDR规则)
+/*********************************************************************************************
+ * 可变长度整型解码 (A-XDR规则, 使用2's补码)
+ * -------------------------------------------------------------------------------------------
+ * @param [in] buf - 解码缓冲区
+ * @param [out] value - 解码得到的整数值
+ * -------------------------------------------------------------------------------------------
+ * @return 成功 - 返回 true; 失败 - 返回 false
+ *********************************************************************************************/
 bool axdr_decode_integer_var(AxdrBuffer *buf, int64_t *value)
 {
     if (buf->error || !value || buf->pos >= buf->size)
+    {
         return false;
+    }
 
     // Read first byte
     uint8_t first_byte = buf->data[buf->pos++];
-    
+
     // Case 1: Values 0-127 are encoded directly
-    if ((first_byte & 0x80) == 0) {
+    if ((first_byte & 0x80) == 0)
+    {
         *value = first_byte;
         return true;
     }
-    
+
     // Case 2: First byte with MSB=1 indicates length
     uint8_t length = first_byte & 0x7F;
-    if (length > 8 || buf->pos + length > buf->size) {
+    if (length > 8 || buf->pos + length > buf->size)
+    {
         buf->error = true;
         return false;
     }
 
     // Read the value bytes in big-endian order
     int64_t result = 0;
-    for (int i = 0; i < length; i++) {
+    for (int i = 0; i < length; i++)
+    {
         result = (result << 8) | buf->data[buf->pos++];
     }
 
     // Handle sign extension if needed
-    if (length < 8 && (result & (1LL << ((length * 8) - 1)))) {
+    if (length < 8 && (result & (1LL << ((length * 8) - 1))))
+    {
         result |= ~((1LL << (length * 8)) - 1);
     }
 
@@ -315,75 +422,125 @@ bool axdr_decode_integer_var(AxdrBuffer *buf, int64_t *value)
     return true;
 }
 
-// 布尔型编码
+/*********************************************************************************************
+ * 布尔型编码
+ * -------------------------------------------------------------------------------------------
+ * @param [in] buf - 编码缓冲区
+ * @param [in] value - 要编码的布尔值
+ * -------------------------------------------------------------------------------------------
+ * @return 成功 - 返回 true; 失败 - 返回 false
+ *********************************************************************************************/
 bool axdr_encode_boolean(AxdrBuffer *buf, bool value)
 {
     if (buf->error)
+    {
         return false;
+    }
+
     if (!ensure_capacity(buf, 1))
+    {
         return false;
+    }
+
     buf->data[buf->pos++] = value ? 0xFF : 0x00; // 标准建议非零为真
+
     return true;
 }
 
-// 布尔型解码
+/*********************************************************************************************
+ * 布尔型解码
+ * -------------------------------------------------------------------------------------------
+ * @param [in] buf - 解码缓冲区
+ * @param [out] value - 解码得到的布尔值
+ * -------------------------------------------------------------------------------------------
+ * @return 成功 - 返回 true; 失败 - 返回 false
+ *********************************************************************************************/
 bool axdr_decode_boolean(AxdrBuffer *buf, bool *value)
 {
     if (buf->error || !value || buf->pos >= buf->size)
     {
         if (buf->pos >= buf->size)
+        {
             buf->error = true;
+        }
+
         return false;
     }
+
     *value = (buf->data[buf->pos++] != 0);
+
     return true;
 }
 
-// 枚举型编码 (作为整型编码)
+/*********************************************************************************************
+ * 枚举型编码 (作为整型编码)
+ * -------------------------------------------------------------------------------------------
+ * @param [in] buf - 编码缓冲区
+ * @param [in] value - 要编码的枚举值
+ * -------------------------------------------------------------------------------------------
+ * @return 成功 - 返回 true; 失败 - 返回 false
+ *********************************************************************************************/
 bool axdr_encode_enumerated(AxdrBuffer *buf, int32_t value)
 {
     // 通常枚举值较小，使用固定长度或可变长度整型编码
-    // 这里假设使用固定2字节编码，符合DLMS常见实践
-    return axdr_encode_integer_fixed(buf, value, 2);
+    // 这里假设使用固定1字节编码
+    return axdr_encode_integer_fixed(buf, value, 1);
 }
 
-// 枚举型解码
+/*********************************************************************************************
+ * 枚举型解码
+ * -------------------------------------------------------------------------------------------
+ * @param [in] buf - 解码缓冲区
+ * @param [out] value - 指向存储解码结果的指针
+ * -------------------------------------------------------------------------------------------
+ * @return 成功 - 返回 true; 失败 - 返回 false
+ *********************************************************************************************/
 bool axdr_decode_enumerated(AxdrBuffer *buf, int32_t *value)
 {
     int64_t tmp;
-    bool res = axdr_decode_integer_fixed(buf, &tmp, 2);
+    bool res = axdr_decode_integer_fixed(buf, &tmp, 1);
     if (res && value)
+    {
         *value = (int32_t) tmp;
+    }
+
     return res;
 }
 
 /**********************************************************************************************
  * 编码固定长度的位串
- * ********************************************************************************************
- * @param buf - 编码缓冲区
- * @param bits - 指向位串数据的指针
- * @param bit_count - 位数
- * @return true if successful, false if error occurs
+ * --------------------------------------------------------------------------------------------
+ * @param [in] buf - 编码缓冲区
+ * @param [in] bits - 指向位串数据的指针
+ * @param [in] bit_count - 位数
+ * --------------------------------------------------------------------------------------------
+ * @return 成功 - 返回 true; 失败 - 返回 false
  *********************************************************************************************/
 bool axdr_encode_bitstring_fixed(AxdrBuffer *buf, const uint8_t *bits, int64_t bit_count)
 {
     if (buf->error || !bits || bit_count < 0)
+    {
         return false;
+    }
 
     int byte_count = (bit_count + 7) / 8;  // Round up to nearest byte
     int unused_bits = (8 - (bit_count % 8)) % 8;
 
     if (!ensure_capacity(buf, byte_count + 1))
+    {
         return false;
+    }
 
     // Write bit string bytes
-    if (byte_count > 0) {
+    if (byte_count > 0)
+    {
         // Copy the bytes directly since we want MSB to LSB order
         memcpy(buf->data + buf->pos, bits, byte_count);
 
         // If we have a partial byte at the end, mask off unused bits
         // The bits should be right-aligned in the last byte
-        if (bit_count % 8 != 0) {
+        if (bit_count % 8 != 0)
+        {
             uint8_t mask = 0xFF << unused_bits;
             buf->data[buf->pos + byte_count - 1] &= mask;
         }
@@ -396,21 +553,25 @@ bool axdr_encode_bitstring_fixed(AxdrBuffer *buf, const uint8_t *bits, int64_t b
 
 /*********************************************************************************************
  * 位串解码 (固定长度)
- * *******************************************************************************************
- * @param buf - 解码缓冲区
- * @param bits - 指向存储解码结果的位串缓冲区
- * @param bit_count - 指向存储实际位数的整数指针
- * @param max_bits - bits 缓冲区的最大位数
- * @return true if successful, false if error occurs
+ * -------------------------------------------------------------------------------------------
+ * @param [in] buf - 解码缓冲区
+ * @param [out] bits - 指向存储解码结果的位串缓冲区
+ * @param [out] bit_count - 实际解码的bit的位数
+ * @param [in] bitLengh - bit的位数
+ * -------------------------------------------------------------------------------------------
+ * @return 成功 - 返回 true; 失败 - 返回 false
  ********************************************************************************************/
 bool axdr_decode_bitstring_fixed(AxdrBuffer *buf, uint8_t *bits, int64_t *bit_count, int64_t bitLengh)
 {
     if (buf->error || !bits || !bit_count || bitLengh < 0 || buf->pos + 1 > buf->size)
+    {
         return false;
+    }
 
     // Calculate number of bytes needed
     int64_t byte_count = (bitLengh + 7) / 8;
-    if (buf->pos + byte_count > buf->size) {
+    if (buf->pos + byte_count > buf->size)
+    {
         buf->error = true;
         return false;
     }
@@ -420,18 +581,21 @@ bool axdr_decode_bitstring_fixed(AxdrBuffer *buf, uint8_t *bits, int64_t *bit_co
 
     // Read unused bits count
     int unused_bits = byte_count * 8 - bitLengh;
-    if (unused_bits > 7) {
+    if (unused_bits > 7)
+    {
         buf->error = true;
         return false;
     }
 
     // Read the data
-    if (byte_count > 0) {
+    if (byte_count > 0)
+    {
         // Copy the bytes directly since we maintain MSB to LSB order
         memcpy(bits, buf->data + buf->pos, byte_count);
 
         // If we have a partial byte, ensure unused bits are cleared
-        if (bitLengh % 8 != 0) {
+        if (bitLengh % 8 != 0)
+        {
             uint8_t mask = 0xFF << unused_bits;
             bits[byte_count - 1] &= mask;
         }
@@ -440,29 +604,60 @@ bool axdr_decode_bitstring_fixed(AxdrBuffer *buf, uint8_t *bits, int64_t *bit_co
     }
 
     *bit_count = bitLengh;
+
     return true;
 }
 
-// 位串编码 (可变长度)
+/*********************************************************************************************
+ * 可变长度的位串编码
+ * -------------------------------------------------------------------------------------------
+ * @param [in] buf - 编码缓冲区
+ * @param [in] bits - 指向待编码的位串缓冲区
+ * @param [in] bit_count - 要编码的位串长度
+ * -------------------------------------------------------------------------------------------
+ * @return 成功 - 返回 true; 失败 - 返回 false
+ *********************************************************************************************/
 bool axdr_encode_bitstring_var(AxdrBuffer *buf, const uint8_t *bits, int64_t bit_count)
 {
     if (buf->error || !bits || bit_count < 0)
+    {
         return false;
+    }
 
     int64_t byte_count = (bit_count + 7) / 8;
-    if (!axdr_encode_integer_var(buf, bit_count)) // 编码长度
-        return false;
 
+    // 编码长度
+    if (!axdr_encode_integer_var(buf, bit_count))
+    {
+        return false;
+    }
+
+    // 确保缓冲区有足够的空间
     if (!ensure_capacity(buf, 1 + byte_count))
+    {
         return false;
+    }
 
+    // 编码位串
     return axdr_encode_bitstring_fixed(buf, bits, bit_count);
 }
 
+/*********************************************************************************************
+ * 可变长度位串解码
+ * -------------------------------------------------------------------------------------------
+ * @param [in] buf - 解码缓冲区
+ * @param [out] bits - 指向存储解码结果的位串缓冲区
+ * @param [in] bits_buffer_size - 解码缓冲区的最大长度
+ * @param [in] bit_count - 解码得到的位串位数
+ * -------------------------------------------------------------------------------------------
+ * @return 成功 - 返回 true; 失败 - 返回 false
+ ********************************************************************************************/
 bool axdr_decode_bitstring_var(AxdrBuffer *buf, const uint8_t *bits, uint64_t bits_buffer_size, int64_t *bit_count)
 {
     if (buf->error || !bits || bits_buffer_size <= 0 || !bit_count)
+    {
         return false;
+    }
 
     int64_t len;
     if (!axdr_decode_integer_var(buf, &len) || len < 0)
@@ -479,8 +674,7 @@ bool axdr_decode_bitstring_var(AxdrBuffer *buf, const uint8_t *bits, uint64_t bi
 
     *bit_count = len;
     bool result =  axdr_decode_bitstring_fixed(buf, (uint8_t*) bits, bit_count, len);
-
-    if (!result || len != *bit_count)
+    if (!result || len != *bit_count || (len + 7) / 8 > bits_buffer_size)
     {
         *bit_count = 0;
         return false;
@@ -489,22 +683,35 @@ bool axdr_decode_bitstring_var(AxdrBuffer *buf, const uint8_t *bits, uint64_t bi
     return true;
 }
 
-// 字节串编码 (固定长度)
-bool axdr_encode_octetstring_fixed(AxdrBuffer *buf, const uint8_t *octets, int octet_count)
+/*********************************************************************************************
+ * 固定长度字节串编码
+ * -------------------------------------------------------------------------------------------
+ * @param [in] buf - 编码缓冲区
+ * @param [in] octets - 要编码的字节串
+ * @param [in] octet_count - 字节串长度
+ * -------------------------------------------------------------------------------------------
+ * @return 成功 - 返回 true; 失败 - 返回 false
+ *********************************************************************************************/
+bool axdr_encode_octetstring_fixed(AxdrBuffer *buf, const uint8_t *octets, uint64_t octet_count)
 {
     if (buf->error || !octets || octet_count < 0)
+    {
         return false;
+    }
+
     if (!ensure_capacity(buf, octet_count))
+    {
         return false;
+    }
+
     memcpy(buf->data + buf->pos, octets, octet_count);
     buf->pos += octet_count;
+
     return true;
 }
 
-
-
 // 字节串编码 (可变长度)
-bool axdr_encode_octetstring_var(AxdrBuffer *buf, const uint8_t *octets, int octet_count)
+bool axdr_encode_octetstring_var(AxdrBuffer *buf, const uint8_t *octets, uint64_t octet_count)
 {
     if (buf->error || !octets || octet_count < 0)
         return false;
@@ -525,7 +732,7 @@ bool axdr_encode_octetstring_var(AxdrBuffer *buf, const uint8_t *octets, int oct
  * @param octet_count - 字节串长度
  * @return true if successful, false if error occurs
  *********************************************************************************************/
-bool axdr_decode_octetstring_fixed(AxdrBuffer *buf, uint8_t *octets, int octet_count)
+bool axdr_decode_octetstring_fixed(AxdrBuffer *buf, uint8_t *octets, uint64_t octet_count)
 {
     if (buf->error || !octets || buf->pos + octet_count > buf->size)
     {
@@ -539,7 +746,7 @@ bool axdr_decode_octetstring_fixed(AxdrBuffer *buf, uint8_t *octets, int octet_c
 }
 
 // 字节串解码 (可变长度)
-bool axdr_decode_octetstring_var(AxdrBuffer *buf, uint8_t **octets, int *octet_count)
+bool axdr_decode_octetstring_var(AxdrBuffer *buf, uint8_t **octets, uint64_t *octet_count)
 {
     if (buf->error || !octets || !octet_count)
         return false;

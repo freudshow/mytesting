@@ -26,24 +26,31 @@ bool axdr_decode_bitstring_fixed(AxdrBuffer *buf, uint8_t *bits, uint64_t *bit_c
 bool axdr_encode_bitstring_var(AxdrBuffer *buf, const uint8_t *bits, uint64_t bit_count);
 bool axdr_decode_bitstring_var(AxdrBuffer *buf, const uint8_t *bits, uint64_t bits_buffer_size, int64_t *bit_count);
 
+#define BITS_BUFFER_SIZE 1024       // Size of the bit buffer for testing
 // Test values as a struct for easier iteration
 typedef struct {
-    uint8_t bits[1024];     // Input bit string bytes
-    int64_t bit_count;       // Number of bits to encode
-    const char* description;
+    uint8_t bits[BITS_BUFFER_SIZE]; // Input bit string bytes
+    int64_t bit_count;              // Number of bits to encode
+    const char* description;        // Description of the test case
 } TestValue;
 
 // Helper function to print bits
-void print_bits(const uint8_t *data, int byte_count) {
-    for (int i = 0; i < byte_count; i++) {
-        for (int j = 7; j >= 0; j--) {
+void print_bits(const uint8_t *data, int byte_count)
+
+{
+    for (int i = 0; i < byte_count; i++)
+    {
+        for (int j = 7; j >= 0; j--)
+        {
             printf("%d", (data[i] >> j) & 1);
         }
+
         printf(" ");
     }
 }
 
-void test_bitstring_fixed(void) {
+void test_bitstring_fixed(void)
+{
     printf("\n=== Testing axdr_encode/decode_bitstring_fixed ===\n\n");
     
     // Define test values
@@ -60,83 +67,97 @@ void test_bitstring_fixed(void) {
     
     int test_count = sizeof(test_values) / sizeof(TestValue);
     int passed = 0;
-    
-    for (int i = 0; i < test_count; i++) {
+
+    for (int i = 0; i < test_count; i++)
+    {
         printf("Test case %d: %s\n", i + 1, test_values[i].description);
         printf("  Input bits:  ");
         print_bits(test_values[i].bits, (test_values[i].bit_count + 7) / 8);
         printf("(%ld bits)\n", test_values[i].bit_count);
-        
+
         // Create encoder buffer
         AxdrBuffer *enc_buf = axdr_buffer_new_encoder(64);
-        if (!enc_buf) {
+        if (!enc_buf)
+        {
             printf("Failed to create encoder buffer\n");
             continue;
         }
-        
+
         // Encode value
         bool encode_result = axdr_encode_bitstring_fixed(enc_buf, test_values[i].bits, test_values[i].bit_count);
-        if (!encode_result) {
+        if (!encode_result)
+        {
             printf("  FAILED: Encoding failed\n");
             axdr_buffer_free(enc_buf);
             continue;
         }
-        
+
         // Print encoded bytes
         printf("  Encoded (%zu bytes): ", enc_buf->pos);
-        for (size_t j = 0; j < enc_buf->pos; j++) {
+        for (size_t j = 0; j < enc_buf->pos; j++)
+        {
             printf("%02X ", enc_buf->data[j]);
         }
         printf("\n");
-        
+
         // Create decoder buffer
         AxdrBuffer *dec_buf = axdr_buffer_new_decoder(enc_buf->data, enc_buf->pos);
-        if (!dec_buf) {
+        if (!dec_buf)
+        {
             printf("  FAILED: Could not create decoder buffer\n");
             axdr_buffer_free(enc_buf);
             continue;
         }
 
         // Decode value
-        uint8_t decoded_bits[8] = {0};  // Clear output buffer
+        uint8_t decoded_bits[BITS_BUFFER_SIZE] = { 0 };  // Clear output buffer
         uint64_t decoded_bit_count = 0;
         bool decode_result = axdr_decode_bitstring_fixed(dec_buf, decoded_bits, &decoded_bit_count, test_values[i].bit_count);
 
-        if (!decode_result) {
+        if (!decode_result)
+        {
             printf("  FAILED: Decoding failed\n");
-        } else {
+        }
+        else
+        {
             printf("  Decoded bits: ");
             print_bits(decoded_bits, (decoded_bit_count + 7) / 8);
             printf("(%ld bits)\n", decoded_bit_count);
 
             // Compare results
             bool match = (decoded_bit_count == test_values[i].bit_count);
-            if (match) {
+            if (match)
+            {
                 // Compare only the bytes that contain valid bits
-                for (int j = 0; j < test_values[i].bit_count; j++) {
+                for (int j = 0; j < test_values[i].bit_count; j++)
+                {
                     int byte_index = j / 8;
                     int bit_index = 7 - (j % 8);  // MSB to LSB
-                    if (((decoded_bits[byte_index] >> bit_index) & 0x01) != ((test_values[i].bits[byte_index] >> bit_index) & 0x01)) {
+                    if (((decoded_bits[byte_index] >> bit_index) & 0x01) != ((test_values[i].bits[byte_index] >> bit_index) & 0x01))
+                    {
                         match = false;
                         break;
                     }
                 }
             }
-            
-            if (!match) {
+
+            if (!match)
+            {
                 printf("  FAILED: Decoded bits don't match input\n");
-            } else {
+            }
+            else
+            {
                 printf("  PASSED: Successfully encoded and decoded bits\n");
                 passed++;
             }
         }
-        
+
         // Cleanup
         axdr_buffer_free(enc_buf);
         axdr_buffer_free(dec_buf);
         printf("\n");
     }
-    
+
     printf("=== Test Summary ===\n");
     printf("Total tests: %d\n", test_count);
     printf("Passed: %d\n", passed);
@@ -172,6 +193,7 @@ void test_bitstring_var(void)
     };
 
     int test_count = sizeof(test_values) / sizeof(TestValue);
+    int passed = 0;
 
     for (int i = 0; i < test_count; i++)
     {
@@ -215,7 +237,7 @@ void test_bitstring_var(void)
         }
 
         // Decode value
-        uint8_t decoded_bits[1024] = { 0 }; // Clear output buffer
+        uint8_t decoded_bits[BITS_BUFFER_SIZE] = { 0 }; // Clear output buffer
         int64_t decoded_bit_count = 0;
         bool decode_result = axdr_decode_bitstring_var(dec_buf, decoded_bits, sizeof(decoded_bits), &decoded_bit_count);
 
@@ -252,8 +274,14 @@ void test_bitstring_var(void)
             }
             else
             {
+                passed++;
                 printf("  PASSED: Successfully encoded and decoded bits\n");
             }
         }
     }
+
+    printf("=== Test Summary ===\n");
+    printf("Total tests: %d\n", test_count);
+    printf("Passed: %d\n", passed);
+    printf("Failed: %d\n", test_count - passed);
 }
