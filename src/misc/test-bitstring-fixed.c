@@ -284,6 +284,10 @@ void test_bitstring_var(void)
                 printf("  PASSED: Successfully encoded and decoded bits\n");
             }
         }
+
+        // Cleanup
+        axdr_buffer_free(enc_buf);
+        axdr_buffer_free(dec_buf);
     }
 
     printf("=== Test Summary ===\n");
@@ -398,6 +402,10 @@ void testOctetStringFixed(void)
                 printf("  PASSED: Successfully encoded and decoded octet string\n");
             }
         }
+
+        // Cleanup
+        axdr_buffer_free(enc_buf);
+        axdr_buffer_free(dec_buf);
     }
 
     printf("=== Test Summary ===\n");
@@ -560,6 +568,10 @@ void testOctetStringVariable(void)
                 printf("  PASSED: Successfully encoded and decoded octet string\n");
             }
         }
+
+        // Cleanup
+        axdr_buffer_free(enc_buf);
+        axdr_buffer_free(dec_buf);
     }
 
     printf("=== Test Summary ===\n");

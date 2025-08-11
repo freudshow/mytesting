@@ -815,22 +815,32 @@ bool axdr_decode_octetstring_var(AxdrBuffer *buf, uint8_t **octets, int64_t *oct
     return true;
 }
 
-// 可视串编码 (作为可变长度字节串)
+/*********************************************************************************************
+ * 可视串编码 (作为可变长度字节串)
+ * -------------------------------------------------------------------------------------------
+ * @param [in] buf - 编码缓冲区
+ * @param [in] str - 要编码的可视字符串
+ * -------------------------------------------------------------------------------------------
+ * @return 成功 - 返回 true; 失败 - 返回 false
+ *********************************************************************************************/
 bool axdr_encode_visiblestring(AxdrBuffer *buf, const char *str)
 {
-    if (!str)
-    {
-        str = ""; // 处理 NULL 指针
-    }
-
     return axdr_encode_octetstring_var(buf, (const uint8_t*) str, strlen(str));
 }
 
-// 可视串解码 (作为可变长度字节串)
+/*********************************************************************************************
+ * 可视串解码
+ * -------------------------------------------------------------------------------------------
+ * @param [in] buf - 解码缓冲区
+ * @param [out] str - 指向存储解码结果的字符串指针
+ * -------------------------------------------------------------------------------------------
+ * @return 成功 - 返回 true; 失败 - 返回 false
+ *********************************************************************************************/
 bool axdr_decode_visiblestring(AxdrBuffer *buf, char **str)
 {
     uint8_t *tmp_str = NULL;
     int64_t len;
+
     bool res = axdr_decode_octetstring_var(buf, &tmp_str, &len);
     if (res)
     {
@@ -844,7 +854,10 @@ bool axdr_decode_visiblestring(AxdrBuffer *buf, char **str)
         {
             buf->error = true;
         }
+    }
 
+    if (tmp_str)
+    {
         free(tmp_str); // 释放临时分配的内存
     }
 
@@ -857,7 +870,10 @@ bool axdr_encode_generalizedtime(AxdrBuffer *buf, time_t t)
     char time_str[32]; // 足够大
     struct tm *tm_info = gmtime(&t);
     if (!tm_info)
+    {
         return false;
+    }
+
     // 格式: YYYYMMDDHHMMSSZ (例如: 20231027103000Z)
     strftime(time_str, sizeof(time_str), "%Y%m%d%H%M%SZ", tm_info);
     return axdr_encode_visiblestring(buf, time_str);
