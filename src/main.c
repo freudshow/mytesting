@@ -3,10 +3,10 @@
 #include <unistd.h>
 #include <string.h>
 
-void test_bitstring_var(void);
+void testOctetStringVariable(void);
 
 int main(int argc, char **argv)
 {
-    test_bitstring_var();
+    testOctetStringVariable();
     return 0;
 }

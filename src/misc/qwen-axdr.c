@@ -692,9 +692,9 @@ bool axdr_decode_bitstring_var(AxdrBuffer *buf, const uint8_t *bits, uint64_t bi
  * -------------------------------------------------------------------------------------------
  * @return 成功 - 返回 true; 失败 - 返回 false
  *********************************************************************************************/
-bool axdr_encode_octetstring_fixed(AxdrBuffer *buf, const uint8_t *octets, uint64_t octet_count)
+bool axdr_encode_octetstring_fixed(AxdrBuffer *buf, const uint8_t *octets, int64_t octet_count)
 {
-    if (buf->error || !octets || octet_count < 0)
+    if (buf->error || !octets)
     {
         return false;
     }
@@ -707,72 +707,111 @@ bool axdr_encode_octetstring_fixed(AxdrBuffer *buf, const uint8_t *octets, uint6
     memcpy(buf->data + buf->pos, octets, octet_count);
     buf->pos += octet_count;
 
-    return true;
-}
-
-// 字节串编码 (可变长度)
-bool axdr_encode_octetstring_var(AxdrBuffer *buf, const uint8_t *octets, uint64_t octet_count)
-{
-    if (buf->error || !octets || octet_count < 0)
-        return false;
-    if (!axdr_encode_integer_var(buf, octet_count))
-        return false;
-    if (!ensure_capacity(buf, octet_count))
-        return false;
-    memcpy(buf->data + buf->pos, octets, octet_count);
-    buf->pos += octet_count;
     return true;
 }
 
 /*********************************************************************************************
- * 字节串解码 (固定长度)
- *********************************************************************************************
- * @param buf - 解码缓冲区
- * @param octets - 指向存储解码结果的字节串缓冲区
- * @param octet_count - 字节串长度
- * @return true if successful, false if error occurs
+ * 固定长度字节串解码
+ * -------------------------------------------------------------------------------------------
+ * @param [in] buf - 解码缓冲区
+ * @param [out] octets - 指向存储解码结果的字节串缓冲区
+ * @param [in] octet_count - 字节串长度
+ * -------------------------------------------------------------------------------------------
+ * @return 成功 - 返回 true; 失败 - 返回 false
  *********************************************************************************************/
-bool axdr_decode_octetstring_fixed(AxdrBuffer *buf, uint8_t *octets, uint64_t octet_count)
+bool axdr_decode_octetstring_fixed(AxdrBuffer *buf, uint8_t *octets, int64_t octet_count)
 {
     if (buf->error || !octets || buf->pos + octet_count > buf->size)
     {
         if (buf->pos + octet_count > buf->size)
+        {
             buf->error = true;
+        }
+
         return false;
     }
+
     memcpy(octets, buf->data + buf->pos, octet_count);
     buf->pos += octet_count;
+
     return true;
 }
 
-// 字节串解码 (可变长度)
-bool axdr_decode_octetstring_var(AxdrBuffer *buf, uint8_t **octets, uint64_t *octet_count)
+/*********************************************************************************************
+ * 可变长度字节串编码
+ * -------------------------------------------------------------------------------------------
+ * @param [in] buf - 编码缓冲区
+ * @param [in] octets - 要编码的字节串
+ * @param [in] octet_count - 字节串长度
+ * -------------------------------------------------------------------------------------------
+ * @return 成功 - 返回 true; 失败 - 返回 false
+ *********************************************************************************************/
+bool axdr_encode_octetstring_var(AxdrBuffer *buf, const uint8_t *octets, int64_t octet_count)
+{
+    if (buf->error || !octets)
+    {
+        return false;
+    }
+
+    if (!axdr_encode_integer_var(buf, octet_count))
+    {
+        return false;
+    }
+
+    if (!ensure_capacity(buf, octet_count))
+    {
+        return false;
+    }
+
+    memcpy(buf->data + buf->pos, octets, octet_count);
+    buf->pos += octet_count;
+
+    return true;
+}
+
+/*********************************************************************************************
+ * 可变长度字节串解码
+ * -------------------------------------------------------------------------------------------
+ * @param [in] buf - 解码缓冲区
+ * @param [out] octets - 指向存储解码结果的字节串缓冲区
+ * @param [in] octet_count - 字节串长度
+ * -------------------------------------------------------------------------------------------
+ * @return 成功 - 返回 true; 失败 - 返回 false
+ *********************************************************************************************/
+bool axdr_decode_octetstring_var(AxdrBuffer *buf, uint8_t **octets, int64_t *octet_count)
 {
     if (buf->error || !octets || !octet_count)
+    {
         return false;
+    }
+
     int64_t len;
     if (!axdr_decode_integer_var(buf, &len) || len < 0)
     {
         buf->error = true;
         return false;
     }
+
     if (buf->pos + len > buf->size)
     {
         buf->error = true;
         return false;
     }
+
     *octets = malloc(len);
     if (!(*octets) && len > 0)
     {
         buf->error = true;
         return false;
     }
+
     *octet_count = len;
     if (len > 0)
     {
         memcpy(*octets, buf->data + buf->pos, len);
         buf->pos += len;
     }
+
     return true;
 }
 
@@ -780,7 +819,10 @@ bool axdr_decode_octetstring_var(AxdrBuffer *buf, uint8_t **octets, uint64_t *oc
 bool axdr_encode_visiblestring(AxdrBuffer *buf, const char *str)
 {
     if (!str)
+    {
         str = ""; // 处理 NULL 指针
+    }
+
     return axdr_encode_octetstring_var(buf, (const uint8_t*) str, strlen(str));
 }
 
@@ -788,7 +830,7 @@ bool axdr_encode_visiblestring(AxdrBuffer *buf, const char *str)
 bool axdr_decode_visiblestring(AxdrBuffer *buf, char **str)
 {
     uint8_t *tmp_str = NULL;
-    int len;
+    int64_t len;
     bool res = axdr_decode_octetstring_var(buf, &tmp_str, &len);
     if (res)
     {
@@ -802,8 +844,10 @@ bool axdr_decode_visiblestring(AxdrBuffer *buf, char **str)
         {
             buf->error = true;
         }
+
         free(tmp_str); // 释放临时分配的内存
     }
+
     return res && *str;
 }
 
@@ -1069,7 +1113,7 @@ void test_struct_decoder(AxdrBuffer *buf, void *data)
 
     int64_t tmp_int64;
     uint64_t tmp_uint64;
-    
+
     // 1. Integer16
     if (!axdr_decode_integer_fixed(buf, &tmp_int64, 2))
         return;
@@ -1109,16 +1153,16 @@ void test_struct_decoder(AxdrBuffer *buf, void *data)
     int64_t seq_len;
     if (!axdr_decode_integer_var(buf, &seq_len))
         return;
-    
+
     if (seq_len < 0 || seq_len > 1000) // Add reasonable limit
     {
         buf->error = true;
         return;
     }
 
-    ts->seq_of_count = (int)seq_len;
+    ts->seq_of_count = (int) seq_len;
     ts->seq_of_vals = NULL;
-    
+
     if (ts->seq_of_count > 0)
     {
         ts->seq_of_vals = malloc(ts->seq_of_count * sizeof(int32_t));
@@ -1127,7 +1171,7 @@ void test_struct_decoder(AxdrBuffer *buf, void *data)
             buf->error = true;
             return;
         }
-        
+
         for (int i = 0; i < ts->seq_of_count; i++)
         {
             int64_t val;
@@ -1138,7 +1182,7 @@ void test_struct_decoder(AxdrBuffer *buf, void *data)
                 ts->seq_of_count = 0;
                 return;
             }
-            ts->seq_of_vals[i] = (int32_t)val;
+            ts->seq_of_vals[i] = (int32_t) val;
         }
     }
 }
