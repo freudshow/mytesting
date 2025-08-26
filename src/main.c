@@ -3,10 +3,10 @@
 #include <unistd.h>
 #include <string.h>
 
-void testOctetStringVariable(void);
+void testMylist(void);
 
 int main(int argc, char **argv)
 {
-    testOctetStringVariable();
+    testMylist();
     return 0;
 }

@@ -1,6 +1,6 @@
 /* marketing_app.c */
 #include "marketing_app.h"
-
+#include <unistd.h>
 /* ===========================================
  * 任务管理模块实现
  * =========================================== */
@@ -798,6 +798,7 @@ int parse_qgdw11778_response(const unsigned char *buffer, int buf_len, int *obje
 
     /* 数据类型 */
     int data_type = buffer[6];
+    (void) data_type; /* 未使用 */
 
     /* 数据长度 */
     int length = buffer[7];
@@ -871,7 +872,7 @@ void restart_routing(TaskScheduler *scheduler)
             /* 检查最后通信时间 */
             for (int m = 0; m < scheduler->tasks[i].meter_count; m++)
             {
-                time_t last_comm = mktime((struct tm[] ) { scheduler->tasks[i].meters[m].last_comm_time.year - 1900, scheduler->tasks[i].meters[m].last_comm_time.month - 1, scheduler->tasks[i].meters[m].last_comm_time.day, scheduler->tasks[i].meters[m].last_comm_time.hour, scheduler->tasks[i].meters[m].last_comm_time.minute, scheduler->tasks[i].meters[m].last_comm_time.second, 0, 0, -1 });
+                time_t last_comm = mktime((struct tm[] ) { { scheduler->tasks[i].meters[m].last_comm_time.year - 1900, scheduler->tasks[i].meters[m].last_comm_time.month - 1, scheduler->tasks[i].meters[m].last_comm_time.day, scheduler->tasks[i].meters[m].last_comm_time.hour, scheduler->tasks[i].meters[m].last_comm_time.minute, scheduler->tasks[i].meters[m].last_comm_time.second, 0, 0, -1 } });
 
                 if (now - last_comm > 300)
                 { /* 5分钟无通信 */
@@ -897,7 +898,6 @@ void clear_routing(TaskScheduler *scheduler)
 
     if (tm_now->tm_year > tm_last->tm_year || (tm_now->tm_year == tm_last->tm_year && tm_now->tm_mon > tm_last->tm_mon))
     {
-
         /* 统计近期抄表成功率 */
         int success_count = 0;
         int total_count = 0;
@@ -1004,8 +1004,8 @@ int marketapp_main()
     /* 初始化表计 */
     for (int i = 0; i < task1.meter_count; i++)
     {
-        char addr[10];
-        sprintf(addr, "100%d", i);
+        char addr[100];
+        snprintf(addr, sizeof(addr) - 1, "100%d", i);
         init_meter_info(&task1.meters[i], addr, PROTOCOL_QGDW11778, task1.port);
     }
 

@@ -4,6 +4,7 @@
 #include <time.h>
 #include <unistd.h>
 
+#if 0
 // 定义任务状态枚举
 typedef enum {
     TASK_INVALID = 0,  // 无效
@@ -435,3 +436,4 @@ void taskmanager(void)
 
     return 0;
 }
+#endif
