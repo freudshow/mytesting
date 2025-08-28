@@ -184,13 +184,13 @@ void insertSortList(List_s *list)
     while (current != NULL)
     {
         nextNode = current->next; // 保存下一个待处理节点（避免交换后丢失后续节点）
+        printf("\n**********************************************\n");
+        printf("current: val-%d, seq-%d\n----------------------------\n", current->val, current->seq);
 
         printf("sortedHead: \n\t");
         testList->head = sortedHead;
         printList(testList);
-
-        printf("\ncurrent: val-%d, seq-%d\n----------------------------\n", current->val, current->seq);
-
+        printf("----------------------------\n");
         if (sortedHead == NULL ||
                 current->val < sortedHead->val ||
                 (current->val == sortedHead->val && current->seq < sortedHead->seq))
@@ -215,8 +215,14 @@ void insertSortList(List_s *list)
             prev->next = current;
         }
 
+        printf("after insert into sortedHead: \n\t");
+        testList->head = sortedHead;
+        printList(testList);
+        printf("**********************************************\n");
         current = nextNode; // 处理下一个未排序节点
     }
+
+    free(testList);
 
     // 更新链表的头指针
     list->head = sortedHead;
