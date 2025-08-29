@@ -3,10 +3,10 @@
 #include <unistd.h>
 #include <string.h>
 
-void testMylist(void);
+void testPermIter(void);
 
 int main(int argc, char **argv)
 {
-    testMylist();
+    testPermIter();
     return 0;
 }
