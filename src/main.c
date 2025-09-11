@@ -3,10 +3,10 @@
 #include <unistd.h>
 #include <string.h>
 
-void testPermIter(void);
+void messagetest(char *name);
 
 int main(int argc, char **argv)
 {
-    testPermIter();
+    messagetest(argv[0]);
     return 0;
 }
