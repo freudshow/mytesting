@@ -8,7 +8,8 @@
 
 // Token types
 typedef enum {
-    TOKEN_START,                //开始标记
+    TOKEN_INVALID = -1,         //无效标记
+    TOKEN_START = 0,            //开始标记
     TOKEN_INTEGER,              //整数
     TOKEN_FLOAT,                //浮点数
     TOKEN_REALDB,               //实时库值
@@ -179,7 +180,7 @@ static elementType topArray(pStackArray s)
     }
 
     DEBUG_TIME_LINE("Empty pStackArray");
-    exit(1);
+    return TOKEN_INVALID;
 }
 
 /******************************************************
@@ -322,7 +323,7 @@ u32 tokenizer(const char *input, Token *tokens)
             if (position >= inputlen || input[position + 1] < '0' || input[position + 1] > '9')
             {
                 printf("Invalid character: %c, position: %u\n", input[position], position);
-                exit(1);
+                return 0;
             }
 
             pToken->pos = position;
@@ -429,7 +430,7 @@ u32 tokenizer(const char *input, Token *tokens)
                         if (position >= inputlen || input[position] < '0' || input[position] > '9')
                         {
                             printf("Invalid negative number: '-' at position %u has no digit following\n", position - 1);
-                            exit(1);
+                            return 0;
                         }
 
                         // 解析整数部分
@@ -451,7 +452,7 @@ u32 tokenizer(const char *input, Token *tokens)
                             if (position >= inputlen || input[position] < '0' || input[position] > '9')
                             {
                                 printf("Invalid decimal part in negative number at position %u\n", position - 1);
-                                exit(1);
+                                return 0;
                             }
                             while (position < inputlen && input[position] >= '0' && input[position] <= '9')
                             {
@@ -728,7 +729,7 @@ u32 tokenizer(const char *input, Token *tokens)
                     else
                     {
                         printf("Invalid character: %c, position: %u\n", input[position], position);
-                        exit(1);
+                        return 0;
                     }
 
                     position++;
@@ -747,7 +748,7 @@ u32 tokenizer(const char *input, Token *tokens)
                     else
                     {
                         printf("Invalid character: %c, position: %u\n", input[position], position);
-                        exit(1);
+                        return 0;
                     }
 
                     position++;
@@ -766,7 +767,7 @@ u32 tokenizer(const char *input, Token *tokens)
                     else
                     {
                         printf("Invalid character: %c, position: %u\n", input[position], position);
-                        exit(1);
+                        return 0;
                     }
 
                     position++;
@@ -776,7 +777,7 @@ u32 tokenizer(const char *input, Token *tokens)
                     break;
                 default:
                     printf("Invalid character: %c\n", input[position]);
-                    exit(1);
+                    return 0;
             }
         }
     }
@@ -1284,7 +1285,7 @@ double tokenEvaluate(Token *postfix, pStackArray stack)
                     {
                         DEBUG_TIME_LINE("only RealDatabase can be assgned a value: id: %u, type: %s, position: %d",
                                 o1.id, getTokenType(o1.type), o1.pos);
-                        exit(1);
+                        return 0;
                     }
 
                     setRealDB(o1.value.intValue, operandDouble2);
