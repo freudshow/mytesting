@@ -1318,7 +1318,7 @@ double tokenEvaluate(Token *postfix, pStackArray stack)
 void ariMain(void)
 {
 //    char *input = "(2.5 + 3) * 4.2 - 10.1 / #201 + (8  | 4) + (#1<<3) + (16 >> 2) + (7&3) + sin(12) + cos(20) + 2exp(30)+(1==2) + (1!=2)+(1<2)+(1>2)+(1<=2)+(1>=2)";
-    char *input ="56--9+-6.3";
+    char *input ="56--9+-6.3--";
 //    char *input = "65--11+2";
 
 //    char *input = "65--11+2*sin(12)";
@@ -1327,6 +1327,11 @@ void ariMain(void)
 
     Token *tokens = calloc(strlen(input) + 1, sizeof(Token));
     u32 count = tokenizer(input, tokens);
+    if (count == 0)
+    {
+        DEBUG_TIME_LINE("tokenizer error");
+        return;
+    }
 
     DEBUG_TIME_LINE("\n-----------------after tokenizer:--------------------\n");
     printTokens(tokens, count);
