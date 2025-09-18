@@ -3,10 +3,10 @@
 #include <unistd.h>
 #include <string.h>
 
-void messagetest(char *name);
+void ariMain(char *name);
 
 int main(int argc, char **argv)
 {
-    messagetest(argv[0]);
+    ariMain(argv[0]);
     return 0;
 }

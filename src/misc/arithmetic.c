@@ -250,6 +250,51 @@ pStackArray createStackArray(int capacity)
 }
 
 /******************************************************
+ * 函数功能: 判断一个符号是不是操作符
+ * ---------------------------------------------------
+ * @param[in] - t, 符号
+ * ---------------------------------------------------
+ * @return - 是操作符, 返回1; 否则返回0
+ ******************************************************/
+int isTokenOperator(Token *t)
+{
+    switch (t->type)
+    {
+        case TOKEN_PLUS:
+        case TOKEN_MINUS:
+        case TOKEN_MULTIPLY:
+        case TOKEN_DIVIDE:
+        case TOKEN_BIT_NEGATION:
+        case TOKEN_BIT_OR:
+        case TOKEN_BIT_AND:
+        case TOKEN_BIT_XOR:
+        case TOKEN_LEFT_SHIFT:
+        case TOKEN_RIGHT_SHIFT:
+        case TOKEN_SIN:
+        case TOKEN_COS:
+        case TOKEN_LPAREN:
+        case TOKEN_RPAREN:
+        case TOKEN_EXPONENTIAL:
+        case TOKEN_LOGICAL_AND:
+        case TOKEN_LOGICAL_OR:
+        case TOKEN_LOGICAL_NOT:
+        case TOKEN_LOGICA_EQUAL:
+        case TOKEN_LOGICA_NOT_EQUAL:
+        case TOKEN_LOGICA_GREATER:
+        case TOKEN_LOGICA_LESS:
+        case TOKEN_LOGICA_GREATER_EQUAL:
+        case TOKEN_LOGICA_LESS_EQUAL:
+        case TOKEN_ASSIGN:
+        case TOKEN_COMMA:
+        case TOKEN_SEMICOLON:
+            return 1;
+            break;
+        default:
+            return 0;
+    }
+}
+
+/******************************************************
  * 函数功能: 将算术表达式转换为符号序列
  * ---------------------------------------------------
  * @param[in] - input, 算术表达式字符串, 以'\0'结尾
@@ -264,7 +309,7 @@ u32 tokenizer(const char *input, Token *tokens)
     u32 inputlen = strlen(input);
     u32 position = 0;
 
-    while (input[position] != '\0')
+    while (position < inputlen && input[position] != '\0')
     {
         if (input[position] == ' ' || input[position] == '\t' || input[position] == '\r' || input[position] == '\n')
         {
@@ -284,7 +329,7 @@ u32 tokenizer(const char *input, Token *tokens)
             position++;
 
             int i = 0;
-            while (input[position] >= '0' && input[position] <= '9')
+            while (position < inputlen && input[position] >= '0' && input[position] <= '9')
             {
                 pToken->str[i] = input[position];
                 position++;
@@ -298,13 +343,13 @@ u32 tokenizer(const char *input, Token *tokens)
 
             pToken++;
         }
-        else if (input[position] >= '0' && input[position] <= '9') //整数或者小数
+        else if (position < inputlen && input[position] >= '0' && input[position] <= '9') //整数或者小数
         {
             pToken->pos = position;
 
             int i = 0;
 
-            while (input[position] >= '0' && input[position] <= '9')
+            while (position < inputlen && input[position] >= '0' && input[position] <= '9')
             {
                 pToken->str[i] = input[position];
                 position++;
@@ -317,7 +362,7 @@ u32 tokenizer(const char *input, Token *tokens)
                 position++;
                 i++;
 
-                while (input[position] >= '0' && input[position] <= '9')
+                while (position < inputlen && input[position] >= '0' && input[position] <= '9')
                 {
                     pToken->str[i] = input[position];
                     position++;
@@ -347,24 +392,126 @@ u32 tokenizer(const char *input, Token *tokens)
                     pToken->pos = position;
                     pToken->str[0] = input[position];
                     pToken->str[1] = '\0';
+
+                    position++;
+
+                    pToken->id = tokenCount++;
+                    pToken++;
                     break;
                 case '-':
-                    pToken->type = TOKEN_MINUS;
-                    pToken->pos = position;
-                    pToken->str[0] = input[position];
-                    pToken->str[1] = '\0';
+                {
+                    // 判断当前'-'是负号还是减法运算符
+                    int isNegative = 0;
+                    if (tokenCount == 0)
+                    {
+                        // 情况1：位于表达式开头，视为负号
+                        isNegative = 1;
+                    }
+                    else
+                    {
+                        // 情况2：前面是左括号或其他运算符，视为负号
+                        if (isTokenOperator(pToken - 1))
+                        {
+                            isNegative = 1;
+                        }
+                    }
+
+                    if (isNegative)
+                    {
+                        // 处理负数（负号+数字）
+                        pToken->pos = position;  // 记录负号位置
+                        int i = 0;
+                        pToken->str[i++] = '-';  // 保存负号到字符串
+
+                        position++;  // 跳过负号，解析后续数字
+
+                        // 检查负号后是否有数字（避免无效格式如"-abc"）
+                        if (position >= inputlen || input[position] < '0' || input[position] > '9')
+                        {
+                            printf("Invalid negative number: '-' at position %u has no digit following\n", position - 1);
+                            exit(1);
+                        }
+
+                        // 解析整数部分
+                        while (position < inputlen && input[position] >= '0' && input[position] <= '9')
+                        {
+                            pToken->str[i++] = input[position];
+                            position++;
+                        }
+
+                        // 解析小数部分（如果有）
+                        int hasDecimal = 0;
+                        if (position < inputlen && input[position] == '.')
+                        {
+                            hasDecimal = 1;
+                            pToken->str[i++] = '.';
+                            position++;
+
+                            // 检查小数点后是否有数字（避免无效格式如"-123."）
+                            if (position >= inputlen || input[position] < '0' || input[position] > '9')
+                            {
+                                printf("Invalid decimal part in negative number at position %u\n", position - 1);
+                                exit(1);
+                            }
+                            while (position < inputlen && input[position] >= '0' && input[position] <= '9')
+                            {
+                                pToken->str[i++] = input[position];
+                                position++;
+                            }
+                        }
+
+                        pToken->str[i] = '\0';  // 字符串结束符
+
+                        // 设置token类型和值（负数）
+                        if (hasDecimal)
+                        {
+                            pToken->type = TOKEN_FLOAT;
+                            pToken->value.numValue = atof(pToken->str);  // atof自动处理负号
+                        }
+                        else
+                        {
+                            pToken->type = TOKEN_INTEGER;
+                            pToken->value.intValue = atol(pToken->str);  // atol自动处理负号
+                        }
+
+                        pToken->id = tokenCount++;
+                        pToken++;
+                    }
+                    else
+                    {
+                        // 处理减法运算符
+                        pToken->type = TOKEN_MINUS;
+                        pToken->pos = position;
+                        pToken->str[0] = '-';
+                        pToken->str[1] = '\0';
+
+                        position++;
+                        pToken->id = tokenCount++;
+                        pToken++;
+                    }
+                }
                     break;
                 case '*':
                     pToken->type = TOKEN_MULTIPLY;
                     pToken->pos = position;
                     pToken->str[0] = input[position];
                     pToken->str[1] = '\0';
+
+                    position++;
+
+                    pToken->id = tokenCount++;
+                    pToken++;
                     break;
                 case '/':
                     pToken->type = TOKEN_DIVIDE;
                     pToken->pos = position;
                     pToken->str[0] = input[position];
                     pToken->str[1] = '\0';
+
+                    position++;
+
+                    pToken->id = tokenCount++;
+                    pToken++;
                     break;
                 case '|':
                     if (position < inputlen - 1 && input[position + 1] == '|')
@@ -382,6 +529,10 @@ u32 tokenizer(const char *input, Token *tokens)
                         pToken->str[1] = '\0';
                     }
 
+                    position++;
+
+                    pToken->id = tokenCount++;
+                    pToken++;
                     break;
                 case '&':
                     if (position < inputlen - 1 && input[position + 1] == '&')
@@ -398,6 +549,11 @@ u32 tokenizer(const char *input, Token *tokens)
                         pToken->str[0] = input[position];
                         pToken->str[1] = '\0';
                     }
+
+                    position++;
+
+                    pToken->id = tokenCount++;
+                    pToken++;
                     break;
                 case '^':
                     pToken->type = TOKEN_BIT_XOR;
@@ -405,6 +561,10 @@ u32 tokenizer(const char *input, Token *tokens)
                     pToken->str[0] = input[position];
                     pToken->str[1] = '\0';
 
+                    position++;
+
+                    pToken->id = tokenCount++;
+                    pToken++;
                     break;
                 case '~':
                     pToken->type = TOKEN_BIT_NEGATION;
@@ -412,6 +572,10 @@ u32 tokenizer(const char *input, Token *tokens)
                     pToken->str[0] = input[position];
                     pToken->str[1] = '\0';
 
+                    position++;
+
+                    pToken->id = tokenCount++;
+                    pToken++;
                     break;
                 case '<':
                     if (position < inputlen - 1)
@@ -446,6 +610,10 @@ u32 tokenizer(const char *input, Token *tokens)
                         pToken->str[1] = '\0';
                     }
 
+                    position++;
+
+                    pToken->id = tokenCount++;
+                    pToken++;
                     break;
                 case '>':
                     if (position < inputlen - 1)
@@ -480,6 +648,10 @@ u32 tokenizer(const char *input, Token *tokens)
                         pToken->str[1] = '\0';
                     }
 
+                    position++;
+
+                    pToken->id = tokenCount++;
+                    pToken++;
                     break;
                 case '=':
                     if (position < inputlen - 1 && input[position + 1] == '=')
@@ -497,6 +669,10 @@ u32 tokenizer(const char *input, Token *tokens)
                         pToken->str[1] = '\0';
                     }
 
+                    position++;
+
+                    pToken->id = tokenCount++;
+                    pToken++;
                     break;
                 case '!':
                     if (position < inputlen - 1 && input[position + 1] == '=')
@@ -514,18 +690,32 @@ u32 tokenizer(const char *input, Token *tokens)
                         pToken->str[1] = '\0';
                     }
 
+                    position++;
+
+                    pToken->id = tokenCount++;
+                    pToken++;
                     break;
                 case '(':
                     pToken->type = TOKEN_LPAREN;
                     pToken->pos = position;
                     pToken->str[0] = input[position];
                     pToken->str[1] = '\0';
+
+                    position++;
+
+                    pToken->id = tokenCount++;
+                    pToken++;
                     break;
                 case ')':
                     pToken->type = TOKEN_RPAREN;
                     pToken->pos = position;
                     pToken->str[0] = input[position];
                     pToken->str[1] = '\0';
+
+                    position++;
+
+                    pToken->id = tokenCount++;
+                    pToken++;
                     break;
                 case 's':
                     if (position < inputlen - 2 && input[position + 1] == 'i' && input[position + 2] == 'n')
@@ -541,6 +731,10 @@ u32 tokenizer(const char *input, Token *tokens)
                         exit(1);
                     }
 
+                    position++;
+
+                    pToken->id = tokenCount++;
+                    pToken++;
                     break;
                 case 'c':
                     if (position < inputlen - 2 && input[position + 1] == 'o' && input[position + 2] == 's')
@@ -556,6 +750,10 @@ u32 tokenizer(const char *input, Token *tokens)
                         exit(1);
                     }
 
+                    position++;
+
+                    pToken->id = tokenCount++;
+                    pToken++;
                     break;
                 case 'e':
                     if (position < inputlen - 2 && input[position + 1] == 'x' && input[position + 2] == 'p')
@@ -571,16 +769,15 @@ u32 tokenizer(const char *input, Token *tokens)
                         exit(1);
                     }
 
+                    position++;
+
+                    pToken->id = tokenCount++;
+                    pToken++;
                     break;
                 default:
                     printf("Invalid character: %c\n", input[position]);
                     exit(1);
             }
-
-            position++;
-
-            pToken->id = tokenCount++;
-            pToken++;
         }
     }
 
@@ -588,51 +785,6 @@ u32 tokenizer(const char *input, Token *tokens)
     pToken->id = tokenCount++;
 
     return tokenCount;
-}
-
-/******************************************************
- * 函数功能: 判断一个符号是不是操作符
- * ---------------------------------------------------
- * @param[in] - t, 符号
- * ---------------------------------------------------
- * @return - 是操作符, 返回1; 否则返回0
- ******************************************************/
-int isTokenOperator(Token *t)
-{
-    switch (t->type)
-    {
-        case TOKEN_PLUS:
-        case TOKEN_MINUS:
-        case TOKEN_MULTIPLY:
-        case TOKEN_DIVIDE:
-        case TOKEN_BIT_NEGATION:
-        case TOKEN_BIT_OR:
-        case TOKEN_BIT_AND:
-        case TOKEN_BIT_XOR:
-        case TOKEN_LEFT_SHIFT:
-        case TOKEN_RIGHT_SHIFT:
-        case TOKEN_SIN:
-        case TOKEN_COS:
-        case TOKEN_LPAREN:
-        case TOKEN_RPAREN:
-        case TOKEN_EXPONENTIAL:
-        case TOKEN_LOGICAL_AND:
-        case TOKEN_LOGICAL_OR:
-        case TOKEN_LOGICAL_NOT:
-        case TOKEN_LOGICA_EQUAL:
-        case TOKEN_LOGICA_NOT_EQUAL:
-        case TOKEN_LOGICA_GREATER:
-        case TOKEN_LOGICA_LESS:
-        case TOKEN_LOGICA_GREATER_EQUAL:
-		case TOKEN_LOGICA_LESS_EQUAL:
-		case TOKEN_ASSIGN:
-		case TOKEN_COMMA:
-		case TOKEN_SEMICOLON:
-            return 1;
-            break;
-        default:
-            return 0;
-    }
 }
 
 /******************************************************
@@ -869,14 +1021,9 @@ const char* getTokenType(TokenType t)
 void printTokens(Token *tokens, u32 count)
 {
     int i = 0;
-    for (i = 0; i < count; i++)
+    for (i = 0; i < count && tokens[i].type != TOKEN_END; i++)
     {
         printf("id: %u\t, type: %s,\t\t", tokens[i].id, getTokenType(tokens[i].type));
-
-        if (tokens[i].type == TOKEN_END)
-        {
-            break;
-        }
 
         printf("\tposition: %u\tstr: %s", tokens[i].pos + 1, tokens[i].str);
         if (tokens[i].type == TOKEN_INTEGER)
@@ -1170,17 +1317,19 @@ double tokenEvaluate(Token *postfix, pStackArray stack)
  ******************************************************/
 void ariMain(void)
 {
-    char *input = "(2.5 + 3) * 4.2 - 10.1 / #201 + (8  | 4) + (#1<<3)"
-            " + (16 >> 2) + (7&3) + sin(12) + cos(20)"
-            " + 2exp(30)+(1==2)"
-            " + (1!=2)+(1<2)+(1>2)+(1<=2)+(1>=2)";
+//    char *input = "(2.5 + 3) * 4.2 - 10.1 / #201 + (8  | 4) + (#1<<3) + (16 >> 2) + (7&3) + sin(12) + cos(20) + 2exp(30)+(1==2) + (1!=2)+(1<2)+(1>2)+(1<=2)+(1>=2)";
+    char *input ="56--9+-6.3";
+//    char *input = "65--11+2";
+
+//    char *input = "65--11+2*sin(12)";
+
+    DEBUG_TIME_LINE("before tokenizer: %s", input);
 
     Token *tokens = calloc(strlen(input) + 1, sizeof(Token));
     u32 count = tokenizer(input, tokens);
 
     DEBUG_TIME_LINE("\n-----------------after tokenizer:--------------------\n");
     printTokens(tokens, count);
-
     Token *postfix = calloc(count + 1, sizeof(Token));
     pStackArray stack = createStackArray(count + 1); //allocate one more for TOKEN_START
 
