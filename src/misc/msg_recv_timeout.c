@@ -439,5 +439,5 @@ int wait_for_smiOS_ack(ST_UINT32 tag, int msgid, ST_UINT32 *ack)
 void messagetest(char *name)
 {
     ST_LONG type = create_ack_id(0x00050001, 0x1235);
-    printf("type: %08X\n", type);
+    printf("type: %08lX\n", type);
 }

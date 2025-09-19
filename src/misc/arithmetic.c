@@ -174,13 +174,16 @@ static void pushArray(elementType e, pStackArray s)
  ******************************************************/
 static elementType topArray(pStackArray s)
 {
+    elementType tmp = { 0 };
+
     if (!isEmptyArray(s))
     {
         return s->array[s->topIdx];
     }
 
     DEBUG_TIME_LINE("Empty pStackArray");
-    return TOKEN_INVALID;
+    tmp.type = TOKEN_INVALID;
+    return tmp;
 }
 
 /******************************************************
@@ -192,13 +195,16 @@ static elementType topArray(pStackArray s)
  ******************************************************/
 static elementType popArray(pStackArray s)
 {
+    elementType tmp = { 0 };
+
     if (isEmptyArray(s))
     {
         DEBUG_TIME_LINE("Empty pStackArray");
-        exit(1);
+        tmp.type = TOKEN_INVALID;
+        return tmp;
     }
 
-    elementType tmp = s->array[s->topIdx];
+    tmp = s->array[s->topIdx];
     s->topIdx--;
 
     return tmp;
@@ -305,6 +311,9 @@ int isTokenOperator(Token *t)
  ******************************************************/
 u32 tokenizer(const char *input, Token *tokens)
 {
+    //todo: 改成一个个词素解析并交给求值函数
+    //如果当前参与计算的操作数没有实时库，
+    //则直接将求值结果压入逆波兰表达式
     u32 tokenCount = 0;
     Token *pToken = tokens;
     u32 inputlen = strlen(input);
@@ -1066,7 +1075,6 @@ int setRealDB(int realNo, double value)
 
     return 0;
 }
-
 
 /******************************************************
  * 函数功能: 对逆波兰表达式求值
