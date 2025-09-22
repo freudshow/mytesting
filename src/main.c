@@ -4,9 +4,11 @@
 #include <string.h>
 
 int xdrmain(void);
+void ariMain(void);
+void testtinyexpr(void);
 
 int main(int argc, char **argv)
 {
-    xdrmain();
+    ariMain();
     return 0;
 }

@@ -56,6 +56,12 @@ typedef struct {
     } value;
 } Token;
 
+typedef struct tokenState {
+    const char *start;
+    const char *next;
+    Token currentToken;
+} tokenState_s, *pTokenState;
+
 #define EMPTY_TO_S              ( -1 )  //栈的初始指针索引
 #define MIN_STACK_ARRAY_SIZE    ( 32 )  //栈的最小容量
 
@@ -268,32 +274,32 @@ int isTokenOperator(Token *t)
     switch (t->type)
     {
         case TOKEN_PLUS:
-        case TOKEN_MINUS:
-        case TOKEN_MULTIPLY:
-        case TOKEN_DIVIDE:
-        case TOKEN_BIT_NEGATION:
-        case TOKEN_BIT_OR:
-        case TOKEN_BIT_AND:
-        case TOKEN_BIT_XOR:
-        case TOKEN_LEFT_SHIFT:
-        case TOKEN_RIGHT_SHIFT:
-        case TOKEN_SIN:
-        case TOKEN_COS:
-        case TOKEN_LPAREN:
-        case TOKEN_RPAREN:
-        case TOKEN_EXPONENTIAL:
-        case TOKEN_LOGICAL_AND:
-        case TOKEN_LOGICAL_OR:
-        case TOKEN_LOGICAL_NOT:
-        case TOKEN_LOGICA_EQUAL:
-        case TOKEN_LOGICA_NOT_EQUAL:
-        case TOKEN_LOGICA_GREATER:
-        case TOKEN_LOGICA_LESS:
-        case TOKEN_LOGICA_GREATER_EQUAL:
-        case TOKEN_LOGICA_LESS_EQUAL:
-        case TOKEN_ASSIGN:
-        case TOKEN_COMMA:
-        case TOKEN_SEMICOLON:
+            case TOKEN_MINUS:
+            case TOKEN_MULTIPLY:
+            case TOKEN_DIVIDE:
+            case TOKEN_BIT_NEGATION:
+            case TOKEN_BIT_OR:
+            case TOKEN_BIT_AND:
+            case TOKEN_BIT_XOR:
+            case TOKEN_LEFT_SHIFT:
+            case TOKEN_RIGHT_SHIFT:
+            case TOKEN_SIN:
+            case TOKEN_COS:
+            case TOKEN_LPAREN:
+            case TOKEN_RPAREN:
+            case TOKEN_EXPONENTIAL:
+            case TOKEN_LOGICAL_AND:
+            case TOKEN_LOGICAL_OR:
+            case TOKEN_LOGICAL_NOT:
+            case TOKEN_LOGICA_EQUAL:
+            case TOKEN_LOGICA_NOT_EQUAL:
+            case TOKEN_LOGICA_GREATER:
+            case TOKEN_LOGICA_LESS:
+            case TOKEN_LOGICA_GREATER_EQUAL:
+            case TOKEN_LOGICA_LESS_EQUAL:
+            case TOKEN_ASSIGN:
+            case TOKEN_COMMA:
+            case TOKEN_SEMICOLON:
             return 1;
             break;
         default:
@@ -319,7 +325,7 @@ u32 tokenizer(const char *input, Token *tokens)
     u32 inputlen = strlen(input);
     u32 position = 0;
 
-    while (position < inputlen && input[position] != '\0')
+    while (input[position] != '\0')
     {
         if (input[position] == ' ' || input[position] == '\t' || input[position] == '\r' || input[position] == '\n')
         {
@@ -339,7 +345,7 @@ u32 tokenizer(const char *input, Token *tokens)
             position++;
 
             int i = 0;
-            while (position < inputlen && input[position] >= '0' && input[position] <= '9')
+            while (input[position] >= '0' && input[position] <= '9')
             {
                 pToken->str[i] = input[position];
                 position++;
@@ -353,13 +359,13 @@ u32 tokenizer(const char *input, Token *tokens)
 
             pToken++;
         }
-        else if (position < inputlen && input[position] >= '0' && input[position] <= '9') //整数或者小数
+        else if (input[position] >= '0' && input[position] <= '9') //整数或者小数
         {
             pToken->pos = position;
 
             int i = 0;
 
-            while (position < inputlen && input[position] >= '0' && input[position] <= '9')
+            while (input[position] >= '0' && input[position] <= '9')
             {
                 pToken->str[i] = input[position];
                 position++;
@@ -372,7 +378,7 @@ u32 tokenizer(const char *input, Token *tokens)
                 position++;
                 i++;
 
-                while (position < inputlen && input[position] >= '0' && input[position] <= '9')
+                while (input[position] >= '0' && input[position] <= '9')
                 {
                     pToken->str[i] = input[position];
                     position++;
@@ -409,7 +415,7 @@ u32 tokenizer(const char *input, Token *tokens)
                     pToken++;
                     break;
                 case '-':
-                {
+                    {
                     // 判断当前'-'是负号还是减法运算符
                     int isNegative = 0;
                     if (tokenCount == 0)
@@ -443,7 +449,7 @@ u32 tokenizer(const char *input, Token *tokens)
                         }
 
                         // 解析整数部分
-                        while (position < inputlen && input[position] >= '0' && input[position] <= '9')
+                        while (input[position] >= '0' && input[position] <= '9')
                         {
                             pToken->str[i++] = input[position];
                             position++;
@@ -451,7 +457,7 @@ u32 tokenizer(const char *input, Token *tokens)
 
                         // 解析小数部分（如果有）
                         int hasDecimal = 0;
-                        if (position < inputlen && input[position] == '.')
+                        if (input[position] == '.')
                         {
                             hasDecimal = 1;
                             pToken->str[i++] = '.';
@@ -463,7 +469,8 @@ u32 tokenizer(const char *input, Token *tokens)
                                 printf("Invalid decimal part in negative number at position %u\n", position - 1);
                                 return 0;
                             }
-                            while (position < inputlen && input[position] >= '0' && input[position] <= '9')
+
+                            while (input[position] >= '0' && input[position] <= '9')
                             {
                                 pToken->str[i++] = input[position];
                                 position++;
@@ -798,6 +805,19 @@ u32 tokenizer(const char *input, Token *tokens)
 }
 
 /******************************************************
+ * 函数功能: 将算术表达式转换为符号序列
+ * ---------------------------------------------------
+ * @param[in] - input, 算术表达式字符串, 以'\0'结尾
+ * @param[out] - tokens, 输出的符号序列
+ * ---------------------------------------------------
+ * @return - 输出的符号的个数
+ ******************************************************/
+void getNextToken(pTokenState s, Token *tokens)
+{
+    s->currentToken.type = TOKEN_INVALID;
+}
+
+/******************************************************
  * 函数功能: 输出一个操作符的优先级
  * ---------------------------------------------------
  * @param[in] - t, 符号
@@ -809,7 +829,7 @@ int tokenPrecedence(Token *t)
     switch (t->type)
     {
         case TOKEN_START:
-        case TOKEN_END:
+            case TOKEN_END:
             return 0;
         case TOKEN_ASSIGN:
             return 1;
@@ -824,27 +844,27 @@ int tokenPrecedence(Token *t)
         case TOKEN_BIT_AND:
             return 6;
         case TOKEN_LOGICA_NOT_EQUAL:
-        case TOKEN_LOGICA_EQUAL:
+            case TOKEN_LOGICA_EQUAL:
             return 7;
         case TOKEN_LOGICA_GREATER:
-        case TOKEN_LOGICA_LESS:
-        case TOKEN_LOGICA_GREATER_EQUAL:
-        case TOKEN_LOGICA_LESS_EQUAL:
+            case TOKEN_LOGICA_LESS:
+            case TOKEN_LOGICA_GREATER_EQUAL:
+            case TOKEN_LOGICA_LESS_EQUAL:
             return 8;
         case TOKEN_LEFT_SHIFT:
-        case TOKEN_RIGHT_SHIFT:
+            case TOKEN_RIGHT_SHIFT:
             return 9;
         case TOKEN_PLUS:
-        case TOKEN_MINUS:
+            case TOKEN_MINUS:
             return 10;
         case TOKEN_MULTIPLY:
-        case TOKEN_DIVIDE:
+            case TOKEN_DIVIDE:
             return 11;
         case TOKEN_LOGICAL_NOT:
-        case TOKEN_BIT_NEGATION:
+            case TOKEN_BIT_NEGATION:
             return 12;
         case TOKEN_SIN:
-        case TOKEN_COS:
+            case TOKEN_COS:
             return 13;
         case TOKEN_EXPONENTIAL:
             return 14;
@@ -920,7 +940,7 @@ void tokenConvert(Token *infix, u32 inCount, Token *postfix, pStackArray stack)
                     s = stack->top(stack);
                 }
 
-                stack->push(t, stack);//将当前操作符压栈
+                stack->push(t, stack); //将当前操作符压栈
             }
         }
     }
@@ -932,7 +952,7 @@ void tokenConvert(Token *infix, u32 inCount, Token *postfix, pStackArray stack)
         j++;
     }
 
-    stack->pop(stack);//将 TOKEN_START 出栈
+    stack->pop(stack); //将 TOKEN_START 出栈
     postfix[j].type = TOKEN_END; //将最后一个元素标记为 TOKEN_END
 }
 
@@ -976,7 +996,7 @@ const char* getTokenType(TokenType t)
         case TOKEN_COS:
             return ("TOKEN_COS");
         case TOKEN_EXPONENTIAL:
-			return ("TOKEN_EXPONENTIAL");
+            return ("TOKEN_EXPONENTIAL");
         case TOKEN_LPAREN:
             return ("TOKEN_LPAREN");
         case TOKEN_RPAREN:
@@ -984,31 +1004,31 @@ const char* getTokenType(TokenType t)
         case TOKEN_REALDB:
             return ("TOKEN_REALDB");
         case TOKEN_STRING:
-			return ("TOKEN_STRING");
-		case TOKEN_LOGICAL_AND:
-			return ("TOKEN_LOGICAL_AND");
-		case TOKEN_LOGICAL_OR:
-			return ("TOKEN_LOGICAL_OR");
-		case TOKEN_LOGICAL_NOT:
-			return ("TOKEN_LOGICAL_NOT");
-		case TOKEN_LOGICA_EQUAL:
-			return ("TOKEN_LOGICA_EQUAL");
-		case TOKEN_LOGICA_NOT_EQUAL:
-			return ("TOKEN_LOGICA_NOT_EQUAL");
-		case TOKEN_LOGICA_GREATER:
-			return ("TOKEN_GREATER");
-		case TOKEN_LOGICA_LESS:
-			return ("TOKEN_LESS");
-		case TOKEN_LOGICA_GREATER_EQUAL:
-			return ("TOKEN_GREATER_EQUAL");
-		case TOKEN_LOGICA_LESS_EQUAL:
-			return ("TOKEN_LESS_EQUAL");
-		case TOKEN_COMMA:
-			return ("TOKEN_COMMA");
-		case TOKEN_ASSIGN:
-			return ("TOKEN_ASSIGN");
-		case TOKEN_SEMICOLON:
-			return ("TOKEN_SEMICOLON");
+            return ("TOKEN_STRING");
+        case TOKEN_LOGICAL_AND:
+            return ("TOKEN_LOGICAL_AND");
+        case TOKEN_LOGICAL_OR:
+            return ("TOKEN_LOGICAL_OR");
+        case TOKEN_LOGICAL_NOT:
+            return ("TOKEN_LOGICAL_NOT");
+        case TOKEN_LOGICA_EQUAL:
+            return ("TOKEN_LOGICA_EQUAL");
+        case TOKEN_LOGICA_NOT_EQUAL:
+            return ("TOKEN_LOGICA_NOT_EQUAL");
+        case TOKEN_LOGICA_GREATER:
+            return ("TOKEN_GREATER");
+        case TOKEN_LOGICA_LESS:
+            return ("TOKEN_LESS");
+        case TOKEN_LOGICA_GREATER_EQUAL:
+            return ("TOKEN_GREATER_EQUAL");
+        case TOKEN_LOGICA_LESS_EQUAL:
+            return ("TOKEN_LESS_EQUAL");
+        case TOKEN_COMMA:
+            return ("TOKEN_COMMA");
+        case TOKEN_ASSIGN:
+            return ("TOKEN_ASSIGN");
+        case TOKEN_SEMICOLON:
+            return ("TOKEN_SEMICOLON");
         case TOKEN_BIT_NEGATION:
             return ("TOKEN_BIT_NEGATION");
         case TOKEN_END:
@@ -1095,8 +1115,8 @@ double tokenEvaluate(Token *postfix, pStackArray stack)
         t = postfix[i];
         DEBUG_TIME_LINE("token: type-%s, str: %s", getTokenType(t.type), t.str);
         if (t.type == TOKEN_INTEGER ||
-            t.type == TOKEN_FLOAT ||
-            t.type == TOKEN_REALDB)
+                t.type == TOKEN_FLOAT ||
+                t.type == TOKEN_REALDB)
         {
             //操作数直接压栈
             stack->push(t, stack);
@@ -1134,14 +1154,14 @@ double tokenEvaluate(Token *postfix, pStackArray stack)
                     break;
                 case TOKEN_BIT_NEGATION:
                     result.type = TOKEN_INTEGER;
-                    result.value.intValue = (~(int)operandDouble1);
-                    DEBUG_TIME_LINE("operand1: %d, result: %d", (int)operandDouble1, result.value.intValue);
+                    result.value.intValue = (~(int) operandDouble1);
+                    DEBUG_TIME_LINE("operand1: %d, result: %d", (int )operandDouble1, result.value.intValue);
                     stack->push(result, stack);
                     break;
                 case TOKEN_LOGICAL_NOT:
                     result.type = TOKEN_INTEGER;
-                    result.value.intValue = (!(int)operandDouble1);
-                    DEBUG_TIME_LINE("operand1: %d, result: %d", (int)operandDouble1, result.value.intValue);
+                    result.value.intValue = (!(int) operandDouble1);
+                    DEBUG_TIME_LINE("operand1: %d, result: %d", (int )operandDouble1, result.value.intValue);
                     stack->push(result, stack);
                     break;
                 default:
@@ -1212,80 +1232,80 @@ double tokenEvaluate(Token *postfix, pStackArray stack)
                     break;
                 case TOKEN_BIT_OR:
                     result.type = TOKEN_INTEGER;
-                    result.value.intValue = (((int)operandDouble1) | ((int)operandDouble2));
-                    DEBUG_TIME_LINE("operand1: %d, operand2: %d, result: %d", (int)operandDouble1, (int)operandDouble2, result.value.intValue);
+                    result.value.intValue = (((int) operandDouble1) | ((int) operandDouble2));
+                    DEBUG_TIME_LINE("operand1: %d, operand2: %d, result: %d", (int )operandDouble1, (int )operandDouble2, result.value.intValue);
                     stack->push(result, stack);
                     break;
                 case TOKEN_BIT_AND:
                     result.type = TOKEN_INTEGER;
-                    result.value.intValue = (((int)operandDouble1) & ((int)operandDouble2));
-                    DEBUG_TIME_LINE("operand1: %d, operand2: %d, result: %d", (int)operandDouble1, ((int)operandDouble2), result.value.intValue);
+                    result.value.intValue = (((int) operandDouble1) & ((int) operandDouble2));
+                    DEBUG_TIME_LINE("operand1: %d, operand2: %d, result: %d", (int )operandDouble1, ((int )operandDouble2), result.value.intValue);
                     stack->push(result, stack);
                     break;
                 case TOKEN_BIT_XOR:
                     result.type = TOKEN_INTEGER;
-                    result.value.intValue = (((int)operandDouble1) ^ ((int)operandDouble2));
-                    DEBUG_TIME_LINE("operand1: %d, operand2: %d, result: %d", (int)operandDouble1, ((int)operandDouble2), result.value.intValue);
+                    result.value.intValue = (((int) operandDouble1) ^ ((int) operandDouble2));
+                    DEBUG_TIME_LINE("operand1: %d, operand2: %d, result: %d", (int )operandDouble1, ((int )operandDouble2), result.value.intValue);
                     stack->push(result, stack);
                     break;
                 case TOKEN_LEFT_SHIFT:
                     result.type = TOKEN_INTEGER;
-                    result.value.intValue = (((int)operandDouble1) << ((int)operandDouble2));
-                    DEBUG_TIME_LINE("operand1: %d, operand2: %d, result: %d", (int)operandDouble1, ((int)operandDouble2), result.value.intValue);
+                    result.value.intValue = (((int) operandDouble1) << ((int) operandDouble2));
+                    DEBUG_TIME_LINE("operand1: %d, operand2: %d, result: %d", (int )operandDouble1, ((int )operandDouble2), result.value.intValue);
                     stack->push(result, stack);
                     break;
                 case TOKEN_RIGHT_SHIFT:
                     result.type = TOKEN_INTEGER;
-                    result.value.intValue = (((int)operandDouble1) >> ((int)operandDouble2));
-                    DEBUG_TIME_LINE("operand1: %d, operand2: %d, result: %d", (int)operandDouble1, ((int)operandDouble2), result.value.intValue);
+                    result.value.intValue = (((int) operandDouble1) >> ((int) operandDouble2));
+                    DEBUG_TIME_LINE("operand1: %d, operand2: %d, result: %d", (int )operandDouble1, ((int )operandDouble2), result.value.intValue);
                     stack->push(result, stack);
                     break;
                 case TOKEN_LOGICAL_AND:
                     result.type = TOKEN_INTEGER;
-                    result.value.intValue = (((int)operandDouble1) && ((int)operandDouble2));
-                    DEBUG_TIME_LINE("operand1: %d, operand2: %d, result: %d", (int)operandDouble1, ((int)operandDouble2), result.value.intValue);
+                    result.value.intValue = (((int) operandDouble1) && ((int) operandDouble2));
+                    DEBUG_TIME_LINE("operand1: %d, operand2: %d, result: %d", (int )operandDouble1, ((int )operandDouble2), result.value.intValue);
                     stack->push(result, stack);
                     break;
                 case TOKEN_LOGICAL_OR:
                     result.type = TOKEN_INTEGER;
-                    result.value.intValue = (((int)operandDouble1) || ((int)operandDouble2));
-                    DEBUG_TIME_LINE("operand1: %d, operand2: %d, result: %d", (int)operandDouble1, ((int)operandDouble2), result.value.intValue);
+                    result.value.intValue = (((int) operandDouble1) || ((int) operandDouble2));
+                    DEBUG_TIME_LINE("operand1: %d, operand2: %d, result: %d", (int )operandDouble1, ((int )operandDouble2), result.value.intValue);
                     stack->push(result, stack);
                     break;
                 case TOKEN_LOGICA_EQUAL:
                     result.type = TOKEN_INTEGER;
-                    result.value.intValue = (((int)operandDouble1) == ((int)operandDouble2));
-                    DEBUG_TIME_LINE("operand1: %d, operand2: %d, result: %d", (int)operandDouble1, ((int)operandDouble2), result.value.intValue);
+                    result.value.intValue = (((int) operandDouble1) == ((int) operandDouble2));
+                    DEBUG_TIME_LINE("operand1: %d, operand2: %d, result: %d", (int )operandDouble1, ((int )operandDouble2), result.value.intValue);
                     stack->push(result, stack);
                     break;
                 case TOKEN_LOGICA_NOT_EQUAL:
                     result.type = TOKEN_INTEGER;
-                    result.value.intValue = (((int)operandDouble1) != ((int)operandDouble2));
-                    DEBUG_TIME_LINE("operand1: %d, operand2: %d, result: %d", (int)operandDouble1, ((int)operandDouble2), result.value.intValue);
+                    result.value.intValue = (((int) operandDouble1) != ((int) operandDouble2));
+                    DEBUG_TIME_LINE("operand1: %d, operand2: %d, result: %d", (int )operandDouble1, ((int )operandDouble2), result.value.intValue);
                     stack->push(result, stack);
                     break;
                 case TOKEN_LOGICA_GREATER:
                     result.type = TOKEN_INTEGER;
-                    result.value.intValue = (((int)operandDouble1) > ((int)operandDouble2));
-                    DEBUG_TIME_LINE("operand1: %d, operand2: %d, result: %d", (int)operandDouble1, ((int)operandDouble2), result.value.intValue);
+                    result.value.intValue = (((int) operandDouble1) > ((int) operandDouble2));
+                    DEBUG_TIME_LINE("operand1: %d, operand2: %d, result: %d", (int )operandDouble1, ((int )operandDouble2), result.value.intValue);
                     stack->push(result, stack);
                     break;
                 case TOKEN_LOGICA_LESS:
                     result.type = TOKEN_INTEGER;
-                    result.value.intValue = (((int)operandDouble1) < ((int)operandDouble2));
-                    DEBUG_TIME_LINE("operand1: %d, operand2: %d, result: %d", (int)operandDouble1, ((int)operandDouble2), result.value.intValue);
+                    result.value.intValue = (((int) operandDouble1) < ((int) operandDouble2));
+                    DEBUG_TIME_LINE("operand1: %d, operand2: %d, result: %d", (int )operandDouble1, ((int )operandDouble2), result.value.intValue);
                     stack->push(result, stack);
                     break;
                 case TOKEN_LOGICA_GREATER_EQUAL:
                     result.type = TOKEN_INTEGER;
-                    result.value.intValue = (((int)operandDouble1) >= ((int)operandDouble2));
-                    DEBUG_TIME_LINE("operand1: %d, operand2: %d, result: %d", (int)operandDouble1, ((int)operandDouble2), result.value.intValue);
+                    result.value.intValue = (((int) operandDouble1) >= ((int) operandDouble2));
+                    DEBUG_TIME_LINE("operand1: %d, operand2: %d, result: %d", (int )operandDouble1, ((int )operandDouble2), result.value.intValue);
                     stack->push(result, stack);
                     break;
                 case TOKEN_LOGICA_LESS_EQUAL:
                     result.type = TOKEN_INTEGER;
-                    result.value.intValue = (((int)operandDouble1) <= ((int)operandDouble2));
-                    DEBUG_TIME_LINE("operand1: %d, operand2: %d, result: %d", (int)operandDouble1, ((int)operandDouble2), result.value.intValue);
+                    result.value.intValue = (((int) operandDouble1) <= ((int) operandDouble2));
+                    DEBUG_TIME_LINE("operand1: %d, operand2: %d, result: %d", (int )operandDouble1, ((int )operandDouble2), result.value.intValue);
                     stack->push(result, stack);
                     break;
                 case TOKEN_ASSIGN:
@@ -1311,7 +1331,7 @@ double tokenEvaluate(Token *postfix, pStackArray stack)
     Token top = stack->top(stack);
     if (top.type == TOKEN_INTEGER)
     {
-        return (double)top.value.intValue;
+        return (double) top.value.intValue;
     }
 
     return top.value.numValue;
@@ -1327,10 +1347,9 @@ double tokenEvaluate(Token *postfix, pStackArray stack)
 void ariMain(void)
 {
 //    char *input = "(2.5 + 3) * 4.2 - 10.1 / #201 + (8  | 4) + (#1<<3) + (16 >> 2) + (7&3) + sin(12) + cos(20) + 2exp(30)+(1==2) + (1!=2)+(1<2)+(1>2)+(1<=2)+(1>=2)";
-    char *input ="56--9+-6.3--";
+//    char *input ="56--9+-6.3--";
 //    char *input = "65--11+2";
-
-//    char *input = "65--11+2*sin(12)";
+    char *input = "65--11+2*sin(12)";
 
     DEBUG_TIME_LINE("before tokenizer: %s", input);
 
