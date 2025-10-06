@@ -56,7 +56,8 @@ typedef double (*te_fun2)(double, double);
 
 enum {
     TOK_NULL = TE_CLOSURE7+1, TOK_ERROR, TOK_END, TOK_SEP,
-    TOK_OPEN, TOK_CLOSE, TOK_NUMBER, TOK_VARIABLE, TOK_INFIX
+    TOK_OPEN, TOK_CLOSE, TOK_NUMBER, TOK_VARIABLE, TOK_INFIX,
+    TOK_RTDB
 };
 
 
@@ -198,9 +199,9 @@ static const te_variable *find_builtin(const char *name, int len) {
 
     /*Binary search.*/
     while (imax >= imin) {
-        const int i = (imin + ((imax-imin)/2)); // middle index; mid = low + (high - low)/2 to Avoid overflow.
+        const int i = (imin + ((imax-imin)/2));
         int c = strncmp(name, functions[i].name, len);
-        if (!c) c = '\0' - functions[i].name[len]; //make sure an exact match of the function/variable name, not just a prefix match.
+        if (!c) c = '\0' - functions[i].name[len];
         if (c == 0) {
             return functions + i;
         } else if (c > 0) {
@@ -235,6 +236,31 @@ static double divide(double a, double b) {return a / b;}
 static double negate(double a) {return -a;}
 static double comma(double a, double b) {(void)a; return b;}
 
+/* Bitwise operations: convert operand to signed 64-bit integer, operate, return as double. */
+static double bit_or(double a, double b) { return (double)((long long)a | (long long)b); }
+static double bit_and(double a, double b) { return (double)((long long)a & (long long)b); }
+static double bit_xor(double a, double b) { return (double)((long long)a ^ (long long)b); }
+static double bit_not(double a) { return (double)(~(long long)a); }
+static double shl(double a, double b) { return (double)((long long)a << (long long)b); }
+static double shr(double a, double b) { return (double)((long long)a >> (long long)b); }
+
+/* Logical operations */
+static double logical_not(double a) { return (double)(!a); }
+static double logical_and(double a, double b) { return (double)(a && b); }
+static double logical_or(double a, double b) { return (double)(a || b); }
+
+/* Comparison operations */
+static double greater(double a, double b) { return (double)(a > b); }
+static double less(double a, double b) { return (double)(a < b); }
+static double greater_equal(double a, double b) { return (double)(a >= b); }
+static double less_equal(double a, double b) { return (double)(a <= b); }
+static double equal(double a, double b) { return (double)(a == b); }
+static double not_equal(double a, double b) { return (double)(a != b); }
+
+/* RTDB helpers: these call user-provided functions declared in the header. */
+static double rtdb_get_wrapper(double index) { return get_rtdb_value(index); }
+static double rtdb_set_wrapper(double index, double value) { return set_rtdb_value(index, value); }
+
 
 void next_token(state *s) {
     s->type = TOK_NULL;
@@ -256,9 +282,9 @@ void next_token(state *s) {
                 const char *start;
                 start = s->next;
                 while (isalpha(s->next[0]) || isdigit(s->next[0]) || (s->next[0] == '_')) s->next++;
-
-                const te_variable *var = find_lookup(s, start, s->next - start); //find in custom function table
-                if (!var) var = find_builtin(start, s->next - start); //find in builtin functions
+                
+                const te_variable *var = find_lookup(s, start, s->next - start);
+                if (!var) var = find_builtin(start, s->next - start);
 
                 if (!var) {
                     s->type = TOK_ERROR;
@@ -284,18 +310,50 @@ void next_token(state *s) {
 
             } else {
                 /* Look for an operator or special character. */
-                switch (s->next++[0]) {
-                    case '+': s->type = TOK_INFIX; s->function = add; break;
-                    case '-': s->type = TOK_INFIX; s->function = sub; break;
-                    case '*': s->type = TOK_INFIX; s->function = mul; break;
-                    case '/': s->type = TOK_INFIX; s->function = divide; break;
-                    case '^': s->type = TOK_INFIX; s->function = pow; break;
-                    case '%': s->type = TOK_INFIX; s->function = fmod; break;
-                    case '(': s->type = TOK_OPEN; break;
-                    case ')': s->type = TOK_CLOSE; break;
-                    case ',': s->type = TOK_SEP; break;
-                    case ' ': case '\t': case '\n': case '\r': break;
-                    default: s->type = TOK_ERROR; break;
+                const char cur = s->next[0];
+                const char nxt = s->next[1];
+
+                /* RTDB reference: #<digits> */
+                if (cur == '#') {
+                    s->next++; /* skip # */
+                    if (s->next[0] >= '0' && s->next[0] <= '9') {
+                        s->value = strtod(s->next, (char**)&s->next);
+                        s->type = TOK_RTDB;
+                    } else {
+                        s->type = TOK_ERROR;
+                    }
+                }
+                /* two-char operators */
+                else if (cur == '&' && nxt == '&') { s->type = TOK_INFIX; s->function = logical_and; s->next += 2; }
+                else if (cur == '|' && nxt == '|') { s->type = TOK_INFIX; s->function = logical_or; s->next += 2; }
+                else if (cur == '<' && nxt == '<') { s->type = TOK_INFIX; s->function = shl; s->next += 2; }
+                else if (cur == '>' && nxt == '>') { s->type = TOK_INFIX; s->function = shr; s->next += 2; }
+                else if (cur == '=' && nxt == '=') { s->type = TOK_INFIX; s->function = equal; s->next += 2; }
+                else if (cur == '!' && nxt == '=') { s->type = TOK_INFIX; s->function = not_equal; s->next += 2; }
+                else if (cur == '<' && nxt == '=') { s->type = TOK_INFIX; s->function = less_equal; s->next += 2; }
+                else if (cur == '>' && nxt == '=') { s->type = TOK_INFIX; s->function = greater_equal; s->next += 2; }
+                else {
+                    /* single-char operators */
+                    switch (s->next++[0]) {
+                        case '+': s->type = TOK_INFIX; s->function = add; break;
+                        case '-': s->type = TOK_INFIX; s->function = sub; break;
+                        case '*': s->type = TOK_INFIX; s->function = mul; break;
+                        case '/': s->type = TOK_INFIX; s->function = divide; break;
+                        case '^': s->type = TOK_INFIX; s->function = bit_xor; break;
+                        case '%': s->type = TOK_INFIX; s->function = fmod; break;
+                        case '&': s->type = TOK_INFIX; s->function = bit_and; break;
+                        case '|': s->type = TOK_INFIX; s->function = bit_or; break;
+                        case '~': s->type = TE_FUNCTION1 | TE_FLAG_PURE; s->function = bit_not; break;
+                        case '!': s->type = TE_FUNCTION1 | TE_FLAG_PURE; s->function = logical_not; break;
+                        case '<': s->type = TOK_INFIX; s->function = less; break;
+                        case '>': s->type = TOK_INFIX; s->function = greater; break;
+                        case '=': s->type = TOK_INFIX; s->function = rtdb_set_wrapper; break; /* assignment; left must be RTDB */
+                        case '(': s->type = TOK_OPEN; break;
+                        case ')': s->type = TOK_CLOSE; break;
+                        case ',': s->type = TOK_SEP; break;
+                        case ' ': case '\t': case '\n': case '\r': break;
+                        default: s->type = TOK_ERROR; break;
+                    }
                 }
             }
         }
@@ -304,8 +362,18 @@ void next_token(state *s) {
 
 
 static te_expr *list(state *s);
-static te_expr *expr(state *s);
 static te_expr *power(state *s);
+static te_expr *multiplicative(state *s);
+static te_expr *additive(state *s);
+static te_expr *shift(state *s);
+static te_expr *relational(state *s);
+static te_expr *equality(state *s);
+static te_expr *bitand_(state *s);
+static te_expr *bitxor_(state *s);
+static te_expr *bitor_(state *s);
+static te_expr *land(state *s);
+static te_expr *lor(state *s);
+static te_expr *assign(state *s);
 
 static te_expr *base(state *s) {
     /* <base>      =    <constant> | <variable> | <function-0> {"(" ")"} | <function-1> <power> | <function-X> "(" <expr> {"," <expr>} ")" | "(" <list> ")" */
@@ -328,6 +396,22 @@ static te_expr *base(state *s) {
             ret->bound = s->bound;
             next_token(s);
             break;
+
+        case TOK_RTDB: {
+            /* Create a function1 node that when evaluated calls rtdb_get_wrapper(index) */
+            ret = new_expr(TE_FUNCTION1 | TE_FLAG_PURE, 0);
+            CHECK_NULL(ret);
+
+            /* parameter 0 is the index (constant) */
+            te_expr *idx = new_expr(TE_CONSTANT, 0);
+            CHECK_NULL(idx, te_free(ret));
+            idx->value = s->value;
+
+            ret->function = rtdb_get_wrapper;
+            ret->parameters[0] = idx;
+            next_token(s);
+            break;
+        }
 
         case TE_FUNCTION0:
         case TE_CLOSURE0:
@@ -372,13 +456,13 @@ static te_expr *base(state *s) {
             if (IS_CLOSURE(s->type)) ret->parameters[arity] = s->context;
             next_token(s);
 
-            if (s->type != TOK_OPEN) {
+                if (s->type != TOK_OPEN) {
                 s->type = TOK_ERROR;
             } else {
                 int i;
                 for(i = 0; i < arity; i++) {
                     next_token(s);
-                    ret->parameters[i] = expr(s);
+                    ret->parameters[i] = assign(s);
                     CHECK_NULL(ret->parameters[i], te_free(ret));
 
                     if(s->type != TOK_SEP) {
@@ -419,8 +503,11 @@ static te_expr *base(state *s) {
 }
 
 
+/* New expression parser chain to match C-like precedence. */
+static te_expr *power(state *s); /* forward (unary) */
+
 static te_expr *power(state *s) {
-    /* <power>     =    {("-" | "+")} <base> */
+    /* unary: handles leading + and - (as before), and then primary/base */
     int sign = 1;
     while (s->type == TOK_INFIX && (s->function == add || s->function == sub)) {
         if (s->function == sub) sign = -sign;
@@ -428,154 +515,250 @@ static te_expr *power(state *s) {
     }
 
     te_expr *ret;
-
     if (sign == 1) {
         ret = base(s);
     } else {
         te_expr *b = base(s);
         CHECK_NULL(b);
-
         ret = NEW_EXPR(TE_FUNCTION1 | TE_FLAG_PURE, b);
         CHECK_NULL(ret, te_free(b));
-
         ret->function = negate;
     }
 
     return ret;
 }
 
-#ifdef TE_POW_FROM_RIGHT
-static te_expr *factor(state *s) {
-    /* <factor>    =    <power> {"^" <power>} */
+static te_expr *multiplicative(state *s) {
     te_expr *ret = power(s);
-    CHECK_NULL(ret);
-
-    int neg = 0;
-
-    if (ret->type == (TE_FUNCTION1 | TE_FLAG_PURE) && ret->function == negate) {
-        te_expr *se = ret->parameters[0];
-        free(ret);
-        ret = se;
-        neg = 1;
-    }
-
-    te_expr *insertion = 0;
-
-    while (s->type == TOK_INFIX && (s->function == pow)) {
-        te_fun2 t = s->function;
-        next_token(s);
-
-        if (insertion) {
-            /* Make exponentiation go right-to-left. */
-            te_expr *p = power(s);
-            CHECK_NULL(p, te_free(ret));
-
-            te_expr *insert = NEW_EXPR(TE_FUNCTION2 | TE_FLAG_PURE, insertion->parameters[1], p);
-            CHECK_NULL(insert, te_free(p), te_free(ret));
-
-            insert->function = t;
-            insertion->parameters[1] = insert;
-            insertion = insert;
-        } else {
-            te_expr *p = power(s);
-            CHECK_NULL(p, te_free(ret));
-
-            te_expr *prev = ret;
-            ret = NEW_EXPR(TE_FUNCTION2 | TE_FLAG_PURE, ret, p);
-            CHECK_NULL(ret, te_free(p), te_free(prev));
-
-            ret->function = t;
-            insertion = ret;
-        }
-    }
-
-    if (neg) {
-        te_expr *prev = ret;
-        ret = NEW_EXPR(TE_FUNCTION1 | TE_FLAG_PURE, ret);
-        CHECK_NULL(ret, te_free(prev));
-
-        ret->function = negate;
-    }
-
-    return ret;
-}
-#else
-static te_expr *factor(state *s) {
-    /* <factor>    =    <power> {"^" <power>} */
-    te_expr *ret = power(s);
-    CHECK_NULL(ret);
-
-    while (s->type == TOK_INFIX && (s->function == pow)) {
-        te_fun2 t = s->function;
-        next_token(s);
-        te_expr *p = power(s);
-        CHECK_NULL(p, te_free(ret));
-
-        te_expr *prev = ret;
-        ret = NEW_EXPR(TE_FUNCTION2 | TE_FLAG_PURE, ret, p);
-        CHECK_NULL(ret, te_free(p), te_free(prev));
-
-        ret->function = t;
-    }
-
-    return ret;
-}
-#endif
-
-
-
-static te_expr *term(state *s) {
-    /* <term>      =    <factor> {("*" | "/" | "%") <factor>} */
-    te_expr *ret = factor(s);
     CHECK_NULL(ret);
 
     while (s->type == TOK_INFIX && (s->function == mul || s->function == divide || s->function == fmod)) {
         te_fun2 t = s->function;
         next_token(s);
-        te_expr *f = factor(s);
-        CHECK_NULL(f, te_free(ret));
+        te_expr *r = power(s);
+        CHECK_NULL(r, te_free(ret));
 
         te_expr *prev = ret;
-        ret = NEW_EXPR(TE_FUNCTION2 | TE_FLAG_PURE, ret, f);
-        CHECK_NULL(ret, te_free(f), te_free(prev));
-
+        ret = NEW_EXPR(TE_FUNCTION2 | TE_FLAG_PURE, ret, r);
+        CHECK_NULL(ret, te_free(r), te_free(prev));
         ret->function = t;
     }
 
     return ret;
 }
 
-
-static te_expr *expr(state *s) {
-    /* <expr>      =    <term> {("+" | "-") <term>} */
-    te_expr *ret = term(s);
+static te_expr *additive(state *s) {
+    te_expr *ret = multiplicative(s);
     CHECK_NULL(ret);
 
     while (s->type == TOK_INFIX && (s->function == add || s->function == sub)) {
         te_fun2 t = s->function;
         next_token(s);
-        te_expr *te = term(s);
-        CHECK_NULL(te, te_free(ret));
+        te_expr *r = multiplicative(s);
+        CHECK_NULL(r, te_free(ret));
 
         te_expr *prev = ret;
-        ret = NEW_EXPR(TE_FUNCTION2 | TE_FLAG_PURE, ret, te);
-        CHECK_NULL(ret, te_free(te), te_free(prev));
-
+        ret = NEW_EXPR(TE_FUNCTION2 | TE_FLAG_PURE, ret, r);
+        CHECK_NULL(ret, te_free(r), te_free(prev));
         ret->function = t;
     }
 
     return ret;
 }
 
+static te_expr *shift(state *s) {
+    te_expr *ret = additive(s);
+    CHECK_NULL(ret);
+
+    while (s->type == TOK_INFIX && (s->function == shl || s->function == shr)) {
+        te_fun2 t = s->function;
+        next_token(s);
+        te_expr *r = additive(s);
+        CHECK_NULL(r, te_free(ret));
+
+        te_expr *prev = ret;
+        ret = NEW_EXPR(TE_FUNCTION2 | TE_FLAG_PURE, ret, r);
+        CHECK_NULL(ret, te_free(r), te_free(prev));
+        ret->function = t;
+    }
+
+    return ret;
+}
+
+static te_expr *relational(state *s) {
+    te_expr *ret = shift(s);
+    CHECK_NULL(ret);
+
+    while (s->type == TOK_INFIX && (s->function == less || s->function == greater || s->function == less_equal || s->function == greater_equal)) {
+        te_fun2 t = s->function;
+        next_token(s);
+        te_expr *r = shift(s);
+        CHECK_NULL(r, te_free(ret));
+
+        te_expr *prev = ret;
+        ret = NEW_EXPR(TE_FUNCTION2 | TE_FLAG_PURE, ret, r);
+        CHECK_NULL(ret, te_free(r), te_free(prev));
+        ret->function = t;
+    }
+
+    return ret;
+}
+
+static te_expr *equality(state *s) {
+    te_expr *ret = relational(s);
+    CHECK_NULL(ret);
+
+    while (s->type == TOK_INFIX && (s->function == equal || s->function == not_equal)) {
+        te_fun2 t = s->function;
+        next_token(s);
+        te_expr *r = relational(s);
+        CHECK_NULL(r, te_free(ret));
+
+        te_expr *prev = ret;
+        ret = NEW_EXPR(TE_FUNCTION2 | TE_FLAG_PURE, ret, r);
+        CHECK_NULL(ret, te_free(r), te_free(prev));
+        ret->function = t;
+    }
+
+    return ret;
+}
+
+static te_expr *bitand_(state *s) {
+    te_expr *ret = equality(s);
+    CHECK_NULL(ret);
+
+    while (s->type == TOK_INFIX && s->function == bit_and) {
+        te_fun2 t = s->function;
+        next_token(s);
+        te_expr *r = equality(s);
+        CHECK_NULL(r, te_free(ret));
+
+        te_expr *prev = ret;
+        ret = NEW_EXPR(TE_FUNCTION2 | TE_FLAG_PURE, ret, r);
+        CHECK_NULL(ret, te_free(r), te_free(prev));
+        ret->function = t;
+    }
+
+    return ret;
+}
+
+static te_expr *bitxor_(state *s) {
+    te_expr *ret = bitand_(s);
+    CHECK_NULL(ret);
+
+    while (s->type == TOK_INFIX && s->function == bit_xor) {
+        te_fun2 t = s->function;
+        next_token(s);
+        te_expr *r = bitand_(s);
+        CHECK_NULL(r, te_free(ret));
+
+        te_expr *prev = ret;
+        ret = NEW_EXPR(TE_FUNCTION2 | TE_FLAG_PURE, ret, r);
+        CHECK_NULL(ret, te_free(r), te_free(prev));
+        ret->function = t;
+    }
+
+    return ret;
+}
+
+static te_expr *bitor_(state *s) {
+    te_expr *ret = bitxor_(s);
+    CHECK_NULL(ret);
+
+    while (s->type == TOK_INFIX && s->function == bit_or) {
+        te_fun2 t = s->function;
+        next_token(s);
+        te_expr *r = bitxor_(s);
+        CHECK_NULL(r, te_free(ret));
+
+        te_expr *prev = ret;
+        ret = NEW_EXPR(TE_FUNCTION2 | TE_FLAG_PURE, ret, r);
+        CHECK_NULL(ret, te_free(r), te_free(prev));
+        ret->function = t;
+    }
+
+    return ret;
+}
+
+static te_expr *land(state *s) {
+    te_expr *ret = bitor_(s);
+    CHECK_NULL(ret);
+
+    while (s->type == TOK_INFIX && s->function == logical_and) {
+        te_fun2 t = s->function;
+        next_token(s);
+        te_expr *r = bitor_(s);
+        CHECK_NULL(r, te_free(ret));
+
+        te_expr *prev = ret;
+        ret = NEW_EXPR(TE_FUNCTION2 | TE_FLAG_PURE, ret, r);
+        CHECK_NULL(ret, te_free(r), te_free(prev));
+        ret->function = t;
+    }
+
+    return ret;
+}
+
+static te_expr *lor(state *s) {
+    te_expr *ret = land(s);
+    CHECK_NULL(ret);
+
+    while (s->type == TOK_INFIX && s->function == logical_or) {
+        te_fun2 t = s->function;
+        next_token(s);
+        te_expr *r = land(s);
+        CHECK_NULL(r, te_free(ret));
+
+        te_expr *prev = ret;
+        ret = NEW_EXPR(TE_FUNCTION2 | TE_FLAG_PURE, ret, r);
+        CHECK_NULL(ret, te_free(r), te_free(prev));
+        ret->function = t;
+    }
+
+    return ret;
+}
+
+static te_expr *assign(state *s) {
+    /* assignment is lowest precedence and right-associative */
+    te_expr *ret = lor(s);
+    CHECK_NULL(ret);
+
+    if (s->type == TOK_INFIX && s->function == rtdb_set_wrapper) {
+        te_fun2 t = s->function;
+        next_token(s);
+        te_expr *r = assign(s);
+        CHECK_NULL(r, te_free(ret));
+
+        te_expr *prev = ret;
+        ret = NEW_EXPR(TE_FUNCTION2, prev, r); /* assignment not pure */
+        CHECK_NULL(ret, te_free(r), te_free(prev));
+        ret->function = t;
+
+        /* Left must be RTDB-get node */
+        if (prev && TYPE_MASK(prev->type) == TE_FUNCTION1 && prev->function == rtdb_get_wrapper) {
+            te_expr *index = prev->parameters[0];
+            prev->parameters[0] = 0;
+            te_free(prev);
+            ret->parameters[0] = index;
+            ret->type = TE_FUNCTION2;
+        } else {
+            s->type = TOK_ERROR;
+            te_free(ret);
+            return NULL;
+        }
+    }
+
+    return ret;
+}
 
 static te_expr *list(state *s) {
-    /* <list>      =    <expr> {"," <expr>} */
-    te_expr *ret = expr(s);
+    /* <list> = <assign> {"," <assign>} */
+    te_expr *ret = assign(s);
     CHECK_NULL(ret);
 
     while (s->type == TOK_SEP) {
         next_token(s);
-        te_expr *e = expr(s);
+        te_expr *e = assign(s);
         CHECK_NULL(e, te_free(ret));
 
         te_expr *prev = ret;

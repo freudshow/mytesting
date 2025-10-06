@@ -2,6 +2,8 @@
 #include <stdlib.h>
 #include "tinyexpr.h"
 
+static double rtdb[1024];
+
 /* An example of calling a C function. */
 double my_sum(double a, double b)
 {
@@ -13,6 +15,19 @@ double add_with_context(void *context, double x)
 {
     double offset = *(double*) context;
     return x + offset;
+}
+
+double get_rtdb_value(double index) {
+    int i = (int)index;
+    if (i < 0 || i >= (int)(sizeof(rtdb)/sizeof(rtdb[0]))) return 0.0;
+    return rtdb[i];
+}
+
+double set_rtdb_value(double index, double value) {
+    int i = (int)index;
+    if (i < 0 || i >= (int)(sizeof(rtdb)/sizeof(rtdb[0]))) return 0.0;
+    rtdb[i] = value;
+    return value;
 }
 
 void testtinyexpr(void)

@@ -59,6 +59,11 @@ typedef struct te_variable {
     void *context;
 } te_variable;
 
+/* Realtime DB accessors that user must provide. */
+/* index is interpreted as an integer (passed as double by the parser). */
+double get_rtdb_value(double index);
+double set_rtdb_value(double index, double value);
+
 
 
 /* Parses the input expression, evaluates it, and frees it. */

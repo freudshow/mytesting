@@ -6,9 +6,10 @@
 int xdrmain(void);
 void ariMain(void);
 void testtinyexpr(void);
+void timewheelmain(void);
 
 int main(int argc, char **argv)
 {
-    ariMain();
+    timewheelmain();
     return 0;
 }
