@@ -12,6 +12,7 @@ typedef enum {
     TASK_PRIORITY_MEDIUM,
     TASK_PRIORITY_HIGH,
     TASK_PRIORITY_URGENT,
+    TASK_PRIORITY_MAX = TASK_PRIORITY_URGENT + 1,
     TASK_PRIORITY_COUNT = 255
 } TaskPriority;
 
@@ -22,9 +23,11 @@ typedef struct Slot Slot;
 typedef struct TimeWheel TimeWheel;
 typedef struct ThreadPool ThreadPool;
 
+typedef void (*taskFunc_t)(void *arg);
+
 // 任务结构
 struct Task {
-    void (*func)(void *arg);  // 任务函数
+    taskFunc_t func;  // 任务函数
     void *arg;                // 任务参数
     TaskPriority priority;    // 任务优先级
     unsigned int interval;    // 周期任务的时间间隔(秒), 0表示一次性任务
@@ -50,7 +53,7 @@ struct ThreadPool {
 
 // 子槽位结构(用于槽位分片)
 struct SubSlot {
-    Task *tasks[TASK_PRIORITY_COUNT];  // 按优先级存储的任务链表
+    Task *tasks[TASK_PRIORITY_MAX];  // 按优先级存储的任务链表
     pthread_mutex_t mutex;             // 保护子槽位的互斥锁
 };
 
