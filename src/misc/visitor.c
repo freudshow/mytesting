@@ -1,167 +1,143 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <math.h>  // For M_PI and pow
 
 // Forward declarations
-typedef struct Element Element;
+typedef struct Shape Shape;
 typedef struct Visitor Visitor;
 
-// Function pointer type for accepting a visitor
-typedef void (*AcceptFunc)(Element*, Visitor*);
-
-// Basic element structure
-struct Element {
-    AcceptFunc accept;
-};
-
-// Concrete elements will inherit from this basic element
-
-// ElementA structure and its accept function
-typedef struct {
-    Element base;
-} ElementA;
-
-void ElementA_Accept(Element *self, Visitor *visitor);
-
-ElementA* CreateElementA()
-{
-    ElementA *element = (ElementA*) malloc(sizeof(ElementA));
-    if (!element)
-        return NULL;
-    element->base.accept = ElementA_Accept;
-    return element;
-}
-
-void DestroyElementA(ElementA *element)
-{
-    free(element);
-}
-
-// ElementB structure and its accept function
-typedef struct {
-    Element base;
-} ElementB;
-
-void ElementB_Accept(Element *self, Visitor *visitor);
-
-ElementB* CreateElementB()
-{
-    ElementB *element = (ElementB*) malloc(sizeof(ElementB));
-    if (!element)
-        return NULL;
-    element->base.accept = ElementB_Accept;
-    return element;
-}
-
-void DestroyElementB(ElementB *element)
-{
-    free(element);
-}
-
-// Function pointers for visiting different elements
-typedef void (*VisitElementAFunc)(Visitor*, ElementA*);
-typedef void (*VisitElementBFunc)(Visitor*, ElementB*);
-
-// Basic visitor structure
+// Visitor struct with function pointers for each concrete shape
 struct Visitor {
-    VisitElementAFunc visitElementA;
-    VisitElementBFunc visitElementB;
+    void (*visitCircle)(Visitor *self, void *circle);
+    void (*visitSquare)(Visitor *self, void *square);
 };
 
-// ConcreteVisitor1 implementation
+// Shape (Element) struct with accept function pointer
+struct Shape {
+    void (*accept)(Shape *self, Visitor *visitor);
+};
+
+// Concrete Shape: Circle
 typedef struct {
-    Visitor base;
-} ConcreteVisitor1;
+    Shape base;  // "Inherit" from Shape
+    double radius;
+} Circle;
 
-void ConcreteVisitor1_VisitElementA(Visitor *self, ElementA *element)
+void circleAccept(Shape *self, Visitor *visitor)
 {
-    printf("ConcreteVisitor1 visited ElementA\n");
+    visitor->visitCircle(visitor, (Circle*) self);
 }
 
-void ConcreteVisitor1_VisitElementB(Visitor *self, ElementB *element)
+Circle* createCircle(double radius)
 {
-    printf("ConcreteVisitor1 visited ElementB\n");
+    Circle *circle = malloc(sizeof(Circle));
+    circle->base.accept = circleAccept;
+    circle->radius = radius;
+    return circle;
 }
 
-ConcreteVisitor1* CreateConcreteVisitor1()
-{
-    ConcreteVisitor1 *visitor = (ConcreteVisitor1*) malloc(sizeof(ConcreteVisitor1));
-    if (!visitor)
-        return NULL;
-    visitor->base.visitElementA = ConcreteVisitor1_VisitElementA;
-    visitor->base.visitElementB = ConcreteVisitor1_VisitElementB;
-    return visitor;
-}
-
-void DestroyConcreteVisitor1(ConcreteVisitor1 *visitor)
-{
-    free(visitor);
-}
-
-// ConcreteVisitor2 implementation
+// Concrete Shape: Square
 typedef struct {
-    Visitor base;
-} ConcreteVisitor2;
+    Shape base;  // "Inherit" from Shape
+    double side;
+} Square;
 
-void ConcreteVisitor2_VisitElementA(Visitor *self, ElementA *element)
+void squareAccept(Shape *self, Visitor *visitor)
 {
-    printf("ConcreteVisitor2 visited ElementA\n");
+    visitor->visitSquare(visitor, (Square*) self);
 }
 
-void ConcreteVisitor2_VisitElementB(Visitor *self, ElementB *element)
+Square* createSquare(double side)
 {
-    printf("ConcreteVisitor2 visited ElementB\n");
+    Square *square = malloc(sizeof(Square));
+    square->base.accept = squareAccept;
+    square->side = side;
+    return square;
 }
 
-ConcreteVisitor2* CreateConcreteVisitor2()
+// Concrete Visitor: AreaVisitor
+typedef struct {
+    Visitor base;  // "Inherit" from Visitor
+    double area;   // State to accumulate or store result
+} AreaVisitor;
+
+void areaVisitCircle(Visitor *self, void *circlePtr)
 {
-    ConcreteVisitor2 *visitor = (ConcreteVisitor2*) malloc(sizeof(ConcreteVisitor2));
-    if (!visitor)
-        return NULL;
-    visitor->base.visitElementA = ConcreteVisitor2_VisitElementA;
-    visitor->base.visitElementB = ConcreteVisitor2_VisitElementB;
-    return visitor;
+    Circle *circle = (Circle*) circlePtr;
+    AreaVisitor *av = (AreaVisitor*) self;
+    av->area = M_PI * pow(circle->radius, 2);
+    printf("Circle area: %.2f\n", av->area);
 }
 
-void DestroyConcreteVisitor2(ConcreteVisitor2 *visitor)
+void areaVisitSquare(Visitor *self, void *squarePtr)
 {
-    free(visitor);
+    Square *square = (Square*) squarePtr;
+    AreaVisitor *av = (AreaVisitor*) self;
+    av->area = pow(square->side, 2);
+    printf("Square area: %.2f\n", av->area);
 }
 
-// Implementing accept functions for concrete elements
-void ElementA_Accept(Element *self, Visitor *visitor)
+AreaVisitor* createAreaVisitor()
 {
-    ElementA *element = (ElementA*) self;
-    visitor->visitElementA(visitor, element);
+    AreaVisitor *av = malloc(sizeof(AreaVisitor));
+    av->base.visitCircle = areaVisitCircle;
+    av->base.visitSquare = areaVisitSquare;
+    av->area = 0.0;
+    return av;
 }
 
-void ElementB_Accept(Element *self, Visitor *visitor)
+// Concrete Visitor: PerimeterVisitor
+typedef struct {
+    Visitor base;  // "Inherit" from Visitor
+    double perimeter;  // State to store result
+} PerimeterVisitor;
+
+void perimeterVisitCircle(Visitor *self, void *circlePtr)
 {
-    ElementB *element = (ElementB*) self;
-    visitor->visitElementB(visitor, element);
+    Circle *circle = (Circle*) circlePtr;
+    PerimeterVisitor *pv = (PerimeterVisitor*) self;
+    pv->perimeter = 2 * M_PI * circle->radius;
+    printf("Circle perimeter: %.2f\n", pv->perimeter);
 }
 
-int visitormain()
+void perimeterVisitSquare(Visitor *self, void *squarePtr)
 {
-    // Create elements
-    ElementA *elementA = CreateElementA();
-    ElementB *elementB = CreateElementB();
+    Square *square = (Square*) squarePtr;
+    PerimeterVisitor *pv = (PerimeterVisitor*) self;
+    pv->perimeter = 4 * square->side;
+    printf("Square perimeter: %.2f\n", pv->perimeter);
+}
+
+PerimeterVisitor* createPerimeterVisitor()
+{
+    PerimeterVisitor *pv = malloc(sizeof(PerimeterVisitor));
+    pv->base.visitCircle = perimeterVisitCircle;
+    pv->base.visitSquare = perimeterVisitSquare;
+    pv->perimeter = 0.0;
+    return pv;
+}
+
+// Example usage
+void visitormain(void)
+{
+    // Create shapes
+    Circle *circle = createCircle(5.0);
+    Square *square = createSquare(4.0);
 
     // Create visitors
-    ConcreteVisitor1 *visitor1 = CreateConcreteVisitor1();
-    ConcreteVisitor2 *visitor2 = CreateConcreteVisitor2();
+    AreaVisitor *areaVisitor = createAreaVisitor();
+    PerimeterVisitor *perimeterVisitor = createPerimeterVisitor();
 
-    // Use the accept method to visit each element with each visitor
-    elementA->base.accept((Element*) elementA, (Visitor*) visitor1);
-    elementB->base.accept((Element*) elementB, (Visitor*) visitor1);
+    // Apply visitors
+    circle->base.accept((Shape*) circle, (Visitor*) areaVisitor);
+    square->base.accept((Shape*) square, (Visitor*) areaVisitor);
 
-    elementA->base.accept((Element*) elementA, (Visitor*) visitor2);
-    elementB->base.accept((Element*) elementB, (Visitor*) visitor2);
+    circle->base.accept((Shape*) circle, (Visitor*) perimeterVisitor);
+    square->base.accept((Shape*) square, (Visitor*) perimeterVisitor);
 
-    // Clean up memory
-    DestroyElementA(elementA);
-    DestroyElementB(elementB);
-    DestroyConcreteVisitor1(visitor1);
-    DestroyConcreteVisitor2(visitor2);
-
-    return 0;
+    // Clean up (in real code, free all malloc'd memory)
+    free(circle);
+    free(square);
+    free(areaVisitor);
+    free(perimeterVisitor);
 }

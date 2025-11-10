@@ -7,9 +7,13 @@ int xdrmain(void);
 void ariMain(void);
 void testtinyexpr(void);
 void timewheelmain(void);
+void test_bitstring_codec(void);
+void axdrtest(void);
+void test_bitstring_var(void);
+void visitormain(void);
 
 int main(int argc, char **argv)
 {
-    timewheelmain();
+    visitormain();
     return 0;
 }

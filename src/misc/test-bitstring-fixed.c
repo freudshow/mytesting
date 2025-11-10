@@ -204,6 +204,18 @@ void test_bitstring_var(void)
                                     0x55,
                                     0xAA, 0x55, 0xAA, 0x55, 0xAA, 0xFF },
                                   351, "350 bits" },
+                                { { 0xAA, 0x55, 0xAA, 0x55, 0xAA, 0x55, 0xAA,
+                                    0x55,
+                                    0xAA, 0x55, 0xAA, 0x55, 0xAA, 0x55,
+                                    0xAA,
+                                    0x55 },
+                                  128, "128 bits" },
+                                { { 0xAA, 0x55, 0xAA, 0x55, 0xAA, 0x55, 0xAA,
+                                    0x55,
+                                    0xAA, 0x55, 0xAA, 0x55, 0xAA, 0x55,
+                                    0xAA,
+                                    0x55 },
+                                  127, "127 bits" },
     };
 
     int test_count = sizeof(test_values) / sizeof(TestValue);
