@@ -11,9 +11,10 @@ void test_bitstring_codec(void);
 void axdrtest(void);
 void test_bitstring_var(void);
 void visitormain(void);
+void testbaud(void);
 
 int main(int argc, char **argv)
 {
-    visitormain();
+    testbaud();
     return 0;
 }
