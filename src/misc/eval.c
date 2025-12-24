@@ -1,380 +1,95 @@
-/**********************************************************************************
- * eval.c : A simple expression calculator
- * run: gcc eval.c -lm -o eval
- * --------------------------------------------------------------------------------
- * A simple expression calculator supporting:
- * grammar of ExprCalc:
- *
- * prog      : stmt EOF ;
- *
- * stmt      : assignStmt
- *           | expr
- *           ;
- *
- * assignStmt: HASH ASSIGN expr ;
- *
- * expr      : logicalOr ;
- *
- * logicalOr : logicalAnd ( OROR logicalAnd )* ;
- * logicalAnd: bitOr ( ANDAND bitOr )* ;
- * bitOr     : bitXor ( PIPE bitXor )* ;
- * bitXor    : bitAnd ( CARET bitAnd )* ;
- * bitAnd    : equality ( AMP equality )* ;
- * equality  : relational ( EQ relational )* ;
- * relational: shift ( (GT | GTE | LT | LTE) shift )* ;
- * shift     : add ( (LSHIFT | RSHIFT) add )* ;
- * add       : mul ( (PLUS | MINUS) mul )* ;
- * mul       : unary ( (MULT | DIV) unary )* ;
- * unary     : ( NOT | TILDE | MINUS ) unary
- *           | primary
- *           ;
- * primary   : NUMBER
- *           | HASH
- *           | LPAREN expr RPAREN
- *           | functionCall
- *           ;
- *
- * functionCall
- *           : IDENT LPAREN expr RPAREN
- *           ;
- *
- * // Lexer tokens (representative)
- * PLUS    : '+' ;
- * MINUS   : '-' ;
- * MULT    : '*' ;
- * DIV     : '/' ;
- * NOT     : '!' ;
- * ANDAND  : '&&' ;
- * OROR    : '||' ;
- * GT      : '>' ;
- * GTE     : '>=' ;
- * LT      : '<' ;
- * LTE     : '<=' ;
- * EQ      : '==' ;
- * AMP     : '&' ;
- * PIPE    : '|' ;
- * CARET   : '^' ;
- * TILDE   : '~' ;
- * LSHIFT  : '<<' ;
- * RSHIFT  : '>>' ;
- * LPAREN  : '(' ;
- * RPAREN  : ')' ;
- * ASSIGN  : '=' ;
- *
- * // numbers and identifiers
- * NUMBER  : [0-9]+ ('.' [0-9]*)? | '.' [0-9]+ ;
- * HASH    : '#' [0-9]+ ;
- * IDENT   : [a-zA-Z]+ ;
- *
- * // whitespace and bad chars
- * WS      : [ \t\r\n]+ -> skip ;
- * ERROR_CHAR : . -> channel(HIDDEN) ; // or handle as error in lexer action
- ***********************************************************************************/
+// eval_ast.c
+// gcc eval_ast.c -lm -o eval_ast
+// Recursive-descent parser + AST + evaluator following specified grammar and precedence
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
 #include <math.h>
 #include <stdint.h>
-#include <setjmp.h>
 
 typedef enum {
-    T_NUM,
-    T_HASH,
-    T_IDENT,
-    T_PLUS,
-    T_MINUS,
-    T_MUL,
-    T_DIV,
-    T_LP,
-    T_RP,
-    T_NOT,
-    T_ANDAND,
-    T_OROR,
-    T_GT,
-    T_GTE,
-    T_LT,
-    T_LTE,
-    T_EQ,
-    T_AMP,
-    T_PIPE,
-    T_CARET,
-    T_TILDE,
-    T_LSHIFT,
-    T_RSHIFT,
+    T_NUM, T_HASH, T_IDENT,
+    T_PLUS, T_MINUS, T_MUL, T_DIV,
+    T_LP, T_RP,
+    T_NOT, T_NEQ, T_ANDAND, T_OROR,
+    T_GT, T_GTE, T_LT, T_LTE, T_EQ,
+    T_AMP, T_PIPE, T_CARET, T_TILDE,
+    T_LSHIFT, T_RSHIFT,
     T_ASSIGN,
-    T_EOF,
-    T_INVALID
+    T_EOF, T_INVALID
 } TokenType;
 
 typedef struct {
     TokenType type;
-    char *text; // for HASH (id) or IDENT or number text
+    char *text;
     double num;
+    int pos;
 } Token;
 
-const char *input_s;
-int input_pos, input_len;
-
-void skipws()
-{
-    while (input_pos < input_len && isspace((unsigned char )input_s[input_pos]))
-        input_pos++;
-}
-
-Token make_tok(TokenType t, const char *txt)
-{
-    Token tk;
-    tk.type = t;
-    tk.text = txt ? strdup(txt) : NULL;
-    tk.num = 0.0;
-    return tk;
-}
-
-Token make_num(double v, const char *txt)
-{
-    Token tk = make_tok(T_NUM, txt);
-    tk.num = v;
-    return tk;
-}
-
-static Token next_token()
-{
-    skipws();
-    if (input_pos >= input_len)
-        return make_tok(T_EOF, NULL);
-    char c = input_s[input_pos];
-
-    // multi-char ops
-    if (c == '&' && input_pos + 1 < input_len && input_s[input_pos + 1] == '&')
-    {
-        input_pos += 2;
-        return make_tok(T_ANDAND, "&&");
-    }
-    if (c == '|' && input_pos + 1 < input_len && input_s[input_pos + 1] == '|')
-    {
-        input_pos += 2;
-        return make_tok(T_OROR, "||");
-    }
-    if (c == '<' && input_pos + 1 < input_len && input_s[input_pos + 1] == '<')
-    {
-        input_pos += 2;
-        return make_tok(T_LSHIFT, "<<");
-    }
-    if (c == '>' && input_pos + 1 < input_len && input_s[input_pos + 1] == '>')
-    {
-        input_pos += 2;
-        return make_tok(T_RSHIFT, ">>");
-    }
-    if (c == '>' && input_pos + 1 < input_len && input_s[input_pos + 1] == '=')
-    {
-        input_pos += 2;
-        return make_tok(T_GTE, ">=");
-    }
-    if (c == '<' && input_pos + 1 < input_len && input_s[input_pos + 1] == '=')
-    {
-        input_pos += 2;
-        return make_tok(T_LTE, "<=");
-    }
-    if (c == '=' && input_pos + 1 < input_len && input_s[input_pos + 1] == '=')
-    {
-        input_pos += 2;
-        return make_tok(T_EQ, "==");
-    }
-
-    // single
-    if (c == '+')
-    {
-        input_pos++;
-        return make_tok(T_PLUS, "+");
-    }
-    if (c == '-')
-    {
-        input_pos++;
-        return make_tok(T_MINUS, "-");
-    }
-    if (c == '*')
-    {
-        input_pos++;
-        return make_tok(T_MUL, "*");
-    }
-    if (c == '/')
-    {
-        input_pos++;
-        return make_tok(T_DIV, "/");
-    }
-    if (c == '(')
-    {
-        input_pos++;
-        return make_tok(T_LP, "(");
-    }
-    if (c == ')')
-    {
-        input_pos++;
-        return make_tok(T_RP, ")");
-    }
-    if (c == '!')
-    {
-        input_pos++;
-        return make_tok(T_NOT, "!");
-    }
-    if (c == '>')
-    {
-        input_pos++;
-        return make_tok(T_GT, ">");
-    }
-    if (c == '<')
-    {
-        input_pos++;
-        return make_tok(T_LT, "<");
-    }
-    if (c == '&')
-    {
-        input_pos++;
-        return make_tok(T_AMP, "&");
-    }
-    if (c == '|')
-    {
-        input_pos++;
-        return make_tok(T_PIPE, "|");
-    }
-    if (c == '^')
-    {
-        input_pos++;
-        return make_tok(T_CARET, "^");
-    }
-    if (c == '~')
-    {
-        input_pos++;
-        return make_tok(T_TILDE, "~");
-    }
-    if (c == '=')
-    {
-        input_pos++;
-        return make_tok(T_ASSIGN, "=");
-    }
-
-    if (c == '#')
-    {
-        input_pos++;
-        int start = input_pos;
-        if (input_pos < input_len && isdigit((unsigned char )input_s[input_pos]))
-        {
-            while (input_pos < input_len && isdigit((unsigned char )input_s[input_pos]))
-                input_pos++;
-            int n = input_pos - start;
-            char *txt = strndup(input_s + start, n);
-            Token t = make_tok(T_HASH, txt);
-            free(txt); // token keeps copy created by make_tok
-            return t;
-        }
-        else
-        {
-            input_pos++;
-            return make_tok(T_INVALID, NULL);
-        }
-    }
-
-    if (isdigit((unsigned char)c) || c == '.')
-    {
-        char *endptr;
-        double v = strtod(input_s + input_pos, &endptr);
-        int consumed = (int) (endptr - (input_s + input_pos));
-        if (consumed == 0)
-        {
-            input_pos++;
-            return make_tok(T_INVALID, NULL);
-        }
-        char *txt = strndup(input_s + input_pos, consumed);
-        input_pos += consumed;
-        Token t = make_num(v, txt);
-        free(txt);
-        return t;
-    }
-
-    if (isalpha((unsigned char )c))
-    {
-        int start = input_pos;
-        while (input_pos < input_len && isalpha((unsigned char )input_s[input_pos]))
-            input_pos++;
-        int n = input_pos - start;
-        char *id = strndup(input_s + start, n);
-        Token t = make_tok(T_IDENT, id);
-        free(id);
-        return t;
-    }
-
-    // unknown char
-    input_pos++;
-    return make_tok(T_INVALID, NULL);
-}
-
-// simple token vector
 typedef struct {
     Token *arr;
-    int sz, cap;
+    int sz;
+    int cap;
     int idx;
-} TokVec;
+} TokenList;
 
-void vec_init(TokVec *v)
+static void tlist_init(TokenList *t)
 {
-    v->sz = 0;
-    v->cap = 16;
-    v->arr = malloc(sizeof(Token) * v->cap);
-    v->idx = 0;
+    t->sz = 0;
+    t->cap = 16;
+    t->arr = malloc(sizeof(Token) * t->cap);
+    t->idx = 0;
 }
-
-void vec_push(TokVec *v, Token t)
+static void tlist_push(TokenList *t, Token tk)
 {
-    if (v->sz == v->cap)
+    if (t->sz == t->cap)
     {
-        v->cap *= 2;
-        v->arr = realloc(v->arr, sizeof(Token) * v->cap);
+        t->cap *= 2;
+        t->arr = realloc(t->arr, sizeof(Token) * t->cap);
     }
-    v->arr[v->sz++] = t;
+    t->arr[t->sz++] = tk;
 }
-
-Token vec_peek(TokVec *v)
+static Token tlist_peek(TokenList *t)
 {
-    if (v->idx < v->sz)
-        return v->arr[v->idx];
-    return make_tok(T_EOF, NULL);
+    if (t->idx < t->sz)
+        return t->arr[t->idx];
+    Token eof = { T_EOF, NULL, 0, 0 };
+    return eof;
 }
-
-Token vec_next(TokVec *v)
+static Token tlist_next(TokenList *t)
 {
-    if (v->idx < v->sz)
-        return v->arr[v->idx++];
-    return make_tok(T_EOF, NULL);
+    if (t->idx < t->sz)
+        return t->arr[t->idx++];
+    Token eof = { T_EOF, NULL, 0, 0 };
+    return eof;
 }
-
-void vec_free(TokVec *v)
+static void tlist_free(TokenList *t)
 {
-    for (int i = 0; i < v->sz; i++)
-        if (v->arr[i].text)
-            free(v->arr[i].text);
-    free(v->arr);
+    for (int i = 0; i < t->sz; i++)
+        if (t->arr[i].text)
+            free(t->arr[i].text);
+    free(t->arr);
 }
 
-// RT mapping
+// runtime mapping
 typedef struct {
     int id;
     double val;
 } RtEntry;
-
 typedef struct {
     RtEntry *arr;
-    int sz, cap;
+    int sz;
+    int cap;
 } RtMap;
-
-void rt_init(RtMap *m)
+static void rt_init(RtMap *m)
 {
     m->sz = 0;
     m->cap = 16;
     m->arr = malloc(sizeof(RtEntry) * m->cap);
 }
-
-void rt_set(RtMap *m, int id, double v)
+static void rt_set(RtMap *m, int id, double v)
 {
     for (int i = 0; i < m->sz; i++)
         if (m->arr[i].id == id)
@@ -391,372 +106,881 @@ void rt_set(RtMap *m, int id, double v)
     m->arr[m->sz].val = v;
     m->sz++;
 }
-
-double rt_get(RtMap *m, int id)
+static double rt_get(RtMap *m, int id)
 {
     for (int i = 0; i < m->sz; i++)
         if (m->arr[i].id == id)
             return m->arr[i].val;
     return 0.0;
 }
-
-void rt_free(RtMap *m)
+static void rt_free(RtMap *m)
 {
     free(m->arr);
 }
 
-// Parser (recursive descent) prototypes
-double parse_logical_or(TokVec *v, RtMap *rt);
-double parse_logical_and(TokVec *v, RtMap *rt);
-double parse_bitor(TokVec *v, RtMap *rt);
-double parse_bitxor(TokVec *v, RtMap *rt);
-double parse_bitand(TokVec *v, RtMap *rt);
-double parse_equality(TokVec *v, RtMap *rt);
-double parse_relational(TokVec *v, RtMap *rt);
-double parse_shift(TokVec *v, RtMap *rt);
-double parse_addsub(TokVec *v, RtMap *rt);
-double parse_muldiv(TokVec *v, RtMap *rt);
-double parse_unary(TokVec *v, RtMap *rt);
-double parse_primary(TokVec *v, RtMap *rt);
+// AST node types
+typedef enum {
+    N_NUMBER, N_HASH, N_UNARY, N_BINARY, N_FUNC, N_ASSIGN
+} NodeType;
+typedef enum {
+    U_NEG, U_NOT, U_BITNOT
+} UnaryOp;
+typedef enum {
+    B_ADD, B_SUB, B_MUL, B_DIV, B_LSHIFT, B_RSHIFT, B_GT, B_GTE, B_LT, B_LTE, B_EQ, B_NEQ, B_BITAND, B_BITXOR, B_BITOR, B_ANDAND, B_OROR
+} BinaryOp;
 
-double parse_primary(TokVec *v, RtMap *rt)
+typedef struct Node {
+    NodeType type;
+    int pos; // position in input for errors
+    union {
+        double number;
+        int hashId;
+        struct {
+            UnaryOp op;
+            struct Node *child;
+        } unary;
+        struct {
+            BinaryOp op;
+            struct Node *left;
+            struct Node *right;
+        } binary;
+        struct {
+            char *name;
+            struct Node *arg;
+        } func;
+        struct {
+            int id;
+            struct Node *rhs;
+        } assign;
+    } v;
+} Node;
+
+static Node* node_number(double val, int pos)
 {
-    Token t = vec_peek(v);
-    if (t.type == T_NUM)
-    {
-        vec_next(v);
-        return t.num;
-    }
+    Node *n = malloc(sizeof(Node));
+    n->type = N_NUMBER;
+    n->pos = pos;
+    n->v.number = val;
+    return n;
+}
+static Node* node_hash(int id, int pos)
+{
+    Node *n = malloc(sizeof(Node));
+    n->type = N_HASH;
+    n->pos = pos;
+    n->v.hashId = id;
+    return n;
+}
+static Node* node_unary(UnaryOp op, Node *child, int pos)
+{
+    Node *n = malloc(sizeof(Node));
+    n->type = N_UNARY;
+    n->pos = pos;
+    n->v.unary.op = op;
+    n->v.unary.child = child;
+    return n;
+}
+static Node* node_binary(BinaryOp op, Node *l, Node *r, int pos)
+{
+    Node *n = malloc(sizeof(Node));
+    n->type = N_BINARY;
+    n->pos = pos;
+    n->v.binary.op = op;
+    n->v.binary.left = l;
+    n->v.binary.right = r;
+    return n;
+}
+static Node* node_func(const char *name, Node *arg, int pos)
+{
+    Node *n = malloc(sizeof(Node));
+    n->type = N_FUNC;
+    n->pos = pos;
+    n->v.func.name = strdup(name);
+    n->v.func.arg = arg;
+    return n;
+}
+static Node* node_assign(int id, Node *rhs, int pos)
+{
+    Node *n = malloc(sizeof(Node));
+    n->type = N_ASSIGN;
+    n->pos = pos;
+    n->v.assign.id = id;
+    n->v.assign.rhs = rhs;
+    return n;
+}
 
-    if (t.type == T_HASH)
+static void free_node(Node *n)
+{
+    if (!n)
+        return;
+    switch (n->type)
     {
-        vec_next(v);
-        int id = atoi(t.text);
-        return rt_get(rt, id);
+        case N_NUMBER:
+            break;
+        case N_HASH:
+            break;
+        case N_UNARY:
+            free_node(n->v.unary.child);
+            break;
+        case N_BINARY:
+            free_node(n->v.binary.left);
+            free_node(n->v.binary.right);
+            break;
+        case N_FUNC:
+            free(n->v.func.name);
+            free_node(n->v.func.arg);
+            break;
+        case N_ASSIGN:
+            free_node(n->v.assign.rhs);
+            break;
     }
+    free(n);
+}
 
-    if (t.type == T_IDENT)
+// printing AST
+static void print_node(Node *n, const char *indent, int last)
+{
+    if (!n)
+        return;
+    printf("%s%s", indent, last ? "└─ " : "├─ ");
+    switch (n->type)
     {
-        vec_next(v);
-        if (strcmp(t.text, "sin") == 0 || strcmp(t.text, "cos") == 0 || strcmp(t.text, "exp") == 0)
+        case N_NUMBER:
+            printf("%g\n", n->v.number);
+            break;
+        case N_HASH:
+            printf("#%d\n", n->v.hashId);
+            break;
+        case N_UNARY:
+            printf("Unary(%s)\n", n->v.unary.op == U_NEG ? "-" : (n->v.unary.op == U_NOT ? "!" : "~"));
+            {
+                char buf[256];
+                snprintf(buf, sizeof(buf), "%s%s", indent, last ? "   " : "│  ");
+                print_node(n->v.unary.child, buf, 1);
+            }
+            break;
+        case N_BINARY:
         {
-            Token p = vec_peek(v);
-            if (p.type != T_LP)
+            const char *name = "?";
+            switch (n->v.binary.op)
             {
-                fprintf(stderr, "Syntax error: expected ( after %s\n", t.text);
-                longjmp(*(jmp_buf*) NULL, 1);
+                case B_ADD:
+                    name = "+";
+                    break;
+                case B_SUB:
+                    name = "-";
+                    break;
+                case B_MUL:
+                    name = "*";
+                    break;
+                case B_DIV:
+                    name = "/";
+                    break;
+                case B_LSHIFT:
+                    name = "<<";
+                    break;
+                case B_RSHIFT:
+                    name = ">>";
+                    break;
+                case B_GT:
+                    name = ">";
+                    break;
+                case B_GTE:
+                    name = ">=";
+                    break;
+                case B_LT:
+                    name = "<";
+                    break;
+                case B_LTE:
+                    name = "<=";
+                    break;
+                case B_EQ:
+                    name = "==";
+                    break;
+                case B_NEQ:
+                    name = "!=";
+                    break;
+                case B_BITAND:
+                    name = "&";
+                    break;
+                case B_BITXOR:
+                    name = "^";
+                    break;
+                case B_BITOR:
+                    name = "|";
+                    break;
+                case B_ANDAND:
+                    name = "&&";
+                    break;
+                case B_OROR:
+                    name = "||";
+                    break;
             }
-            vec_next(v);
-            double a = parse_logical_or(v, rt);
-            Token rp = vec_peek(v);
-            if (rp.type != T_RP)
+            printf("Binary(%s)\n", name);
+            char buf[256];
+            snprintf(buf, sizeof(buf), "%s%s", indent, last ? "   " : "│  ");
+            print_node(n->v.binary.left, buf, 0);
+            print_node(n->v.binary.right, buf, 1);
+        }
+            break;
+        case N_FUNC:
+            printf("Func(%s)\n", n->v.func.name);
             {
-                fprintf(stderr, "Syntax error: expected )\n");
-                longjmp(*(jmp_buf*) NULL, 1);
+                char buf[256];
+                snprintf(buf, sizeof(buf), "%s%s", indent, last ? "   " : "│  ");
+                print_node(n->v.func.arg, buf, 1);
             }
-            vec_next(v);
-            if (strcmp(t.text, "sin") == 0)
+            break;
+        case N_ASSIGN:
+            printf("Assign(#%d)\n", n->v.assign.id);
+            {
+                char buf[256];
+                snprintf(buf, sizeof(buf), "%s%s", indent, last ? "   " : "│  ");
+                print_node(n->v.assign.rhs, buf, 1);
+            }
+            break;
+    }
+}
+
+// evaluation with short-circuit
+static double eval_node(Node *n, RtMap *rt)
+{
+    if (!n)
+        return 0.0;
+    switch (n->type)
+    {
+        case N_NUMBER:
+            return n->v.number;
+        case N_HASH:
+            return rt_get(rt, n->v.hashId);
+        case N_UNARY:
+        {
+            double v = eval_node(n->v.unary.child, rt);
+            if (n->v.unary.op == U_NEG)
+                return -v;
+            if (n->v.unary.op == U_NOT)
+                return v != 0.0 ? 0.0 : 1.0;
+            return (double) (~((long) v));
+        }
+        case N_BINARY:
+        {
+            switch (n->v.binary.op)
+            {
+                case B_ADD:
+                    return eval_node(n->v.binary.left, rt) + eval_node(n->v.binary.right, rt);
+                case B_SUB:
+                    return eval_node(n->v.binary.left, rt) - eval_node(n->v.binary.right, rt);
+                case B_MUL:
+                    return eval_node(n->v.binary.left, rt) * eval_node(n->v.binary.right, rt);
+                case B_DIV:
+                {
+                    double r = eval_node(n->v.binary.right, rt);
+                    if (r == 0)
+                    {
+                        fprintf(stderr, "Runtime error: division by zero at pos %d\n", n->pos);
+                        exit(1);
+                    }
+                    return eval_node(n->v.binary.left, rt) / r;
+                }
+                case B_LSHIFT:
+                    return (double) (((long) eval_node(n->v.binary.left, rt)) << (int) eval_node(n->v.binary.right, rt));
+                case B_RSHIFT:
+                    return (double) (((long) eval_node(n->v.binary.left, rt)) >> (int) eval_node(n->v.binary.right, rt));
+                case B_GT:
+                    return eval_node(n->v.binary.left, rt) > eval_node(n->v.binary.right, rt) ? 1.0 : 0.0;
+                case B_GTE:
+                    return eval_node(n->v.binary.left, rt) >= eval_node(n->v.binary.right, rt) ? 1.0 : 0.0;
+                case B_LT:
+                    return eval_node(n->v.binary.left, rt) < eval_node(n->v.binary.right, rt) ? 1.0 : 0.0;
+                case B_LTE:
+                    return eval_node(n->v.binary.left, rt) <= eval_node(n->v.binary.right, rt) ? 1.0 : 0.0;
+                case B_EQ:
+                    return eval_node(n->v.binary.left, rt) == eval_node(n->v.binary.right, rt) ? 1.0 : 0.0;
+                case B_NEQ:
+                    return eval_node(n->v.binary.left, rt) != eval_node(n->v.binary.right, rt) ? 1.0 : 0.0;
+                case B_BITAND:
+                    return (double) (((long) eval_node(n->v.binary.left, rt)) & ((long) eval_node(n->v.binary.right, rt)));
+                case B_BITXOR:
+                    return (double) (((long) eval_node(n->v.binary.left, rt)) ^ ((long) eval_node(n->v.binary.right, rt)));
+                case B_BITOR:
+                    return (double) (((long) eval_node(n->v.binary.left, rt)) | ((long) eval_node(n->v.binary.right, rt)));
+                case B_ANDAND:
+                {
+                    double lv = eval_node(n->v.binary.left, rt);
+                    if (lv == 0.0)
+                        return 0.0;
+                    double rv = eval_node(n->v.binary.right, rt);
+                    return rv != 0.0 ? 1.0 : 0.0;
+                }
+                case B_OROR:
+                {
+                    double lv = eval_node(n->v.binary.left, rt);
+                    if (lv != 0.0)
+                        return 1.0;
+                    double rv = eval_node(n->v.binary.right, rt);
+                    return rv != 0.0 ? 1.0 : 0.0;
+                }
+            }
+            break;
+        }
+        case N_FUNC:
+        {
+            double a = eval_node(n->v.func.arg, rt);
+            if (strcmp(n->v.func.name, "sin") == 0)
                 return sin(a);
-            if (strcmp(t.text, "cos") == 0)
+            if (strcmp(n->v.func.name, "cos") == 0)
                 return cos(a);
-            return exp(a);
+            if (strcmp(n->v.func.name, "exp") == 0)
+                return exp(a);
+            fprintf(stderr, "Runtime error: unknown function %s at pos %d\n", n->v.func.name, n->pos);
+            exit(1);
         }
-        else
+        case N_ASSIGN:
         {
-            fprintf(stderr, "Unknown function: %s\n", t.text);
-            longjmp(*(jmp_buf*) NULL, 1);
+            double v = eval_node(n->v.assign.rhs, rt);
+            rt_set(rt, n->v.assign.id, v);
+            return v;
         }
     }
-
-    if (t.type == T_LP)
-    {
-        vec_next(v);
-        double vret = parse_logical_or(v, rt);
-        Token rp = vec_peek(v);
-        if (rp.type != T_RP)
-        {
-            fprintf(stderr, "Syntax error: expected )\n");
-            longjmp(*(jmp_buf*) NULL, 1);
-        }
-        vec_next(v);
-        return vret;
-    }
-
-    fprintf(stderr, "Unexpected token in primary\n");
-    longjmp(*(jmp_buf*) NULL, 1);
     return 0.0;
 }
 
-double parse_unary(TokVec *v, RtMap *rt)
+// Parser functions follow grammar and precedence
+static Node* parse_assign(TokenList *toks);
+static Node* parse_logical_or_node(TokenList *toks);
+static Node* parse_logical_and_node(TokenList *toks);
+static Node* parse_bitor_node(TokenList *toks);
+static Node* parse_bitxor_node(TokenList *toks);
+static Node* parse_bitand_node(TokenList *toks);
+static Node* parse_equality_node(TokenList *toks);
+static Node* parse_relational_node(TokenList *toks);
+static Node* parse_shift_node(TokenList *toks);
+static Node* parse_add_node(TokenList *toks);
+static Node* parse_multiply_node(TokenList *toks);
+static Node* parse_unary_node(TokenList *toks);
+static Node* parse_power_node(TokenList *toks);
+static Node* parse_primary_node(TokenList *toks);
+
+static int match(TokenList *t, TokenType ty)
 {
-    Token t = vec_peek(v);
-    if (t.type == T_NOT)
+    if (tlist_peek(t).type == ty)
     {
-        vec_next(v);
-        double r = parse_unary(v, rt);
-        return r != 0.0 ? 0.0 : 1.0;
+        tlist_next(t);
+        return 1;
     }
-
-    if (t.type == T_TILDE)
-    {
-        vec_next(v);
-        double r = parse_unary(v, rt);
-        int64_t iv = (int64_t) r;
-        return (double) (~iv);
-    }
-
-    if (t.type == T_MINUS)
-    {
-        vec_next(v);
-        double r = parse_unary(v, rt);
-        return -r;
-    }
-
-    return parse_primary(v, rt);
+    return 0;
 }
 
-double parse_muldiv(TokVec *v, RtMap *rt)
+static Node* parse_assign(TokenList *toks)
 {
-    double left = parse_unary(v, rt);
+    Token cur = tlist_peek(toks);
+    if (cur.type == T_HASH && toks->idx + 1 < toks->sz && toks->arr[toks->idx + 1].type == T_ASSIGN)
+    {
+        Token h = tlist_next(toks); // consume HASH
+        Token a = tlist_next(toks); // consume ASSIGN
+        Node *rhs = parse_assign(toks); // right-assoc
+        int id = atoi(h.text);
+        return node_assign(id, rhs, a.pos);
+    }
+    return parse_logical_or_node(toks);
+}
+
+static Node* parse_logical_or_node(TokenList *toks)
+{
+    Node *left = parse_logical_and_node(toks);
+    while (match(toks, T_OROR))
+    {
+        Node *right = parse_logical_and_node(toks);
+        left = node_binary(B_OROR, left, right, left->pos);
+    }
+    return left;
+}
+
+static Node* parse_logical_and_node(TokenList *toks)
+{
+    Node *left = parse_bitor_node(toks);
+    while (match(toks, T_ANDAND))
+    {
+        Node *right = parse_bitor_node(toks);
+        left = node_binary(B_ANDAND, left, right, left->pos);
+    }
+    return left;
+}
+
+static Node* parse_bitor_node(TokenList *toks)
+{
+    Node *left = parse_bitxor_node(toks);
+    while (match(toks, T_PIPE))
+    {
+        Node *r = parse_bitxor_node(toks);
+        left = node_binary(B_BITOR, left, r, left->pos);
+    }
+    return left;
+}
+
+static Node* parse_bitxor_node(TokenList *toks)
+{
+    Node *left = parse_bitand_node(toks);
+    while (match(toks, T_CARET))
+    {
+        Node *r = parse_bitand_node(toks);
+        left = node_binary(B_BITXOR, left, r, left->pos);
+    }
+    return left;
+}
+
+static Node* parse_bitand_node(TokenList *toks)
+{
+    Node *left = parse_equality_node(toks);
+    while (match(toks, T_AMP))
+    {
+        Node *r = parse_equality_node(toks);
+        left = node_binary(B_BITAND, left, r, left->pos);
+    }
+    return left;
+}
+
+static Node* parse_equality_node(TokenList *toks)
+{
+    Node *left = parse_relational_node(toks);
     while (1)
     {
-        Token t = vec_peek(v);
-        if (t.type == T_MUL)
+        if (match(toks, T_EQ))
         {
-            vec_next(v);
-            double r = parse_unary(v, rt);
-            left *= r;
+            Node *r = parse_relational_node(toks);
+            left = node_binary(B_EQ, left, r, left->pos);
         }
-        else if (t.type == T_DIV)
+        else if (match(toks, T_NEQ))
         {
-            vec_next(v);
-            double r = parse_unary(v, rt);
-            if (r == 0.0)
+            Node *r = parse_relational_node(toks);
+            left = node_binary(B_NEQ, left, r, left->pos);
+        }
+        else
+            break;
+    }
+    return left;
+}
+
+static Node* parse_relational_node(TokenList *toks)
+{
+    Node *left = parse_shift_node(toks);
+    while (1)
+    {
+        if (match(toks, T_GT))
+        {
+            Node *r = parse_shift_node(toks);
+            left = node_binary(B_GT, left, r, left->pos);
+        }
+        else if (match(toks, T_GTE))
+        {
+            Node *r = parse_shift_node(toks);
+            left = node_binary(B_GTE, left, r, left->pos);
+        }
+        else if (match(toks, T_LT))
+        {
+            Node *r = parse_shift_node(toks);
+            left = node_binary(B_LT, left, r, left->pos);
+        }
+        else if (match(toks, T_LTE))
+        {
+            Node *r = parse_shift_node(toks);
+            left = node_binary(B_LTE, left, r, left->pos);
+        }
+        else
+            break;
+    }
+    return left;
+}
+
+static Node* parse_shift_node(TokenList *toks)
+{
+    Node *left = parse_add_node(toks);
+    while (1)
+    {
+        if (match(toks, T_LSHIFT))
+        {
+            Node *r = parse_add_node(toks);
+            left = node_binary(B_LSHIFT, left, r, left->pos);
+        }
+        else if (match(toks, T_RSHIFT))
+        {
+            Node *r = parse_add_node(toks);
+            left = node_binary(B_RSHIFT, left, r, left->pos);
+        }
+        else
+            break;
+    }
+    return left;
+}
+
+static Node* parse_add_node(TokenList *toks)
+{
+    Node *left = parse_multiply_node(toks);
+    while (1)
+    {
+        if (match(toks, T_PLUS))
+        {
+            Node *r = parse_multiply_node(toks);
+            left = node_binary(B_ADD, left, r, left->pos);
+        }
+        else if (match(toks, T_MINUS))
+        {
+            Node *r = parse_multiply_node(toks);
+            left = node_binary(B_SUB, left, r, left->pos);
+        }
+        else
+            break;
+    }
+    return left;
+}
+
+static Node* parse_multiply_node(TokenList *toks)
+{
+    Node *left = parse_unary_node(toks);
+    while (1)
+    {
+        if (match(toks, T_MUL))
+        {
+            Node *r = parse_unary_node(toks);
+            left = node_binary(B_MUL, left, r, left->pos);
+        }
+        else if (match(toks, T_DIV))
+        {
+            Node *r = parse_unary_node(toks);
+            left = node_binary(B_DIV, left, r, left->pos);
+        }
+        else
+            break;
+    }
+    return left;
+}
+
+static Node* parse_unary_node(TokenList *toks)
+{
+    if (match(toks, T_NOT))
+    {
+        Node *op = parse_unary_node(toks);
+        return node_unary(U_NOT, op, op->pos);
+    }
+    if (match(toks, T_TILDE))
+    {
+        Node *op = parse_unary_node(toks);
+        return node_unary(U_BITNOT, op, op->pos);
+    }
+    if (match(toks, T_MINUS))
+    {
+        Node *op = parse_unary_node(toks);
+        return node_unary(U_NEG, op, op->pos);
+    }
+    return parse_power_node(toks);
+}
+
+static Node* parse_power_node(TokenList *toks)
+{
+    Token cur = tlist_peek(toks);
+    if (cur.type == T_IDENT && strcmp(cur.text, "exp") == 0)
+    {
+        tlist_next(toks);
+        if (!match(toks, T_LP))
+        {
+            fprintf(stderr, "Syntax error: expected '(' after exp at %d\n", cur.pos);
+            exit(1);
+        }
+        Node *arg = parse_assign(toks);
+        if (!match(toks, T_RP))
+        {
+            fprintf(stderr, "Syntax error: expected ')' after exp at %d\n", cur.pos);
+            exit(1);
+        }
+        return node_func("exp", arg, cur.pos);
+    }
+    if (cur.type == T_IDENT && (strcmp(cur.text, "sin") == 0 || strcmp(cur.text, "cos") == 0))
+    {
+        tlist_next(toks);
+        if (!match(toks, T_LP))
+        {
+            fprintf(stderr, "Syntax error: expected '(' after %s at %d\n", cur.text, cur.pos);
+            exit(1);
+        }
+        Node *arg = parse_assign(toks);
+        if (!match(toks, T_RP))
+        {
+            fprintf(stderr, "Syntax error: expected ')' after %s at %d\n", cur.text, cur.pos);
+            exit(1);
+        }
+        return node_func(cur.text, arg, cur.pos);
+    }
+    return parse_primary_node(toks);
+}
+
+static Node* parse_primary_node(TokenList *toks)
+{
+    Token t = tlist_peek(toks);
+    if (t.type == T_NUM)
+    {
+        Token tk = tlist_next(toks);
+        return node_number(tk.num, tk.pos);
+    }
+    if (t.type == T_HASH)
+    {
+        Token tk = tlist_next(toks);
+        int id = atoi(tk.text);
+        return node_hash(id, tk.pos);
+    }
+    if (t.type == T_IDENT)
+    {
+        fprintf(stderr, "Syntax error: unexpected identifier '%s' at %d\n", t.text, t.pos);
+        exit(1);
+    }
+    if (match(toks, T_LP))
+    {
+        Node *v = parse_assign(toks);
+        Token r = tlist_peek(toks);
+        if (!match(toks, T_RP))
+        {
+            fprintf(stderr, "Syntax error: expected ')' at %d\n", r.pos);
+            exit(1);
+        }
+        return v;
+    }
+    fprintf(stderr, "Syntax error: unexpected token at pos %d\n", t.pos);
+    exit(1);
+}
+
+// Tokenizer
+static void tokenize(const char *s, TokenList *out)
+{
+    int i = 0;
+    int n = (int) strlen(s);
+    while (1)
+    {
+        while (i < n && isspace((unsigned char )s[i]))
+            i++;
+        if (i >= n)
+        {
+            Token t = { T_EOF, NULL, 0 };
+            tlist_push(out, t);
+            break;
+        }
+        char c = s[i];
+        // multi-char tokens
+        if (c == '&' && i + 1 < n && s[i + 1] == '&')
+        {
+            Token t = { T_ANDAND, strdup("&&"), 0, i };
+            tlist_push(out, t);
+            i += 2;
+            continue;
+        }
+        if (c == '|' && i + 1 < n && s[i + 1] == '|')
+        {
+            Token t = { T_OROR, strdup("||"), 0, i };
+            tlist_push(out, t);
+            i += 2;
+            continue;
+        }
+        if (c == '<' && i + 1 < n && s[i + 1] == '<')
+        {
+            Token t = { T_LSHIFT, strdup("<<"), 0, i };
+            tlist_push(out, t);
+            i += 2;
+            continue;
+        }
+        if (c == '>' && i + 1 < n && s[i + 1] == '>')
+        {
+            Token t = { T_RSHIFT, strdup(">>"), 0, i };
+            tlist_push(out, t);
+            i += 2;
+            continue;
+        }
+        if (c == '>' && i + 1 < n && s[i + 1] == '=')
+        {
+            Token t = { T_GTE, strdup(">="), 0, i };
+            tlist_push(out, t);
+            i += 2;
+            continue;
+        }
+        if (c == '<' && i + 1 < n && s[i + 1] == '=')
+        {
+            Token t = { T_LTE, strdup("<="), 0, i };
+            tlist_push(out, t);
+            i += 2;
+            continue;
+        }
+        if (c == '!' && i + 1 < n && s[i + 1] == '=')
+        {
+            Token t = { T_NEQ, strdup("!="), 0, i };
+            tlist_push(out, t);
+            i += 2;
+            continue;
+        }
+        if (c == '=' && i + 1 < n && s[i + 1] == '=')
+        {
+            Token t = { T_EQ, strdup("=="), 0, i };
+            tlist_push(out, t);
+            i += 2;
+            continue;
+        }
+        // numbers
+        if (isdigit((unsigned char)c) || c == '.')
+        {
+            int start = i;
+            while (i < n && (isdigit((unsigned char)s[i]) || s[i] == '.'))
+                i++;
+            int len = i - start;
+            char *txt = strndup(s + start, len);
+            double v = strtod(txt, NULL);
+            Token t = { T_NUM, txt, v };
+            tlist_push(out, t);
+            continue;
+        }
+        if (c == '#')
+        {
+            i++;
+            int start = i;
+            while (i < n && isdigit((unsigned char )s[i]))
+                i++;
+            if (start == i)
             {
-                fprintf(stderr, "Division by zero\n");
-                longjmp(*(jmp_buf*) NULL, 1);
+                Token t = { T_INVALID, NULL, 0 };
+                tlist_push(out, t);
+                break;
             }
-            left /= r;
+            int len = i - start;
+            char *txt = strndup(s + start, len);
+            Token t = { T_HASH, txt, 0 };
+            tlist_push(out, t);
+            continue;
         }
-        else
-            break;
-    }
-    return left;
-}
-
-double parse_addsub(TokVec *v, RtMap *rt)
-{
-    double left = parse_muldiv(v, rt);
-    while (1)
-    {
-        Token t = vec_peek(v);
-        if (t.type == T_PLUS)
+        if (isalpha((unsigned char )c))
         {
-            vec_next(v);
-            double r = parse_muldiv(v, rt);
-            left += r;
+            int start = i;
+            while (i < n && isalpha((unsigned char )s[i]))
+                i++;
+            int len = i - start;
+            char *txt = strndup(s + start, len);
+            Token t = { T_IDENT, txt, 0 };
+            tlist_push(out, t);
+            continue;
         }
-        else if (t.type == T_MINUS)
+        // single char
+        switch (c)
         {
-            vec_next(v);
-            double r = parse_muldiv(v, rt);
-            left -= r;
-        }
-        else
-            break;
-    }
-
-    return left;
-}
-
-double parse_shift(TokVec *v, RtMap *rt)
-{
-    double left = parse_addsub(v, rt);
-    while (1)
-    {
-        Token t = vec_peek(v);
-        if (t.type == T_LSHIFT)
-        {
-            vec_next(v);
-            double r = parse_addsub(v, rt);
-            int64_t lv = (int64_t) left, rv = (int64_t) r;
-            left = (double) (lv << rv);
-        }
-        else if (t.type == T_RSHIFT)
-        {
-            vec_next(v);
-            double r = parse_addsub(v, rt);
-            int64_t lv = (int64_t) left, rv = (int64_t) r;
-            left = (double) (lv >> rv);
-        }
-        else
-        {
-            break;
-        }
-    }
-
-    return left;
-}
-
-double parse_relational(TokVec *v, RtMap *rt)
-{
-    double left = parse_shift(v, rt);
-    while (1)
-    {
-        Token t = vec_peek(v);
-        if (t.type == T_GT)
-        {
-            vec_next(v);
-            double r = parse_shift(v, rt);
-            left = left > r ? 1.0 : 0.0;
-        }
-        else if (t.type == T_GTE)
-        {
-            vec_next(v);
-            double r = parse_shift(v, rt);
-            left = left >= r ? 1.0 : 0.0;
-        }
-        else if (t.type == T_LT)
-        {
-            vec_next(v);
-            double r = parse_shift(v, rt);
-            left = left < r ? 1.0 : 0.0;
-        }
-        else if (t.type == T_LTE)
-        {
-            vec_next(v);
-            double r = parse_shift(v, rt);
-            left = left <= r ? 1.0 : 0.0;
-        }
-        else
-            break;
-    }
-    return left;
-}
-
-double parse_equality(TokVec *v, RtMap *rt)
-{
-    double left = parse_relational(v, rt);
-    while (1)
-    {
-        Token t = vec_peek(v);
-        if (t.type == T_EQ)
-        {
-            vec_next(v);
-            double r = parse_relational(v, rt);
-            left = left == r ? 1.0 : 0.0;
-        }
-        else
-            break;
-    }
-    return left;
-}
-
-double parse_bitand(TokVec *v, RtMap *rt)
-{
-    double left = parse_equality(v, rt);
-    while (1)
-    {
-        Token t = vec_peek(v);
-        if (t.type == T_AMP)
-        {
-            vec_next(v);
-            double r = parse_equality(v, rt);
-            int64_t lv = (int64_t) left, rv = (int64_t) r;
-            left = (double) (lv & rv);
-        }
-        else
-            break;
-    }
-    return left;
-}
-double parse_bitxor(TokVec *v, RtMap *rt)
-{
-    double left = parse_bitand(v, rt);
-    while (1)
-    {
-        Token t = vec_peek(v);
-        if (t.type == T_CARET)
-        {
-            vec_next(v);
-            double r = parse_bitand(v, rt);
-            int64_t lv = (int64_t) left, rv = (int64_t) r;
-            left = (double) (lv ^ rv);
-        }
-        else
-            break;
-    }
-    return left;
-}
-double parse_bitor(TokVec *v, RtMap *rt)
-{
-    double left = parse_bitxor(v, rt);
-    while (1)
-    {
-        Token t = vec_peek(v);
-        if (t.type == T_PIPE)
-        {
-            vec_next(v);
-            double r = parse_bitxor(v, rt);
-            int64_t lv = (int64_t) left, rv = (int64_t) r;
-            left = (double) (lv | rv);
-        }
-        else
-            break;
-    }
-    return left;
-}
-
-double parse_logical_and(TokVec *v, RtMap *rt)
-{
-    double left = parse_bitor(v, rt);
-    while (1)
-    {
-        Token t = vec_peek(v);
-        if (t.type == T_ANDAND)
-        {
-            vec_next(v);
-            if (left == 0.0)
-            { // short-circuit: still consume RHS syntactically
-                parse_bitor(v, rt);
-                left = 0.0;
-            }
-            else
+            case '+':
             {
-                double r = parse_bitor(v, rt);
-                left = (r != 0.0) ? 1.0 : 0.0;
+                Token t = { T_PLUS, strdup("+"), 0, i };
+                tlist_push(out, t);
+                i++;
+                break;
+            }
+            case '-':
+            {
+                Token t = { T_MINUS, strdup("-"), 0, i };
+                tlist_push(out, t);
+                i++;
+                break;
+            }
+            case '*':
+            {
+                Token t = { T_MUL, strdup("*"), 0, i };
+                tlist_push(out, t);
+                i++;
+                break;
+            }
+            case '/':
+            {
+                Token t = { T_DIV, strdup("/"), 0, i };
+                tlist_push(out, t);
+                i++;
+                break;
+            }
+            case '(':
+            {
+                Token t = { T_LP, strdup("("), 0, i };
+                tlist_push(out, t);
+                i++;
+                break;
+            }
+            case ')':
+            {
+                Token t = { T_RP, strdup(")"), 0, i };
+                tlist_push(out, t);
+                i++;
+                break;
+            }
+            case '!':
+            {
+                Token t = { T_NOT, strdup("!"), 0, i };
+                tlist_push(out, t);
+                i++;
+                break;
+            }
+            case '>':
+            {
+                Token t = { T_GT, strdup(">"), 0, i };
+                tlist_push(out, t);
+                i++;
+                break;
+            }
+            case '<':
+            {
+                Token t = { T_LT, strdup("<"), 0, i };
+                tlist_push(out, t);
+                i++;
+                break;
+            }
+            case '&':
+            {
+                Token t = { T_AMP, strdup("&"), 0, i };
+                tlist_push(out, t);
+                i++;
+                break;
+            }
+            case '|':
+            {
+                Token t = { T_PIPE, strdup("|"), 0, i };
+                tlist_push(out, t);
+                i++;
+                break;
+            }
+            case '^':
+            {
+                Token t = { T_CARET, strdup("^"), 0, i };
+                tlist_push(out, t);
+                i++;
+                break;
+            }
+            case '~':
+            {
+                Token t = { T_TILDE, strdup("~"), 0, i };
+                tlist_push(out, t);
+                i++;
+                break;
+            }
+            case '=':
+            {
+                Token t = { T_ASSIGN, strdup("="), 0, i };
+                tlist_push(out, t);
+                i++;
+                break;
+            }
+            default:
+            {
+                Token t = { T_INVALID, NULL, 0 };
+                tlist_push(out, t);
+                i++;
+                break;
             }
         }
-        else
-            break;
     }
-    return left;
 }
 
-double parse_logical_or(TokVec *v, RtMap *rt)
+// small helper to show error with caret
+static void print_error_with_caret(const char *line, int pos)
 {
-    double left = parse_logical_and(v, rt);
-    while (1)
-    {
-        Token t = vec_peek(v);
-        if (t.type == T_OROR)
-        {
-            vec_next(v);
-            if (left != 0.0)
-            {
-                parse_logical_and(v, rt);
-                left = 1.0;
-            }
-            else
-            {
-                double r = parse_logical_and(v, rt);
-                left = (r != 0.0) ? 1.0 : 0.0;
-            }
-        }
-        else
-            break;
-    }
-    return left;
+    fprintf(stderr, "%s\n", line);
+    for (int i = 0; i < pos && line[i]; i++)
+        fputc(line[i] == '\t' ? '\t' : ' ', stderr);
+    fprintf(stderr, "^\n");
 }
 
 void eval_main(void)
@@ -764,87 +988,56 @@ void eval_main(void)
     char line[4096];
     RtMap rt;
     rt_init(&rt);
-
     printf("expr> ");
     while (fgets(line, sizeof(line), stdin))
     {
         if (line[0] == '\n' || line[0] == 0)
-        {
             break;
-        }
-
-        input_s = line;
-        input_pos = 0;
-        input_len = (int) strlen(line);
-        TokVec tokens;
-        vec_init(&tokens);
-
-        // tokenize
-        while (1)
-        {
-            Token t = next_token();
-            vec_push(&tokens, t);
-            if (t.type == T_INVALID)
+        TokenList toks;
+        tlist_init(&toks);
+        // tokenize directly using the tokenizer function above
+        // (we already have tokenize implemented earlier, reuse)
+        tokenize(line, &toks);
+        // find invalid
+        int invalid_idx = -1;
+        for (int i = 0; i < toks.sz; i++)
+            if (toks.arr[i].type == T_INVALID)
             {
-                fprintf(stderr, "Invalid character in input\n");
+                invalid_idx = toks.arr[i].pos;
                 break;
             }
-            if (t.type == T_EOF)
-                break;
-        }
-        if (tokens.sz > 0 && tokens.arr[tokens.sz - 1].type == T_INVALID)
+        if (invalid_idx >= 0)
         {
-            vec_free(&tokens);
+            fprintf(stderr, "Lexical error at position %d\n", invalid_idx);
+            print_error_with_caret(line, invalid_idx);
+            tlist_free(&toks);
             printf("expr> ");
             continue;
         }
-        tokens.idx = 0;
-
-        // statement: assignment (#id = expr) or expression
-        Token first = vec_peek(&tokens);
-        if (first.type == T_HASH)
-        {
-            // lookahead
-            if (tokens.sz >= 2 && tokens.arr[1].type == T_ASSIGN)
-            {
-                Token hash = vec_next(&tokens); // consume
-                vec_next(&tokens); // consume =
-                // parse rhs
-                double value = 0.0;
-                // use setjmp/longjmp? keep simple: parse and check errors by try-like behavior with prints
-                value = parse_logical_or(&tokens, &rt);
-                Token after = vec_peek(&tokens);
-                if (after.type != T_EOF)
-                {
-                    fprintf(stderr, "Syntax error: unexpected token after assignment\n");
-                }
-                else
-                {
-                    int id = atoi(hash.text);
-                    rt_set(&rt, id, value);
-                    printf("Assigned #%d = %g\n", id, value);
-                }
-                vec_free(&tokens);
-                printf("expr> ");
-                continue;
-            }
-        }
-        // else expression
-        double result = 0.0;
-        result = parse_logical_or(&tokens, &rt);
-        Token after = vec_peek(&tokens);
+        toks.idx = 0;
+        Node *ast = NULL;
+        // parse
+        // protect from parse errors with checks
+        // using exit on errors inside parser
+        ast = parse_assign(&toks);
+        Token after = tlist_peek(&toks);
         if (after.type != T_EOF)
         {
-            fprintf(stderr, "Syntax error: unexpected token\n");
+            fprintf(stderr, "Syntax error: unexpected token at pos %d\n", after.pos);
+            print_error_with_caret(line, after.pos);
+            free_node(ast);
+            tlist_free(&toks);
+            printf("expr> ");
+            continue;
         }
-        else
-        {
-            printf("%g\n", result);
-        }
-
-        vec_free(&tokens);
+        printf("AST:\n");
+        print_node(ast, "", 1);
+        // evaluate
+        double res = eval_node(ast, &rt);
+        printf("Result: %g\n", res);
+        free_node(ast);
+        tlist_free(&toks);
         printf("expr> ");
     }
-
     rt_free(&rt);
 }
