@@ -163,8 +163,6 @@ uint8 get_days_in_month(uint16 year, uint8 month)
 
 void addDateTimeByTi(OOP_DATETIME_T *start, OOP_TI_T *interval, OOP_DATETIME_T *result, uint8 sign)
 {
-    (void)sign; // parameter intentionally unused
-
     if (start == NULL || interval == NULL || result == NULL)
     {
         return;
@@ -172,30 +170,54 @@ void addDateTimeByTi(OOP_DATETIME_T *start, OOP_TI_T *interval, OOP_DATETIME_T *
 
     memcpy(result, start, sizeof(OOP_DATETIME_T));
 
+    /* sign: non-zero => add, zero => subtract */
+    int64_t s = sign ? 1 : -1;
+
     switch (interval->unit)
     {
         case TI_SEC:
         {
-            int64_t total_seconds = (int64_t)result->second + (int64_t)interval->value;
-            int64_t carry_minutes = total_seconds / 60;
-            result->second = (uint8)(total_seconds % 60);
+            int64_t delta = s * (int64_t)interval->value;
+            int64_t total_seconds = (int64_t)result->second + delta;
 
-            if (carry_minutes > 0)
+            int64_t new_sec = total_seconds % 60;
+            int64_t carry_minutes = total_seconds / 60;
+            if (new_sec < 0)
+            {
+                new_sec += 60;
+                carry_minutes -= 1;
+            }
+            result->second = (uint8)new_sec;
+
+            if (carry_minutes != 0)
             {
                 int64_t total_minutes = (int64_t)result->minute + carry_minutes;
+                int64_t new_min = total_minutes % 60;
                 int64_t carry_hours = total_minutes / 60;
-                result->minute = (uint8)(total_minutes % 60);
+                if (new_min < 0)
+                {
+                    new_min += 60;
+                    carry_hours -= 1;
+                }
+                result->minute = (uint8)new_min;
 
-                if (carry_hours > 0)
+                if (carry_hours != 0)
                 {
                     int64_t total_hours = (int64_t)result->hour + carry_hours;
+                    int64_t new_hour = total_hours % 24;
                     int64_t carry_days = total_hours / 24;
-                    result->hour = (uint8)(total_hours % 24);
-
-                    if (carry_days > 0)
+                    if (new_hour < 0)
                     {
-                        OOP_TI_T day_interval = { TI_DAY, (uint16)carry_days };
-                        addDateTimeByTi(result, &day_interval, result, 1);
+                        new_hour += 24;
+                        carry_days -= 1;
+                    }
+                    result->hour = (uint8)new_hour;
+
+                    if (carry_days != 0)
+                    {
+                        OOP_TI_T day_interval = { TI_DAY, (uint16)(carry_days > 0 ? carry_days : -carry_days) };
+                        uint8 next_sign = carry_days > 0 ? 1 : 0;
+                        addDateTimeByTi(result, &day_interval, result, next_sign);
                     }
                 }
             }
@@ -204,20 +226,35 @@ void addDateTimeByTi(OOP_DATETIME_T *start, OOP_TI_T *interval, OOP_DATETIME_T *
 
         case TI_MIN:
         {
-            int64_t total_minutes = (int64_t)result->minute + (int64_t)interval->value;
-            int64_t carry_hours = total_minutes / 60;
-            result->minute = (uint8)(total_minutes % 60);
+            int64_t delta = s * (int64_t)interval->value;
+            int64_t total_minutes = (int64_t)result->minute + delta;
 
-            if (carry_hours > 0)
+            int64_t new_min = total_minutes % 60;
+            int64_t carry_hours = total_minutes / 60;
+            if (new_min < 0)
+            {
+                new_min += 60;
+                carry_hours -= 1;
+            }
+            result->minute = (uint8)new_min;
+
+            if (carry_hours != 0)
             {
                 int64_t total_hours = (int64_t)result->hour + carry_hours;
+                int64_t new_hour = total_hours % 24;
                 int64_t carry_days = total_hours / 24;
-                result->hour = (uint8)(total_hours % 24);
-
-                if (carry_days > 0)
+                if (new_hour < 0)
                 {
-                    OOP_TI_T day_interval = { TI_DAY, (uint16)carry_days };
-                    addDateTimeByTi(result, &day_interval, result, 1);
+                    new_hour += 24;
+                    carry_days -= 1;
+                }
+                result->hour = (uint8)new_hour;
+
+                if (carry_days != 0)
+                {
+                    OOP_TI_T day_interval = { TI_DAY, (uint16)(carry_days > 0 ? carry_days : -carry_days) };
+                    uint8 next_sign = carry_days > 0 ? 1 : 0;
+                    addDateTimeByTi(result, &day_interval, result, next_sign);
                 }
             }
             break;
@@ -225,14 +262,23 @@ void addDateTimeByTi(OOP_DATETIME_T *start, OOP_TI_T *interval, OOP_DATETIME_T *
 
         case TI_HOUR:
         {
-            int64_t total_hours = (int64_t)result->hour + (int64_t)interval->value;
-            int64_t carry_days = total_hours / 24;
-            result->hour = (uint8)(total_hours % 24);
+            int64_t delta = s * (int64_t)interval->value;
+            int64_t total_hours = (int64_t)result->hour + delta;
 
-            if (carry_days > 0)
+            int64_t new_hour = total_hours % 24;
+            int64_t carry_days = total_hours / 24;
+            if (new_hour < 0)
             {
-                OOP_TI_T day_interval = { TI_DAY, (uint16)carry_days };
-                addDateTimeByTi(result, &day_interval, result, 1);
+                new_hour += 24;
+                carry_days -= 1;
+            }
+            result->hour = (uint8)new_hour;
+
+            if (carry_days != 0)
+            {
+                OOP_TI_T day_interval = { TI_DAY, (uint16)(carry_days > 0 ? carry_days : -carry_days) };
+                uint8 next_sign = carry_days > 0 ? 1 : 0;
+                addDateTimeByTi(result, &day_interval, result, next_sign);
             }
             break;
         }
@@ -241,27 +287,54 @@ void addDateTimeByTi(OOP_DATETIME_T *start, OOP_TI_T *interval, OOP_DATETIME_T *
         {
             uint16 remaining_days = interval->value;
 
-            while (remaining_days > 0)
+            if (sign) // add days
             {
-                uint8 days_in_month = get_days_in_month(result->year, result->month);
-                /* days left after current day until end of month */
-                uint8 days_left = days_in_month - result->mday;
-
-                if (remaining_days <= days_left)
+                while (remaining_days > 0)
                 {
-                    result->mday += (uint8)remaining_days;
-                    remaining_days = 0;
-                }
-                else
-                {
-                    /* consume the rest of this month and move to the first day of next month */
-                    remaining_days -= (uint16)(days_left + 1);
-                    result->mday = 1;
+                    uint8 days_in_month = get_days_in_month(result->year, result->month);
+                    uint8 days_left = days_in_month - result->mday;
 
-                    if (++result->month > 12)
+                    if (remaining_days <= days_left)
                     {
-                        result->month = 1;
-                        result->year++;
+                        result->mday += (uint8)remaining_days;
+                        remaining_days = 0;
+                    }
+                    else
+                    {
+                        remaining_days -= (uint16)(days_left + 1);
+                        result->mday = 1;
+
+                        if (++result->month > 12)
+                        {
+                            result->month = 1;
+                            result->year++;
+                        }
+                    }
+                }
+            }
+            else // subtract days
+            {
+                while (remaining_days > 0)
+                {
+                    if (remaining_days < result->mday)
+                    {
+                        result->mday = (uint8)(result->mday - remaining_days);
+                        remaining_days = 0;
+                    }
+                    else
+                    {
+                        remaining_days -= result->mday;
+                        // move to last day of previous month
+                        if (result->month == 1)
+                        {
+                            result->month = 12;
+                            result->year--;
+                        }
+                        else
+                        {
+                            result->month--;
+                        }
+                        result->mday = get_days_in_month(result->year, result->month);
                     }
                 }
             }
@@ -272,10 +345,20 @@ void addDateTimeByTi(OOP_DATETIME_T *start, OOP_TI_T *interval, OOP_DATETIME_T *
 
         case TI_MON:
         {
-            uint16 total_months = result->month + interval->value;
+            int64_t delta = s * (int64_t)interval->value;
+            int64_t month_index = (int64_t)result->year * 12 + ((int64_t)result->month - 1);
+            month_index += delta;
 
-            result->year += (total_months - 1) / 12;
-            result->month = (total_months - 1) % 12 + 1;
+            int64_t new_year = month_index / 12;
+            int64_t new_month0 = month_index % 12;
+            if (new_month0 < 0)
+            {
+                new_month0 += 12;
+                new_year -= 1;
+            }
+
+            result->year = (uint16)new_year;
+            result->month = (uint8)(new_month0 + 1);
 
             uint8 days_in_month = get_days_in_month(result->year, result->month);
             if (result->mday > days_in_month)
@@ -289,7 +372,9 @@ void addDateTimeByTi(OOP_DATETIME_T *start, OOP_TI_T *interval, OOP_DATETIME_T *
 
         case TI_YEAR:
         {
-            result->year += interval->value;
+            int64_t delta = s * (int64_t)interval->value;
+            int64_t new_year = (int64_t)result->year + delta;
+            result->year = (uint16)new_year;
 
             if (result->month == 2 && result->mday == 29)
             {
@@ -581,7 +666,74 @@ void test_calcNextRunTime(void)
     ASSERT(equalDatetime(&next, &now), "calcNextRunTime with zero interval returns now when start <= now");
 }
 
-int testDateTime(void)
+void test_addDateTimeByTi_subtraction(void)
+{
+    OOP_DATETIME_T start, res;
+    OOP_TI_T it;
+
+    // subtract 20 seconds from 2025-01-01 00:00:10 -> 2024-12-31 23:59:50
+    start = (OOP_DATETIME_T){2025, 1, 1, 0, 0, 0, 10, 0};
+    it.unit = TI_SEC; it.value = 20;
+    addDateTimeByTi(&start, &it, &res, 0);
+    OOP_DATETIME_T expect1 = {2024, 12, 31, 0, 23, 59, 50, 0};
+    ASSERT(equalDatetime(&res, &expect1), "Subtract 20 seconds across year boundary");
+
+    // subtract 90 minutes from 2025-01-01 01:00 -> 2024-12-31 23:30
+    start = (OOP_DATETIME_T){2025, 1, 1, 0, 1, 0, 0, 0};
+    it.unit = TI_MIN; it.value = 90;
+    addDateTimeByTi(&start, &it, &res, 0);
+    OOP_DATETIME_T expect2 = {2024, 12, 31, 0, 23, 30, 0, 0};
+    ASSERT(equalDatetime(&res, &expect2), "Subtract 90 minutes across day/month boundary");
+
+    // subtract 1 day from March 1, 2021 -> Feb 28 2021
+    start = (OOP_DATETIME_T){2021, 3, 1, 0, 0, 0, 0, 0};
+    it.unit = TI_DAY; it.value = 1;
+    addDateTimeByTi(&start, &it, &res, 0);
+    OOP_DATETIME_T expect3 = {2021, 2, 28, 0, 0, 0, 0, 0};
+    ASSERT(equalDatetime(&res, &expect3), "Subtract 1 day from Mar1->Feb28 non-leap");
+
+    // subtract 1 month from Jan 31 2021 -> Dec 31 2020
+    start = (OOP_DATETIME_T){2021, 1, 31, 0, 0, 0, 0, 0};
+    it.unit = TI_MON; it.value = 1;
+    addDateTimeByTi(&start, &it, &res, 0);
+    OOP_DATETIME_T expect4 = {2020, 12, 31, 0, 0, 0, 0, 0};
+    ASSERT(equalDatetime(&res, &expect4), "Subtract 1 month from Jan31->Dec31 previous year");
+}
+
+void test_addDateTimeByTi_boundary(void)
+{
+    OOP_DATETIME_T start, res;
+    OOP_TI_T it;
+
+    // add 0 seconds => no change
+    start = (OOP_DATETIME_T){2025, 6, 15, 0, 12, 34, 56, 0};
+    it.unit = TI_SEC; it.value = 0;
+    addDateTimeByTi(&start, &it, &res, 1);
+    ASSERT(equalDatetime(&res, &start), "Add 0 seconds leaves datetime unchanged");
+
+    // add 1 second to 23:59:59 -> next day
+    start = (OOP_DATETIME_T){2025, 12, 31, 0, 23, 59, 59, 0};
+    it.unit = TI_SEC; it.value = 1;
+    addDateTimeByTi(&start, &it, &res, 1);
+    OOP_DATETIME_T expect1 = {2026, 1, 1, 0, 0, 0, 0, 0};
+    ASSERT(equalDatetime(&res, &expect1), "Add 1 second rolls over to next day/year");
+
+    // add 1 month to March 31 -> April 30
+    start = (OOP_DATETIME_T){2021, 3, 31, 0, 0, 0, 0, 0};
+    it.unit = TI_MON; it.value = 1;
+    addDateTimeByTi(&start, &it, &res, 1);
+    OOP_DATETIME_T expect2 = {2021, 4, 30, 0, 0, 0, 0, 0};
+    ASSERT(equalDatetime(&res, &expect2), "Add 1 month from Mar31->Apr30");
+
+    // subtract 1 month from Jan 31 -> Dec 31 previous year (boundary repeat to ensure stability)
+    start = (OOP_DATETIME_T){2021, 1, 31, 0, 0, 0, 0, 0};
+    it.unit = TI_MON; it.value = 1;
+    addDateTimeByTi(&start, &it, &res, 0);
+    OOP_DATETIME_T expect3 = {2020, 12, 31, 0, 0, 0, 0, 0};
+    ASSERT(equalDatetime(&res, &expect3), "Subtract 1 month from Jan31->Dec31 previous year (boundary)");
+}
+
+void testDateTime(void)
 {
     printf("Running datetimeArithmetic tests...\n");
 
@@ -591,9 +743,10 @@ int testDateTime(void)
     test_addDateTimeByTi_seconds();
     test_addDateTimeByTi_minutes_hours_days();
     test_addDateTimeByTi_month_year();
+    test_addDateTimeByTi_subtraction();
+    test_addDateTimeByTi_boundary();
     test_compareOOPDatetime();
     test_calcNextRunTime();
 
     printf("\nTests run: %d, failed: %d\n", tests_run, tests_failed);
-    return tests_failed == 0 ? 0 : 1;
 }

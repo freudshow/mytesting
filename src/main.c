@@ -12,9 +12,12 @@ void axdrtest(void);
 void test_bitstring_var(void);
 void visitormain(void);
 void testbaud(void);
+void testDateTime(void);
+void eval_main(void);
 
 int main(int argc, char **argv)
 {
-    testbaud();
+//    testDateTime();
+    eval_main();
     return 0;
 }
