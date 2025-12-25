@@ -1,140 +1,4 @@
-/******************************************************************************************************************
- * grammar eval.g4;
- * ----------------------------------------------------------------------------------------------------------------
- * # Top-level
- * prog : stmt EOF ;
- * stmt : assignStmt | expr ;
- * assignStmt : HASH ASSIGN expr ;
- * ----------------------------------------------------------------------------------------------------------------
- * # Expression entry
- * expr : assignExpr ;
- *
- * # Priority 1 (lowest): assignment, right-associative
- * assignExpr
- *     : logicalOr ( ASSIGN assignExpr )?   # priority 1, right-assoc
- *     ;
- *
- * # Priority 2: || (left-assoc)
- * logicalOr
- *     : logicalAnd ( OROR logicalAnd )*
- *     ;
- *
- * # Priority 3: && (left-assoc)
- * logicalAnd
- *     : bitOr ( ANDAND bitOr )*
- *     ;
- *
- * # Priority 4: bitwise OR '|' (left-assoc)
- * bitOr
- *     : bitXor ( PIPE bitXor )*
- *     ;
- *
- * # Priority 5: bitwise XOR '^' (left-assoc)
- * bitXor
- *     : bitAnd ( CARET bitAnd )*
- *     ;
- *
- * # Priority 6: bitwise AND '&' (left-assoc)
- * bitAnd
- *     : equality ( AMP equality )*
- *     ;
- *
- * # Priority 7: equality '==' '!=' (left-assoc)
- * equality
- *     : relational ( (EQ | NEQ) relational )*
- *     ;
- *
- * # Priority 8: relational < <= > >= (left-assoc)
- * relational
- *     : shift ( (LT | LTE | GT | GTE) shift )*
- *     ;
- *
- * # Priority 9: shifts << >> (left-assoc)
- * shift
- *     : add ( (LSHIFT | RSHIFT) add )*
- *     ;
- *
- * # Priority 10: addition/subtraction + - (left-assoc)
- * add
- *     : mul ( (PLUS | MINUS) mul )*
- *     ;
- *
- * # Priority 11: multiply/divide * / (left-assoc)
- * mul
- *     : unary ( (MULT | DIV) unary )*
- *     ;
- *
- * # Priority 12: unary: ~, !, - (right-assoc)
- * unary
- *     : ( TILDE | NOT | MINUS ) unary
- *     | power
- *     ;
- *
- * # Priority 13: sin, cos function calls (tighter than unary)
- * # handled as primary forms below
- *
- * # Priority 14 (highest): exp function call (tightest)
- * # handled as primary form below
- *
- * # power/primary level (functions and atoms)
- * power
- *     : expFunc                 # ExpFunction
- *     | sinCosFunc              # SinCosFunction
- *     | primary                 # AtomPrimary
- *     ;
- *
- * # function productions
- * expFunc
- *     : EXP LP expr RP          # 'exp(expr)' — priority 14 (highest)
- *     ;
- *
- * sinCosFunc
- *     : ( SIN | COS ) LP expr RP  # 'sin(expr)' or 'cos(expr)' — priority 13
- *     ;
- *
- * # primary atoms
- * primary
- *     : NUMBER
- *     | HASH                     # realtime marker '#123'
- *     | LP expr RP
- *     ;
- *
- * # Lexer tokens (representative)
- * PLUS    : '+' ;
- * MINUS   : '-' ;
- * MULT    : '*' ;
- * DIV     : '/' ;
- * NOT     : '!' ;
- * ANDAND  : '&&' ;
- * OROR    : '||' ;
- * GT      : '>' ;
- * GTE     : '>=' ;
- * LT      : '<' ;
- * LTE     : '<=' ;
- * EQ      : '==' ;
- * NEQ     : '!=' ;
- * AMP     : '&' ;
- * PIPE    : '|' ;
- * CARET   : '^' ;
- * TILDE   : '~' ;
- * LSHIFT  : '<<' ;
- * RSHIFT  : '>>' ;
- * LP      : '(' ;
- * RP      : ')' ;
- * ASSIGN  : '=' ;
- *
- * # functions and identifiers
- * SIN     : 'sin' ;
- * COS     : 'cos' ;
- * EXP     : 'exp' ;
- * NUMBER  : [0-9]+ ('.' [0-9]*)? | '.' [0-9]+ ;
- * HASH    : '#' [0-9]+ ;
- * IDENT   : [a-zA-Z]+ ;
- *
- * # whitespace & error
- * WS      : [ \t\r\n]+ -> skip ;
- * ERROR_CHAR : . -> channel(HIDDEN) ;
- ****************************************************************************************************************/
+#define _POSIX_C_SOURCE 200809L
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -1237,7 +1101,7 @@ static void tokenize(const char* s, TokenList* out)
 
         if (i >= n)
         {
-            Token t = { T_EOF, NULL, 0 };
+            Token t = { T_EOF, NULL, 0, i };
             tlist_push(out, t);
             break;
         }
@@ -1348,13 +1212,13 @@ static void tokenize(const char* s, TokenList* out)
                 i++;
             if (start == i)
             {
-                Token t = { T_INVALID, NULL, 0 };
+                Token t = { T_INVALID, NULL, 0, start - 1 };
                 tlist_push(out, t);
                 break;
             }
             int len = i - start;
             char* txt = strndup(s + start, len);
-            Token t = { T_HASH, txt, 0 };
+            Token t = { T_HASH, txt, 0, start - 1 };
             tlist_push(out, t);
             continue;
         }
@@ -1474,9 +1338,16 @@ static void tokenize(const char* s, TokenList* out)
             i++;
             break;
         }
+        case ',':
+        {
+            Token t = { T_COMMA, strdup(","), 0, i };
+            tlist_push(out, t);
+            i++;
+            break;
+        }
         default:
         {
-            Token t = { T_INVALID, NULL, 0 };
+            Token t = { T_INVALID, NULL, 0, i };
             tlist_push(out, t);
             i++;
             break;
