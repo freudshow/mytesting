@@ -142,6 +142,9 @@
 #include <ctype.h>
 #include <math.h>
 #include <stdint.h>
+#include <limits.h>
+
+#define EVAL_FUNCTION(funcPtr, ...) ((double(*)(__VA_ARGS__))funcPtr)
 
 typedef enum {
     T_NUM,
@@ -353,6 +356,7 @@ typedef struct Node {
         } binary;
         struct {
             char *name;
+            void *funcPtr;
             struct Node *arg;
         } func;
         struct {
@@ -361,6 +365,145 @@ typedef struct Node {
         } assign;
     } v;
 } Node;
+
+typedef struct buildInFuncStruct {
+    const char *name;
+    const void *funcPtr;
+} buildInFunc_s;
+
+static double pi(void)
+{
+    return 3.14159265358979323846;
+}
+
+static double e(void)
+{
+    return 2.71828182845904523536;
+}
+
+static double fac(double a)
+{/* simplest version of fac */
+    if (a < 0.0)
+        return NAN;
+    if (a > UINT_MAX)
+        return INFINITY;
+    unsigned int ua = (unsigned int) (a);
+    unsigned long int result = 1, i;
+    for (i = 1; i <= ua; i++)
+    {
+        if (i > ULONG_MAX / result)
+            return INFINITY;
+        result *= i;
+    }
+    return (double) result;
+}
+
+static double ncr(double n, double r)
+{
+    if (n < 0.0 || r < 0.0 || n < r)
+        return NAN;
+    if (n > UINT_MAX || r > UINT_MAX)
+        return INFINITY;
+    unsigned long int un = (unsigned int) (n), ur = (unsigned int) (r), i;
+    unsigned long int result = 1;
+    if (ur > un / 2)
+        ur = un - ur;
+    for (i = 1; i <= ur; i++)
+    {
+        if (result > ULONG_MAX / (un - ur + i))
+            return INFINITY;
+        result *= un - ur + i;
+        result /= i;
+    }
+    return result;
+}
+
+static double npr(double n, double r)
+{
+    return ncr(n, r) * fac(r);
+}
+
+/**************************************
+ * Built-in functions
+ * must be in alphabetical order
+ **************************************/
+static const buildInFunc_s s_buildInFunctions[] = {
+                                                    { "abs", fabs, },
+                                                    { "acos", acos, },
+                                                    { "asin", asin, },
+                                                    { "atan", atan, },
+                                                    { "atan2", atan2, },
+                                                    { "ceil", ceil, },
+                                                    { "cos", cos, },
+                                                    { "cosh", cosh, },
+                                                    { "e", e, },
+                                                    { "exp", exp, },
+                                                    { "fac", fac, },
+                                                    { "floor", floor, },
+                                                    { "ln", log, },
+                                                    { "log", log, },
+                                                    { "log10", log10, },
+                                                    { "ncr", ncr, },
+                                                    { "npr", npr, },
+                                                    { "pi", pi, },
+                                                    { "pow", pow, },
+                                                    { "sin", sin, },
+                                                    { "sinh", sinh, },
+                                                    { "sqrt", sqrt, },
+                                                    { "tan", tan, },
+                                                    { "tanh", tanh, },
+                                                    { 0, 0 } //sentinel, make sure that array has elements, do not remove
+};
+
+static const buildInFunc_s* findBuilDIn(const char *name, int len)
+{
+    int imin = 0;
+    int imax = sizeof(s_buildInFunctions) / sizeof(buildInFunc_s) - 2;
+
+    // binary search
+    while (imax >= imin)
+    {
+        const int i = (imin + ((imax - imin) / 2));
+        int c = strncmp(name, s_buildInFunctions[i].name, len);
+        if (!c)
+        {
+            c = '\0' - s_buildInFunctions[i].name[len];
+        }
+
+        if (c == 0)
+        {
+            return s_buildInFunctions + i;
+        }
+        else if (c > 0)
+        {
+            imin = i + 1;
+        }
+        else
+        {
+            imax = i - 1;
+        }
+    }
+
+    return NULL;
+}
+
+//static const te_variable* find_lookup(const state *s, const char *name, int len)
+//{
+//    int iters;
+//    const te_variable *var;
+//    if (!s->lookup)
+//        return 0;
+//
+//    for (var = s->lookup, iters = s->lookup_len; iters; ++var, --iters)
+//    {
+//        if (strncmp(name, var->name, len) == 0 && var->name[len] == '\0')
+//        {
+//            return var;
+//        }
+//    }
+//
+//    return 0;
+//}
 
 static Node* node_number(double val, int pos)
 {
@@ -401,13 +544,15 @@ static Node* node_binary(BinaryOp op, Node *l, Node *r, int pos)
     return n;
 }
 
-static Node* node_func(const char *name, Node *arg, int pos)
+static Node* node_func(const char *name, Node *arg, int pos, void *funcPtr)
 {
     Node *n = malloc(sizeof(Node));
     n->type = N_FUNC;
     n->pos = pos;
     n->v.func.name = strdup(name);
     n->v.func.arg = arg;
+    n->v.func.funcPtr = funcPtr;
+
     return n;
 }
 
@@ -656,12 +801,9 @@ static double eval_node(Node *n, RtMap *rt)
         case N_FUNC:
         {
             double a = eval_node(n->v.func.arg, rt);
-            if (strcmp(n->v.func.name, "sin") == 0)
-                return sin(a);
-            if (strcmp(n->v.func.name, "cos") == 0)
-                return cos(a);
-            if (strcmp(n->v.func.name, "exp") == 0)
-                return exp(a);
+            if (n->v.func.funcPtr)
+                return EVAL_FUNCTION(n->v.func.funcPtr, double)(a);
+
             fprintf(stderr, "Runtime error: unknown function %s at pos %d\n", n->v.func.name, n->pos);
             exit(1);
         }
@@ -924,24 +1066,42 @@ static Node* parse_unary_node(TokenList *toks)
 static Node* parse_power_node(TokenList *toks)
 {
     Token cur = tlist_peek(toks);
-    if (cur.type == T_IDENT && strcmp(cur.text, "exp") == 0)
-    {
-        tlist_next(toks);
-        if (!match(toks, T_LP))
-        {
-            fprintf(stderr, "Syntax error: expected '(' after exp at %d\n", cur.pos);
-            exit(1);
-        }
-        Node *arg = parse_assign(toks);
-        if (!match(toks, T_RP))
-        {
-            fprintf(stderr, "Syntax error: expected ')' after exp at %d\n", cur.pos);
-            exit(1);
-        }
-        return node_func("exp", arg, cur.pos);
-    }
+//    if (cur.type == T_IDENT && strcmp(cur.text, "exp") == 0)
+//    {
+//        tlist_next(toks);
+//        if (!match(toks, T_LP))
+//        {
+//            fprintf(stderr, "Syntax error: expected '(' after exp at %d\n", cur.pos);
+//            exit(1);
+//        }
+//        Node *arg = parse_assign(toks);
+//        if (!match(toks, T_RP))
+//        {
+//            fprintf(stderr, "Syntax error: expected ')' after exp at %d\n", cur.pos);
+//            exit(1);
+//        }
+//        return node_func("exp", arg, cur.pos, exp);
+//    }
+//
+//    if (cur.type == T_IDENT && (strcmp(cur.text, "sin") == 0 || strcmp(cur.text, "cos") == 0))
+//    {
+//        tlist_next(toks);
+//        if (!match(toks, T_LP))
+//        {
+//            fprintf(stderr, "Syntax error: expected '(' after %s at %d\n", cur.text, cur.pos);
+//            exit(1);
+//        }
+//        Node *arg = parse_assign(toks);
+//        if (!match(toks, T_RP))
+//        {
+//            fprintf(stderr, "Syntax error: expected ')' after %s at %d\n", cur.text, cur.pos);
+//            exit(1);
+//        }
+//        return node_func(cur.text, arg, cur.pos);
+//    }
 
-    if (cur.type == T_IDENT && (strcmp(cur.text, "sin") == 0 || strcmp(cur.text, "cos") == 0))
+    const buildInFunc_s *func = findBuilDIn(cur.text, (int) strlen(cur.text));
+    if (cur.type == T_IDENT && func != NULL)
     {
         tlist_next(toks);
         if (!match(toks, T_LP))
@@ -955,7 +1115,8 @@ static Node* parse_power_node(TokenList *toks)
             fprintf(stderr, "Syntax error: expected ')' after %s at %d\n", cur.text, cur.pos);
             exit(1);
         }
-        return node_func(cur.text, arg, cur.pos);
+
+        return node_func(cur.text, arg, cur.pos, (void*) func->funcPtr);
     }
 
     return parse_primary_node(toks);
@@ -1084,16 +1245,34 @@ static void tokenize(const char *s, TokenList *out)
             continue;
         }
 
-        // numbers
-        if (isdigit((unsigned char)c) || c == '.')
+        // numbers: must start with a digit. If '.' present, it must be followed by one or more digits.
+        if (isdigit((unsigned char )c))
         {
             int start = i;
-            while (i < n && (isdigit((unsigned char)s[i]) || s[i] == '.'))
+            // integer part
+            while (i < n && isdigit((unsigned char )s[i]))
                 i++;
+            // optional fractional part: only accept if '.' followed by at least one digit
+            if (i < n && s[i] == '.')
+            {
+                int dot = i;
+                if (i + 1 < n && isdigit((unsigned char )s[i + 1]))
+                {
+                    // consume '.' and fractional digits
+                    i++; // consume '.'
+                    while (i < n && isdigit((unsigned char )s[i]))
+                        i++;
+                }
+                else
+                {
+                    // '.' not followed by digit: do not consume it as part of number
+                    i = dot; // rewind to dot so it will be processed later
+                }
+            }
             int len = i - start;
             char *txt = strndup(s + start, len);
             double v = strtod(txt, NULL);
-            Token t = { T_NUM, txt, v };
+            Token t = { T_NUM, txt, v, start };
             tlist_push(out, t);
             continue;
         }
@@ -1117,14 +1296,16 @@ static void tokenize(const char *s, TokenList *out)
             continue;
         }
 
-        if (isalpha((unsigned char )c))
+        // identifiers: must start with a letter or underscore, followed by letters, digits or underscores
+        if (isalpha((unsigned char)c) || c == '_')
         {
             int start = i;
-            while (i < n && isalpha((unsigned char )s[i]))
+            i++; // consume first
+            while (i < n && (isalnum((unsigned char)s[i]) || s[i] == '_'))
                 i++;
             int len = i - start;
             char *txt = strndup(s + start, len);
-            Token t = { T_IDENT, txt, 0 };
+            Token t = { T_IDENT, txt, 0, start };
             tlist_push(out, t);
             continue;
         }
@@ -1413,14 +1594,16 @@ static Node* optimize_node(Node *n)
             {
                 double a = node_get_number(n->v.func.arg);
                 double res;
-                if (strcmp(n->v.func.name, "sin") == 0)
-                    res = sin(a);
-                else if (strcmp(n->v.func.name, "cos") == 0)
-                    res = cos(a);
-                else if (strcmp(n->v.func.name, "exp") == 0)
-                    res = exp(a);
+                if (n->v.func.funcPtr)
+                {
+                    res = EVAL_FUNCTION(n->v.func.funcPtr, double)(a);
+                    return node_number(res, n->pos);
+                }
                 else
+                {
                     return n; // unknown func, don't fold
+                }
+
                 int pos = n->pos;
                 free_node(n);
                 return node_number(res, pos);
