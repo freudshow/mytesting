@@ -11,33 +11,34 @@
 #define EVAL_FUNCTION(funcPtr, ...) ((double(*)(__VA_ARGS__))funcPtr)
 
 typedef enum {
-    T_NUM,
-    T_HASH,
-    T_IDENT,
-    T_PLUS,
-    T_MINUS,
-    T_MUL,
-    T_DIV,
-    T_LP,
-    T_RP,
-    T_NOT,
-    T_NEQ,
-    T_ANDAND,
-    T_OROR,
-    T_GT,
-    T_GTE,
-    T_LT,
-    T_LTE,
-    T_EQ,
-    T_AMP,
-    T_PIPE,
-    T_CARET,
-    T_TILDE,
-    T_LSHIFT,
-    T_RSHIFT,
-    T_ASSIGN,
-    T_COMMA,
-    T_EOF, T_INVALID
+    T_NUM,          // integer number or real number
+    T_REALDB,       // real database reference #id
+    T_IDENT,        // identifier (function name or variable)
+    T_PLUS,         // '+'
+    T_MINUS,        // '-'
+    T_MUL,          // '*'
+    T_DIV,          // '/'
+    T_LP,           // '('
+    T_RP,           // ')'
+    T_NOT,          // '!'
+    T_NEQ,          // '!='
+    T_ANDAND,       // '&&'
+    T_OROR,         // '||'
+    T_GT,           // '>'
+    T_GTE,          // '>='
+    T_LT,           // '<'
+    T_LTE,          // '<='
+    T_EQ,           // '=='
+    T_AMP,          // '&'
+    T_PIPE,         // '|'
+    T_CARET,        // '^'
+    T_TILDE,        // '~'
+    T_LSHIFT,       // '<<'
+    T_RSHIFT,       // '>>'
+    T_ASSIGN,       // '='
+    T_COMMA,        // ','
+    T_EOF,          // end of input
+    T_INVALID       // invalid token
 } TokenType;
 
 typedef struct {
@@ -156,6 +157,7 @@ static double rt_get(RtMap* m, int id)
     {
         if (m->arr[i].id == id)
         {
+            printf("rt_get: id=%d, val=%g\n", id, m->arr[i].val);
             return m->arr[i].val;
         }
     }
@@ -171,7 +173,7 @@ static void rt_free(RtMap* m)
 // AST node types
 typedef enum {
     N_NUMBER,
-    N_HASH,
+    N_REAL_DATABASE,
     N_UNARY,
     N_BINARY,
     N_FUNC,
@@ -209,7 +211,7 @@ typedef struct Node {
     int pos; // position in input for errors
     union {
         double number;
-        int hashId;
+        int realDataBaseId;
         struct {
             UnaryOp op;
             struct Node* child;
@@ -231,11 +233,6 @@ typedef struct Node {
         } assign;
     } v;
 } Node;
-
-typedef struct buildInFuncStruct {
-    const char* name;
-    const void* funcPtr;
-} buildInFunc_s;
 
 static double pi(void)
 {
@@ -293,9 +290,13 @@ static double npr(double n, double r)
  * Built-in functions
  * must be in alphabetical order
  **************************************/
-typedef struct { const char* name; const void* funcPtr; int arity; } buildInFunc2_s;
+typedef struct {
+    const char *name;       // function name
+    const void *funcPtr;    // function pointer
+    int arity;              // number of arguments
+} buildInFunc_s;
 
-static const buildInFunc2_s s_buildInFunctions[] = {
+static const buildInFunc_s s_buildInFunctions[] = {
     { "abs", fabs, 1 },
     { "acos", acos, 1 },
     { "asin", asin, 1 },
@@ -323,10 +324,10 @@ static const buildInFunc2_s s_buildInFunctions[] = {
     { NULL, NULL, 0 }
 };
 
-static const buildInFunc2_s* findBuilDIn(const char* name, int len)
+static const buildInFunc_s* findBuilDIn(const char* name, int len)
 {
     int imin = 0;
-    int imax = sizeof(s_buildInFunctions) / sizeof(buildInFunc2_s) - 2;
+    int imax = sizeof(s_buildInFunctions) / sizeof(buildInFunc_s) - 2;
 
     // binary search
     while (imax >= imin)
@@ -382,12 +383,12 @@ static Node* node_number(double val, int pos)
     return n;
 }
 
-static Node* node_hash(int id, int pos)
+static Node* node_realDataBase(int id, int pos)
 {
     Node* n = malloc(sizeof(Node));
-    n->type = N_HASH;
+    n->type = N_REAL_DATABASE;
     n->pos = pos;
-    n->v.hashId = id;
+    n->v.realDataBaseId = id;
     return n;
 }
 
@@ -446,7 +447,7 @@ static void free_node(Node* n)
     {
     case N_NUMBER:
         break;
-    case N_HASH:
+    case N_REAL_DATABASE:
         break;
     case N_UNARY:
         free_node(n->v.unary.child);
@@ -486,8 +487,8 @@ static void print_node(Node* n, const char* indent, int last)
     case N_NUMBER:
         printf("%g\n", n->v.number);
         break;
-    case N_HASH:
-        printf("#%d\n", n->v.hashId);
+    case N_REAL_DATABASE:
+        printf("#%d\n", n->v.realDataBaseId);
         break;
     case N_UNARY:
         printf("Unary(%s)\n", n->v.unary.op == U_NEG ? "-" : (n->v.unary.op == U_NOT ? "!" : "~"));
@@ -596,8 +597,8 @@ static double eval_node(Node* n, RtMap* rt)
     {
     case N_NUMBER:
         return n->v.number;
-    case N_HASH:
-        return rt_get(rt, n->v.hashId);
+    case N_REAL_DATABASE:
+        return rt_get(rt, n->v.realDataBaseId);
     case N_UNARY:
     {
         double v = eval_node(n->v.unary.child, rt);
@@ -755,9 +756,9 @@ static int match(TokenList* t, TokenType ty)
 static Node* parse_assign(TokenList* toks)
 {
     Token cur = tlist_peek(toks);
-    if (cur.type == T_HASH && toks->idx + 1 < toks->sz && toks->arr[toks->idx + 1].type == T_ASSIGN)
+    if (cur.type == T_REALDB && toks->idx + 1 < toks->sz && toks->arr[toks->idx + 1].type == T_ASSIGN)
     {
-        Token h = tlist_next(toks); // consume HASH
+        Token h = tlist_next(toks); // consume REAL_DATABASE
         Token a = tlist_next(toks); // consume ASSIGN
         Node* rhs = parse_assign(toks); // right-assoc
         int id = atoi(h.text);
@@ -1007,7 +1008,7 @@ static Node* parse_power_node(TokenList* toks)
     //        return node_func(cur.text, arg, cur.pos);
     //    }
 
-    const buildInFunc2_s* func = findBuilDIn(cur.text, (int)strlen(cur.text));
+    const buildInFunc_s* func = findBuilDIn(cur.text, (int)strlen(cur.text));
     if (cur.type == T_IDENT && func != NULL)
     {
         tlist_next(toks);
@@ -1058,11 +1059,11 @@ static Node* parse_primary_node(TokenList* toks)
         return node_number(tk.num, tk.pos);
     }
 
-    if (t.type == T_HASH)
+    if (t.type == T_REALDB)
     {
         Token tk = tlist_next(toks);
         int id = atoi(tk.text);
-        return node_hash(id, tk.pos);
+        return node_realDataBase(id, tk.pos);
     }
 
     if (t.type == T_IDENT)
@@ -1218,7 +1219,7 @@ static void tokenize(const char* s, TokenList* out)
             }
             int len = i - start;
             char* txt = strndup(s + start, len);
-            Token t = { T_HASH, txt, 0, start - 1 };
+            Token t = { T_REALDB, txt, 0, start - 1 };
             tlist_push(out, t);
             continue;
         }
@@ -1368,11 +1369,10 @@ static void print_error_with_caret(const char* line, int pos)
     fprintf(stderr, "^\n");
 }
 
-// Optimization: constant-fold subtrees that do not contain any realtime hash (#id)
-// Realtime hash nodes (N_HASH) must not be folded because their values may change concurrently.
-
-// Return 1 if subtree contains a hash node
-static int node_contains_hash(Node* n)
+// Optimization: constant-fold subtrees that do not contain any real database id (#id)
+// Real database nodes (N_REAL_DATABASE) must not be folded because their values may change concurrently.
+// Return 1 if subtree contains a real database node, 0 otherwise
+static int node_contains_realDatabaseId(Node* n)
 {
     if (!n)
     {
@@ -1381,26 +1381,26 @@ static int node_contains_hash(Node* n)
 
     switch (n->type)
     {
-    case N_HASH:
+    case N_REAL_DATABASE:
         return 1;
     case N_NUMBER:
         return 0;
     case N_UNARY:
-        return node_contains_hash(n->v.unary.child);
+        return node_contains_realDatabaseId(n->v.unary.child);
     case N_BINARY:
-        return node_contains_hash(n->v.binary.left) || node_contains_hash(n->v.binary.right);
+        return node_contains_realDatabaseId(n->v.binary.left) || node_contains_realDatabaseId(n->v.binary.right);
     case N_FUNC:
     {
         if (!n->v.func.args) return 0;
         for (int i = 0; i < n->v.func.argc; ++i)
         {
-            if (node_contains_hash(n->v.func.args[i]))
+            if (node_contains_realDatabaseId(n->v.func.args[i]))
                 return 1;
         }
         return 0;
     }
     case N_ASSIGN:
-        return node_contains_hash(n->v.assign.rhs); // assignment lhs is id, not a hash node
+            return node_contains_realDatabaseId(n->v.assign.rhs); // assignment lhs is id, not a real database node
     default:
         return 0;
     }
@@ -1423,13 +1423,13 @@ static Node* optimize_node(Node* n)
     switch (n->type)
     {
     case N_NUMBER:
-    case N_HASH:
+    case N_REAL_DATABASE:
         return n;
 
     case N_UNARY:
     {
         n->v.unary.child = optimize_node(n->v.unary.child);
-        if (!node_contains_hash(n) && n->v.unary.child && n->v.unary.child->type == N_NUMBER)
+        if (!node_contains_realDatabaseId(n) && n->v.unary.child && n->v.unary.child->type == N_NUMBER)
         {
             double c = node_get_number(n->v.unary.child);
             double res;
@@ -1451,7 +1451,7 @@ static Node* optimize_node(Node* n)
     {
         n->v.binary.left = optimize_node(n->v.binary.left);
         n->v.binary.right = optimize_node(n->v.binary.right);
-        if (!node_contains_hash(n) && n->v.binary.left && n->v.binary.right
+        if (!node_contains_realDatabaseId(n) && n->v.binary.left && n->v.binary.right
             && n->v.binary.left->type == N_NUMBER && n->v.binary.right->type == N_NUMBER)
         {
             double l = node_get_number(n->v.binary.left);
@@ -1537,8 +1537,8 @@ static Node* optimize_node(Node* n)
             n->v.func.args[i] = optimize_node(n->v.func.args[i]);
         }
 
-        /* if subtree contains no realtime hashes and all args are numbers, constant-fold */
-        if (!node_contains_hash(n))
+            /* if subtree contains no real database nodes and all args are numbers, constant-fold */
+        if (!node_contains_realDatabaseId(n))
         {
             int all_number = 1;
             for (int i = 0; i < n->v.func.argc; ++i)
