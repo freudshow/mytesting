@@ -1,0 +1,295 @@
+What "evaluation with short-circuit" means
+
+	•  Short-circuit evaluation for logical operators means the right-hand operand is only evaluated when needed to determine the result.
+	•  For logical AND (&&): if the left operand is false (here, 0.0), the whole expression is false and the right operand is NOT evaluated.
+	•  For logical OR (||): if the left operand is true (non-zero), the whole expression is true and the right operand is NOT evaluated.
+	•  This prevents unnecessary work and avoids side effects or runtime errors that would occur if the right-hand side were evaluated.
+
+Where it's implemented in eval_node() (exact behavior)
+
+	•  In eval_node() the short-circuit is implemented in the N_BINARY case for B_ANDAND and B_OROR.
+
+Code logic (conceptual, from the file):
+
+	•  B_ANDAND:
+	•  Evaluate left: double lv = eval_node(left, rt);
+	•  If lv == 0.0 return 0.0 immediately (do not evaluate right).
+	•  Otherwise evaluate right rv = eval_node(right, rt); -> return rv != 0.0 ? 1.0 : 0.0;
+	•  B_OROR:
+	•  Evaluate left: double lv = eval_node(left, rt);
+	•  If lv != 0.0 return 1.0 immediately (do not evaluate right).
+	•  Otherwise evaluate right and return rv != 0.0 ? 1.0 : 0.0;
+
+Important operational details from the implementation
+
+	•  Truthiness: any non-zero double is treated as true; zero is false. The logical operators return 1.0 for true and 0.0 for false.
+	•  Short-circuit prevents the RHS from running, so any side effects in the RHS (like assignments or runtime database reads/writes) will not occur when short-circuiting triggers.
+	•  Other binary operators (arithmetic, comparisons, bitwise) evaluate both operands unconditionally — only && and || are short-circuited.
+	•  Bitwise operators (&, |, ^) are implemented as B_BITAND, B_BITOR, B_BITXOR and do a cast to long and evaluate both sides (no short-circuit). So & is different from &&.
+	•  Function arguments are evaluated eagerly in N_FUNC (the code loops and calls eval_node() for each arg before calling the function), so there is no short-circuiting across function arguments.
+
+Practical examples and consequences
+
+	•  Avoiding runtime errors:
+	•  Expression: 0 && (1/0) -> left is 0.0 so returns 0.0; division by zero in RHS is never executed.
+	•  If there were no short-circuiting, 1/0 would be evaluated and could cause a runtime error.
+	•  Preventing side effects:
+	•  Suppose RHS assigns to a runtime map entry: 0 && (#1 = 5). Because left is zero, RHS is not evaluated and the assignment does not happen.
+	•  Difference with bitwise:
+	•  0 & (side_effect()) will call side_effect() (both sides evaluated) and then bitwise-and their integer representations.
+	•  0 && (side_effect()) will NOT call side_effect() because of short-circuiting.
+
+Edge cases & caveats
+
+	•  NaN: comparisons involving NaN behave per C's double semantics (NaN != NaN etc). If left is NaN, lv == 0.0 is false, so for && it will evaluate the RHS (NaN treated neither equal to 0.0 nor non-zero? practically comparisons like lv != 0.0 will be true for NaN). Be cautious.
+	•  Equality of doubles: B_EQ uses == on doubles — exact equality only. Floating rounding caveats apply.
+	•  The evaluator uses casts to long for bitwise shifts and bitwise ops; huge doubles or non-integer doubles can produce surprising results.
+	•  Division checks: B_DIV checks RHS r == 0 and prints error + exit if zero; short-circuiting can avoid that error if left side of &&/|| prevents the divisor from being computed.
+
+If you want to experiment
+
+	•  I can run a tiny test snippet using that eval machinery to show examples (like 0 && (1/0), 1 || (#1 = 10), 0 & (side-effect)) and print whether the RHS was evaluated. Tell me if you want that and I’ll run/produce it.
+
+Summary
+
+	•  The comment "evaluation with short-circuit" refers to the implementation in eval_node() that intentionally avoids evaluating the right operand for && and || when the left operand already determines the boolean result. This is implemented in the B_ANDAND and B_OROR branches and prevents RHS side effects/errors when short-circuit conditions apply.
+	
+	
+########################################################
+
+Where precedence lives in eval.c
+
+	•  The parser is a recursive-descent parser. Precedence is encoded by the hierarchy of parse functions:
+	•  parse_assign (lowest precedence / top level)
+	•  parse_logical_or_node (||)
+	•  parse_logical_and_node (&&)
+	•  parse_bitor_node (|)
+	•  parse_bitxor_node (^)
+	•  parse_bitand_node (&)
+	•  parse_equality_node (==, !=)
+	•  parse_relational_node (>, >=, <, <=)
+	•  parse_shift_node (<<, >>)
+	•  parse_add_node (+, -)
+	•  parse_multiply_node (*, /)
+	•  parse_unary_node (!, ~, unary -)
+	•  parse_power_node (function calls / primary)
+	•  parse_primary_node (numbers, #id, parentheses, functions)
+	•  Each function calls the next-level function to parse its operands. That "calls the next level" pattern is the key: the deeper you go, the tighter the binding (higher precedence).
+
+Why that ordering yields precedence
+
+	•  Example: 1 + 2 * 3
+	•  parse_add_node tries to parse right operand by calling parse_multiply_node.
+	•  parse_multiply_node consumes 2 * 3 as a single node (because * is handled inside parse_multiply_node).
+	•  Then parse_add_node combines 1 (left) with the multiply-node (2 * 3). => Multiplication binds tighter than addition because parse_add_node delegates to parse_multiply_node to parse operands.
+	•  If you swapped them (if parse_add_node instead called a lower-level function that handled + before *), + could bind more tightly and you'd parse (1 + 2) * 3 instead.
+
+Associativity: left vs right
+
+	•  Left-associative operators (like -, +, *, /) are implemented by the parser using a loop:
+	•  e.g. parse_add_node:
+		•  parse left (multiply level)
+		•  while next token is + or - { parse right (again multiply level); left = node_binary(...); }
+
+	•  That loop produces left-associative grouping: a - b - c -> (a - b) - c.
+	•  Right-associative operators are implemented via recursion. In this file:
+	•  parse_assign recognizes #id = expr and calls parse_assign(toks) recursively for the right-hand side, which makes assignment right-associative (a = b = c -> a = (b = c)).
+	•  There's no explicit exponentiation operator here, but if you wanted a right-associative power (^ as power), you'd have the parser call itself recursively on the right-hand side to get a ^ b ^ c -> a ^ (b ^ c).
+
+Parentheses override grammar
+
+	•  parse_primary_node handles ( parse_assign ) so parentheses always allow you to override default precedence: (1 + 2) * 3 forces addition to be grouped first.
+
+Short-circuit and grammar
+
+	•  Logical && and || are parsed at a higher (looser) level (parse_logical_and_node and parse_logical_or_node). Their position also means they have lower precedence than arithmetic, comparisons, bitwise, etc. For example 1 && 2 < 3 is parsed as 1 && (2 < 3) because relational operators are parsed deeper.
+	•  Short-circuit evaluation is an evaluation-time behavior (we saw it in eval_node()), but grammar determines which subexpressions become the left and right operands that the evaluator will consider for short-circuiting.
+
+Concrete examples and their parse shapes
+
+	•  1 + 2 * 3
+	•  AST: Binary(+, 1, Binary(*, 2, 3))
+	•  Result: 7
+	•  1 * 2 + 3
+	•  AST: Binary(+, Binary(*, 1, 2), 3)
+	•  Result: 5
+	•  a = b = 1
+	•  Because parse_assign is right-assoc via recursive call:
+	•  AST: Assign(a, Assign(b, 1))
+	•  1 || 0 && 0
+	•  Because && is tighter than || (logical_and parsed inside logical_or):
+	•  AST: Binary(||, 1, Binary(&&, 0, 0))
+	•  Result: true (1) because left of || is true; right && never evaluated due to short-circuit.
+
+How changing the grammar changes precedence
+
+	•  If parse_add_node called parse_unary_node directly instead of parse_multiply_node, then + and * would be at the same level and parsed left-to-right (or whichever logic you put), changing results: 1 + 2 * 3 could become (1 + 2) * 3 depending on implementation.
+	•  If you want * to have lower precedence than +, you would arrange the parse functions so that the addition-level is deeper (called by) the multiply-level — essentially invert their positions.
+
+Ambiguities and design choices
+
+	•  The parser is intentionally designed to mirror familiar C-like precedence: bitwise < logical < assignment, arithmetic in usual order, comparisons between arithmetic and bitwise, etc.
+	•  Ambiguous grammars are typically resolved by structuring parse functions like this rather than using a single ambiguous production. Recursive-descent parsing using separate functions is a simple, clear way to encode precedence.
+	•  Tokenizer also matters (multi-char tokens like &&, ||, ==, !=, <<, >>) so the parser sees correct tokens in the intended order.
+
+Gotchas and practical notes
+
+	•  Bitwise ops (&, |, ^) are separate from logical ops (&&, ||) and are parsed at tighter precedence levels here. That matches C, but remember their semantics differ (bitwise evaluate both sides; logical short-circuit).
+	•  Floating/folding effects: optimizer/constant-folder (optimize_node) respects the same node types and precedence; it folds only when it can do so safely given that some nodes reference runtime database IDs (N_REAL_DATABASE), so grammar also determines what subtrees can be folded.
+	•  If you add a new operator, place its parse function at the correct spot in this chain to give it the intended precedence, and choose loop vs recursion depending on associativity.
+
+If you want, I can:
+
+	•  show the actual AST output for a few example expressions using the existing eval program (I can run the parser/evaluator and paste the ASTs/results), or
+	•  propose how to add a new operator with a specified precedence/associativity by editing eval.c.
+
+Which would you like me to do next? (run examples, or show how to change grammar to alter precedence)
+
+###################################################################################
+
+1) Lexical tokens (as produced by tokenize() in eval.c)
+
+	•  Multi-char tokens (recognized first):
+	•  T_ANDAND : "&&"
+	•  T_OROR : "||"
+	•  T_LSHIFT : "<<"
+	•  T_RSHIFT : ">>"
+	•  T_GTE : ">="
+	•  T_LTE : "<="
+	•  T_NEQ : "!="
+	•  T_EQ : "=="
+	•  Numbers:
+	•  T_NUM : sequence of digits, optional fractional part if '.' followed by digit(s). (Tokenizer requires number start with digit.)
+	•  Real database reference:
+	•  T_REALDB: '#' followed by one or more digits (e.g. #123)
+	•  Identifiers:
+	•  T_IDENT: letter or '_' followed by letters/digits/_ (used for built-in function names)
+	•  Single-char tokens:
+	•  T_PLUS : '+'
+	•  T_MINUS : '-'
+	•  T_MUL : '*'
+	•  T_DIV : '/'
+	•  T_LP : '('
+	•  T_RP : ')'
+	•  T_NOT : '!'
+	•  T_GT : '>'
+	•  T_LT : '<'
+	•  T_AMP : '&'
+	•  T_PIPE : '|'
+	•  T_CARET : '^'
+	•  T_TILDE : '~'
+	•  T_ASSIGN: '=' (single '=' used for assignment to #id)
+	•  T_COMMA : ','
+	•  T_EOF : end of input
+	•  Note: T_IDENT that is not a known builtin causes a syntax error in the parser.
+
+2) Grammar (EBNF) matching the parser in eval.c (nonterminals named to match parser functions)
+
+Grammar tokens used below are the token names (e.g. T_NUM, T_REALDB) or the literal lexeme in quotes for clarity.
+
+entry: AssignExpr EOF
+
+AssignExpr: RealDbRef "=" AssignExpr | LogicalOrExpr
+
+LogicalOrExpr: LogicalAndExpr { "||" LogicalAndExpr }
+
+LogicalAndExpr: BitOrExpr { "&&" BitOrExpr }
+
+BitOrExpr: BitXorExpr { "|" BitXorExpr }
+
+BitXorExpr: BitAndExpr { "^" BitAndExpr }
+
+BitAndExpr: EqualityExpr { "&" EqualityExpr }
+
+EqualityExpr: RelationalExpr { ("==" | "!=") RelationalExpr }
+
+RelationalExpr: ShiftExpr { (">" | ">=" | "<" | "<=") ShiftExpr }
+
+ShiftExpr: AddExpr { ("<<" | ">>") AddExpr }
+
+AddExpr: MultiplyExpr { ("+" | "-") MultiplyExpr }
+
+MultiplyExpr: UnaryExpr { ("*" | "/") UnaryExpr }
+
+UnaryExpr: "!" UnaryExpr | "~" UnaryExpr | "-" UnaryExpr | PowerExpr
+
+PowerExpr: // this function level handles builtin function calls and then falls through to primary BuiltinCall | PrimaryExpr
+
+BuiltinCall: IDENT "(" [ AssignExpr { "," AssignExpr } ] ")" // note: parser checks that IDENT matches a builtin function table; otherwise it's an error
+
+PrimaryExpr: NUM | RealDbRef | "(" AssignExpr ")" // IDENT alone is a syntax error in the implemented parser (only allowed as builtin-call followed by '(')
+
+RealDbRef: '#' DIGITS // token T_REALDB
+
+Comments/semantics:
+
+	•  Curly braces { ... } denote repetition (0 or more).
+	•  Square brackets [ ... ] denote optional.
+	•  The parser enforces that RealDbRef "=" AssignExpr makes assignment right-associative (AssignExpr on RHS).
+	•  Builtin functions must be in the builtin table; otherwise parser error.
+
+3) Operator precedence and associativity (highest precedence at top)
+
+	•  Primary / function calls / parentheses
+	•  NUM, #id, function-call, ( ... ) — highest precedence
+	•  Unary (right-associative)
+	•  ! (logical not), ~ (bitwise not), unary -
+	•  Multiplicative (left-associative)
+	•  *, /
+	•  Additive (left-associative)
+	•  +, -
+	•  Shift (left-associative)
+	•  <<, >>
+	•  Relational (left-associative)
+	•  >, >=, <, <=
+	•  Equality (left-associative)
+	•  ==, !=
+	•  Bitwise AND/ XOR / OR (left-associative)
+	•  &, ^, |
+	•  Logical AND (left-associative)
+	•  && — also short-circuits at evaluation time
+	•  Logical OR (left-associative)
+	•  || — also short-circuits at evaluation time
+	•  Assignment to #id (right-associative)
+	•  #id = expr
+
+4) Additional semantic notes that affect parsing/meaning
+
+	•  parse_assign treats #digits = expr specially; assignment only allowed with a T_REALDB LHS — i.e., #1 = 5 is valid, but plain identifier assignment x = 1 is not implemented.
+	•  Function arguments are parsed using parse_assign, so assignment can appear inside argument expressions.
+	•  Builtin function arguments are evaluated eagerly (no short-circuit across separate function args).
+	•  Short-circuit behavior (evaluation-time): && and || will not evaluate their RHS if the LHS determines the result; grammar decides which subexpressions are LHS and RHS.
+	•  The constant-fold optimizer (optimize_node) mirrors these node types and may fold constant subtrees, but it never folds nodes that contain N_REAL_DATABASE (to avoid staleness).
+	•  Equality and relational operators use exact double comparisons (==, !=) and C comparison semantics (beware of NaN behavior).
+
+5) Example parses (how grammar groups operators)
+
+	•  Expression: 1 + 2 * 3
+	•  parse: AddExpr -> left: NUM(1), sees '+', right parsed by MultiplyExpr -> Binary(*, 2, 3)
+	•  AST: Binary(+, 1, Binary(*, 2, 3))
+	•  Result (evaluation): 7
+	•  Expression: #1 = 2 + 3 * 4
+	•  parse: AssignExpr -> #1 = AssignExpr
+		•  RHS: parse_assign => parse_logical_or ... => AddExpr -> left 2, '+' right MultiplyExpr -> (3 * 4)
+
+	•  AST: Assign(#1, Binary(+, 2, Binary(*,3,4)))
+	•  Assignment is right-associative by design.
+	•  Expression: 1 || 0 && (2 / 0)
+	•  parse: LogicalOrExpr -> left: LogicalAndExpr (which will be left=BitOrExpr... yields NUM(1))
+	•  Because && has higher precedence than ||, the parse is Binary(||, 1, Binary(&&, 0, Binary(/,2,0)))
+	•  At evaluation, short-circuiting of || stops RHS evaluation (so (2/0) is never evaluated) and no division-by-zero occurs.
+
+6) How you would change precedence
+
+	•  To make an operator bind tighter (higher precedence), move its parsing into a deeper parse function (i.e., have the calling function delegate to it). Concretely:
+	•  If you want + to bind more tightly than *, make parse_multiply_node call parse_add_node for its operands (swap their order). That reorders precedence.
+	•  To change associativity:
+	•  Left-assoc: use a while loop collecting sequences (as implemented).
+	•  Right-assoc: use recursion on the right side (as parse_assign does).
+
+If you want, I can:
+
+	•  Generate a formal BNF file or a quick diagram showing the exact call-stack flow of the parser, or
+	•  Run the eval program in the repo with a few example expressions and show the resulting AST/optimized AST and evaluation outputs (live demonstration).
+
+Which of those would you like next?

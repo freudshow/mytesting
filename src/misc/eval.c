@@ -8,7 +8,7 @@
 #include <stdint.h>
 #include <limits.h>
 
-#define EVAL_FUNCTION(funcPtr, ...) ((double(*)(__VA_ARGS__))funcPtr)
+#define EVAL_USE_SHORT_CIRCUIT      1       // enable short-circuit evaluation
 
 typedef enum {
     T_NUM,          // integer number or real number
@@ -74,6 +74,15 @@ static void tlist_push(TokenList* t, Token tk)
     t->arr[t->sz++] = tk;
 }
 
+/***********************************
+ * 函数名: tlist_peek
+ * 功能: 查看下一个Token但不移动索引
+ * -----------------------------------
+ * 输入参数: t - Token列表
+ * 输出参数: 无
+ * -----------------------------------
+ * @return - 下一个Token
+ */
 static Token tlist_peek(TokenList* t)
 {
     if (t->idx < t->sz)
@@ -85,6 +94,15 @@ static Token tlist_peek(TokenList* t)
     return eof;
 }
 
+/***************************************
+ * 函数名: tlist_next
+ * 功能: 获取下一个Token并移动索引
+ * -------------------------------------
+ * 输入参数: t - Token列表
+ * 输出参数: 无
+ * -------------------------------------
+ * @return - 下一个Token
+ **************************************/
 static Token tlist_next(TokenList* t)
 {
     if (t->idx < t->sz)
@@ -96,6 +114,15 @@ static Token tlist_next(TokenList* t)
     return eof;
 }
 
+/***************************************
+ * 函数名: tlist_free
+ * 功能: 释放Token列表
+ * -------------------------------------
+ * 输入参数: t - Token列表
+ * 输出参数: 无
+ * -------------------------------------
+ * return: 无
+ ***************************************/
 static void tlist_free(TokenList* t)
 {
     for (int i = 0; i < t->sz; i++)
@@ -170,22 +197,30 @@ static void rt_free(RtMap* m)
     free(m->arr);
 }
 
-// AST node types
+/******************
+ * AST node types
+ ******************/
 typedef enum {
-    N_NUMBER,
-    N_REAL_DATABASE,
-    N_UNARY,
-    N_BINARY,
-    N_FUNC,
-    N_ASSIGN
+    N_NUMBER,           // numeric literal
+    N_REAL_DATABASE,    // real database reference
+    N_UNARY,            // unary operation
+    N_BINARY,           // binary operation
+    N_FUNC,             // function call
+    N_ASSIGN            // assignment
 } NodeType;
 
+/******************
+ * Unary operators
+ ******************/
 typedef enum {
-    U_NEG,
-    U_NOT,
-    U_BITNOT
+    U_NEG,              // unary minus
+    U_NOT,              // logical NOT
+    U_BITNOT            // bitwise NOT
 } UnaryOp;
 
+/******************
+ * Binary operators
+ ******************/
 typedef enum {
     B_ADD,
     B_SUB,
@@ -206,50 +241,86 @@ typedef enum {
     B_OROR
 } BinaryOp;
 
+/********************************************
+ * AST(Abstract Syntax Tree) Node definition
+ ********************************************/
 typedef struct Node {
-    NodeType type;
-    int pos; // position in input for errors
+    NodeType type;                  // node type
+    int pos;                        // position in input for errors
     union {
-        double number;
-        int realDataBaseId;
+        double number;              // for N_NUMBER
+        int realDataBaseId;         // for N_REAL_DATABASE
         struct {
-            UnaryOp op;
-            struct Node* child;
-        } unary;
+            UnaryOp op;             // operator
+            struct Node *child;     // operand
+        } unary;                    // for N_UNARY
         struct {
-            BinaryOp op;
-            struct Node* left;
-            struct Node* right;
-        } binary;
+            BinaryOp op;            // operator
+            struct Node *left;      // left operand
+            struct Node *right;     // right operand
+        } binary;                   // for N_BINARY
         struct {
-            char* name;
-            void* funcPtr;
-            struct Node** args;
-            int argc;
-        } func;
+            char *name;             // function name
+            void *funcPtr;          // function pointer
+            struct Node **args;     // argument nodes
+            int argc;               // number of arguments
+        } func;                     // for N_FUNC
         struct {
-            int id;
-            struct Node* rhs;
-        } assign;
-    } v;
+            int id;                 // real database id
+            struct Node *rhs;       // right-hand side expression
+        } assign;                   // for N_ASSIGN
+    } v;                            // value
 } Node;
 
+/**********************************
+ * 函数名: pi
+ * 功能: 返回圆周率值
+ * -------------------------------
+ * 输入参数: 无
+ * 输出参数: 无
+ * -------------------------------
+ * @return: 圆周率值
+ **********************************/
 static double pi(void)
 {
     return 3.14159265358979323846;
 }
 
+/**********************************
+ * 函数名: e
+ * 功能: 返回自然对数的底值
+ * -------------------------------
+ * 输入参数: 无
+ * 输出参数: 无
+ * -------------------------------
+ * @return: 自然对数的底值
+ **********************************/
 static double e(void)
 {
     return 2.71828182845904523536;
 }
 
+/**********************************
+ * 函数名: fac
+ * 功能: 计算一个数的阶乘
+ * -------------------------------
+ * 输入参数: a - 数值
+ * 输出参数: 无
+ * -------------------------------
+ * @return: a 的阶乘值
+ **********************************/
 static double fac(double a)
 {/* simplest version of fac */
     if (a < 0.0)
+    {
         return NAN;
+    }
+
     if (a > UINT_MAX)
+    {
         return INFINITY;
+    }
+
     unsigned int ua = (unsigned int)(a);
     unsigned long int result = 1, i;
     for (i = 1; i <= ua; i++)
@@ -261,6 +332,16 @@ static double fac(double a)
     return (double)result;
 }
 
+/**********************************
+ * 函数名: ncr
+ * 功能: 计算组合数 nCr
+ * -------------------------------
+ * 输入参数: n - 总数
+ *          r - 取出数
+ * 输出参数: 无
+ * -------------------------------
+ * @return: 组合数 nCr 的值
+ **********************************/
 static double ncr(double n, double r)
 {
     if (n < 0.0 || r < 0.0 || n < r)
@@ -281,6 +362,16 @@ static double ncr(double n, double r)
     return result;
 }
 
+/**********************************
+ * 函数名: npr
+ * 功能: 计算排列数 nPr
+ * -------------------------------
+ * 输入参数: n - 总数
+ *          r - 取出数
+ * 输出参数: 无
+ * -------------------------------
+ * @return: 排列数 nPr 的值
+ **********************************/
 static double npr(double n, double r)
 {
     return ncr(n, r) * fac(r);
@@ -586,6 +677,28 @@ static void print_node(Node* n, const char* indent, int last)
 }
 
 // evaluation with short-circuit
+/***********************************************************
+ * 函数名: eval_node
+ * 功能: 计算AST节点的值. 支持短路求值.
+ * "evaluation with short-circuit" means
+ * 1. Short-circuit evaluation for logical operators means
+ *    the right-hand operand is only evaluated when needed
+ *    to determine the result.
+ * 2. For logical AND (&&): if the left operand is
+ *    false (here, 0.0), the whole expression is false and
+ *    the right operand is NOT evaluated.
+ * 3. For logical OR (||): if the left operand is
+ *    true (non-zero), the whole expression is true and
+ *    the right operand is NOT evaluated.
+ * 4. This prevents unnecessary work and avoids side
+ *    effects or runtime errors that would occur
+ *    if the right-hand side were evaluated.
+ * ---------------------------------------------------------
+ * 输入参数: n - AST节点
+ * 输入参数: rt - 实时库
+ * ---------------------------------------------------------
+ * @return: 计算结果
+ ***********************************************************/
 static double eval_node(Node* n, RtMap* rt)
 {
     if (!n)
@@ -595,138 +708,140 @@ static double eval_node(Node* n, RtMap* rt)
 
     switch (n->type)
     {
-    case N_NUMBER:
-        return n->v.number;
-    case N_REAL_DATABASE:
-        return rt_get(rt, n->v.realDataBaseId);
-    case N_UNARY:
-    {
-        double v = eval_node(n->v.unary.child, rt);
-        if (n->v.unary.op == U_NEG)
+        case N_NUMBER:
+            return n->v.number;
+        case N_REAL_DATABASE:
+            return rt_get(rt, n->v.realDataBaseId);
+        case N_UNARY:
         {
-            return -v;
-        }
-
-        if (n->v.unary.op == U_NOT)
-        {
-            return v != 0.0 ? 0.0 : 1.0;
-        }
-
-        return (double)(~((long)v));
-    }
-    case N_BINARY:
-    {
-        switch (n->v.binary.op)
-        {
-        case B_ADD:
-            return eval_node(n->v.binary.left, rt) + eval_node(n->v.binary.right, rt);
-        case B_SUB:
-            return eval_node(n->v.binary.left, rt) - eval_node(n->v.binary.right, rt);
-        case B_MUL:
-            return eval_node(n->v.binary.left, rt) * eval_node(n->v.binary.right, rt);
-        case B_DIV:
-        {
-            double r = eval_node(n->v.binary.right, rt);
-            if (r == 0)
+            double v = eval_node(n->v.unary.child, rt);
+            if (n->v.unary.op == U_NEG)
             {
-                fprintf(stderr, "Runtime error: division by zero at pos %d\n", n->pos);
+                return -v;
+            }
+
+            if (n->v.unary.op == U_NOT)
+            {
+                return v != 0.0 ? 0.0 : 1.0;
+            }
+
+            return (double) (~((long) v));
+        }
+        case N_BINARY:
+        {
+            switch (n->v.binary.op)
+            {
+                case B_ADD:
+                    return eval_node(n->v.binary.left, rt) + eval_node(n->v.binary.right, rt);
+                case B_SUB:
+                    return eval_node(n->v.binary.left, rt) - eval_node(n->v.binary.right, rt);
+                case B_MUL:
+                    return eval_node(n->v.binary.left, rt) * eval_node(n->v.binary.right, rt);
+                case B_DIV:
+                {
+                    double r = eval_node(n->v.binary.right, rt);
+                    if (r == 0)
+                    {
+                        fprintf(stderr, "Runtime error: division by zero at pos %d\n", n->pos);
+                        exit(1);
+                    }
+
+                    return eval_node(n->v.binary.left, rt) / r;
+                }
+                case B_LSHIFT:
+                    return (double) (((long) eval_node(n->v.binary.left, rt)) << (int) eval_node(n->v.binary.right, rt));
+                case B_RSHIFT:
+                    return (double) (((long) eval_node(n->v.binary.left, rt)) >> (int) eval_node(n->v.binary.right, rt));
+                case B_GT:
+                    return eval_node(n->v.binary.left, rt) > eval_node(n->v.binary.right, rt) ? 1.0 : 0.0;
+                case B_GTE:
+                    return eval_node(n->v.binary.left, rt) >= eval_node(n->v.binary.right, rt) ? 1.0 : 0.0;
+                case B_LT:
+                    return eval_node(n->v.binary.left, rt) < eval_node(n->v.binary.right, rt) ? 1.0 : 0.0;
+                case B_LTE:
+                    return eval_node(n->v.binary.left, rt) <= eval_node(n->v.binary.right, rt) ? 1.0 : 0.0;
+                case B_EQ:
+                    return eval_node(n->v.binary.left, rt) == eval_node(n->v.binary.right, rt) ? 1.0 : 0.0;
+                case B_NEQ:
+                    return eval_node(n->v.binary.left, rt) != eval_node(n->v.binary.right, rt) ? 1.0 : 0.0;
+                case B_BITAND:
+                    return (double) (((long) eval_node(n->v.binary.left, rt)) & ((long) eval_node(n->v.binary.right, rt)));
+                case B_BITXOR:
+                    return (double) (((long) eval_node(n->v.binary.left, rt)) ^ ((long) eval_node(n->v.binary.right, rt)));
+                case B_BITOR:
+                    return (double) (((long) eval_node(n->v.binary.left, rt)) | ((long) eval_node(n->v.binary.right, rt)));
+                case B_ANDAND:
+                {
+                    double lv = eval_node(n->v.binary.left, rt);
+                    if (EVAL_USE_SHORT_CIRCUIT && lv == 0.0)
+                        return 0.0;
+                    double rv = eval_node(n->v.binary.right, rt);
+                    return rv != 0.0 ? 1.0 : 0.0;
+                }
+                case B_OROR:
+                {
+                    double lv = eval_node(n->v.binary.left, rt);
+                    if (EVAL_USE_SHORT_CIRCUIT && lv != 0.0)
+                        return 1.0;
+                    double rv = eval_node(n->v.binary.right, rt);
+                    return rv != 0.0 ? 1.0 : 0.0;
+                }
+            }
+            break;
+        }
+        case N_FUNC:
+        {
+            // evaluate args
+            double args_vals[4];
+            for (int i = 0; i < n->v.func.argc; ++i)
+            {
+                if (i < 4)
+                    args_vals[i] = eval_node(n->v.func.args[i], rt);
+            }
+
+            // dispatch based on arity
+            if (!n->v.func.funcPtr)
+            {
+                fprintf(stderr, "Runtime error: unknown function %s at pos %d\n", n->v.func.name, n->pos);
                 exit(1);
             }
 
-            return eval_node(n->v.binary.left, rt) / r;
+            // support up to 2-arg functions; constants like pi/e have argc==0
+            if (n->v.func.argc == 0)
+            {
+                double (*f0)(void) = (double (*)(void))n->v.func.funcPtr;
+                return f0();
+            }
+            else if (n->v.func.argc == 1)
+            {
+                double (*f1)(double) = (double (*)(double))n->v.func.funcPtr;
+                return f1(args_vals[0]);
+            }
+            else if (n->v.func.argc == 2)
+            {
+                double (*f2)(double, double) = (double (*)(double, double))n->v.func.funcPtr;
+                return f2(args_vals[0], args_vals[1]);
+            }
+            else
+            {
+                fprintf(stderr, "Runtime error: function %s with arity %d not supported at pos %d\n", n->v.func.name, n->v.func.argc, n->pos);
+                exit(1);
+            }
         }
-        case B_LSHIFT:
-            return (double)(((long)eval_node(n->v.binary.left, rt)) << (int)eval_node(n->v.binary.right, rt));
-        case B_RSHIFT:
-            return (double)(((long)eval_node(n->v.binary.left, rt)) >> (int)eval_node(n->v.binary.right, rt));
-        case B_GT:
-            return eval_node(n->v.binary.left, rt) > eval_node(n->v.binary.right, rt) ? 1.0 : 0.0;
-        case B_GTE:
-            return eval_node(n->v.binary.left, rt) >= eval_node(n->v.binary.right, rt) ? 1.0 : 0.0;
-        case B_LT:
-            return eval_node(n->v.binary.left, rt) < eval_node(n->v.binary.right, rt) ? 1.0 : 0.0;
-        case B_LTE:
-            return eval_node(n->v.binary.left, rt) <= eval_node(n->v.binary.right, rt) ? 1.0 : 0.0;
-        case B_EQ:
-            return eval_node(n->v.binary.left, rt) == eval_node(n->v.binary.right, rt) ? 1.0 : 0.0;
-        case B_NEQ:
-            return eval_node(n->v.binary.left, rt) != eval_node(n->v.binary.right, rt) ? 1.0 : 0.0;
-        case B_BITAND:
-            return (double)(((long)eval_node(n->v.binary.left, rt)) & ((long)eval_node(n->v.binary.right, rt)));
-        case B_BITXOR:
-            return (double)(((long)eval_node(n->v.binary.left, rt)) ^ ((long)eval_node(n->v.binary.right, rt)));
-        case B_BITOR:
-            return (double)(((long)eval_node(n->v.binary.left, rt)) | ((long)eval_node(n->v.binary.right, rt)));
-        case B_ANDAND:
+        case N_ASSIGN:
         {
-            double lv = eval_node(n->v.binary.left, rt);
-            if (lv == 0.0)
-                return 0.0;
-            double rv = eval_node(n->v.binary.right, rt);
-            return rv != 0.0 ? 1.0 : 0.0;
+            double v = eval_node(n->v.assign.rhs, rt);
+            rt_set(rt, n->v.assign.id, v);
+            return v;
         }
-        case B_OROR:
-        {
-            double lv = eval_node(n->v.binary.left, rt);
-            if (lv != 0.0)
-                return 1.0;
-            double rv = eval_node(n->v.binary.right, rt);
-            return rv != 0.0 ? 1.0 : 0.0;
-        }
-        }
-        break;
-    }
-    case N_FUNC:
-    {
-        // evaluate args
-        double args_vals[4];
-        for (int i = 0; i < n->v.func.argc; ++i)
-        {
-            if (i < 4)
-                args_vals[i] = eval_node(n->v.func.args[i], rt);
-        }
-
-        // dispatch based on arity
-        if (!n->v.func.funcPtr)
-        {
-            fprintf(stderr, "Runtime error: unknown function %s at pos %d\n", n->v.func.name, n->pos);
-            exit(1);
-        }
-
-        // support up to 2-arg functions; constants like pi/e have argc==0
-        if (n->v.func.argc == 0)
-        {
-            double (*f0)(void) = (double (*)(void))n->v.func.funcPtr;
-            return f0();
-        }
-        else if (n->v.func.argc == 1)
-        {
-            double (*f1)(double) = (double (*)(double))n->v.func.funcPtr;
-            return f1(args_vals[0]);
-        }
-        else if (n->v.func.argc == 2)
-        {
-            double (*f2)(double, double) = (double (*)(double, double))n->v.func.funcPtr;
-            return f2(args_vals[0], args_vals[1]);
-        }
-        else
-        {
-            fprintf(stderr, "Runtime error: function %s with arity %d not supported at pos %d\n", n->v.func.name, n->v.func.argc, n->pos);
-            exit(1);
-        }
-    }
-    case N_ASSIGN:
-    {
-        double v = eval_node(n->v.assign.rhs, rt);
-        rt_set(rt, n->v.assign.id, v);
-        return v;
-    }
     }
 
     return 0.0;
 }
 
-// Parser functions follow grammar and precedence
+/*-------------------------------------------------- Parser functions follow grammar and precedence --------------------------------------------------*/
+
+// Forward declarations
 static Node* parse_assign(TokenList* toks);
 static Node* parse_logical_or_node(TokenList* toks);
 static Node* parse_logical_and_node(TokenList* toks);
@@ -742,6 +857,16 @@ static Node* parse_unary_node(TokenList* toks);
 static Node* parse_power_node(TokenList* toks);
 static Node* parse_primary_node(TokenList* toks);
 
+/***************************************
+ * 函数名: match
+ * 功能: 如果下一个Token类型匹配则消耗掉它
+ * -------------------------------------
+ * 输入参数: t - Token列表
+ *          ty - 期望的Token类型
+ * 输出参数: 无
+ * -------------------------------------
+ * @return: 匹配成功返回1, 否则返回0
+ **************************************/
 static int match(TokenList* t, TokenType ty)
 {
     if (tlist_peek(t).type == ty)
@@ -753,10 +878,22 @@ static int match(TokenList* t, TokenType ty)
     return 0;
 }
 
+/***************************************************
+ * 函数名: parse_assign
+ * 功能: 解析赋值表达式
+ * 语法: assign := REALDB '=' assign | logical_or
+ * --------------------------------------------------
+ * 输入参数: toks - Token列表
+ * 输出参数: 无
+ * --------------------------------------------------
+ * @return: 解析得到的AST节点
+ **************************************************/
 static Node* parse_assign(TokenList* toks)
 {
     Token cur = tlist_peek(toks);
-    if (cur.type == T_REALDB && toks->idx + 1 < toks->sz && toks->arr[toks->idx + 1].type == T_ASSIGN)
+    if (cur.type == T_REALDB &&
+            toks->idx + 1 < toks->sz &&
+            toks->arr[toks->idx + 1].type == T_ASSIGN)
     {
         Token h = tlist_next(toks); // consume REAL_DATABASE
         Token a = tlist_next(toks); // consume ASSIGN
@@ -768,6 +905,16 @@ static Node* parse_assign(TokenList* toks)
     return parse_logical_or_node(toks);
 }
 
+/***************************************************
+ * 函数名: parse_logical_or_node
+ * 功能: 解析逻辑或表达式
+ * 语法: logical_or := logical_and ('||' logical_and)*
+ * --------------------------------------------------
+ * 输入参数: toks - Token列表
+ * 输出参数: 无
+ * --------------------------------------------------
+ * @return: 解析得到的AST节点
+ **************************************************/
 static Node* parse_logical_or_node(TokenList* toks)
 {
     Node* left = parse_logical_and_node(toks);
@@ -780,6 +927,16 @@ static Node* parse_logical_or_node(TokenList* toks)
     return left;
 }
 
+/***************************************************
+ * 函数名: parse_logical_and_node
+ * 功能: 解析逻辑与表达式
+ * 语法: logical_and := bitor ('&&' bitor)*
+ * --------------------------------------------------
+ * 输入参数: toks - Token列表
+ * 输出参数: 无
+ * --------------------------------------------------
+ * @return: 解析得到的AST节点
+ **************************************************/
 static Node* parse_logical_and_node(TokenList* toks)
 {
     Node* left = parse_bitor_node(toks);
@@ -792,6 +949,16 @@ static Node* parse_logical_and_node(TokenList* toks)
     return left;
 }
 
+/***************************************************
+ * 函数名: parse_bitor_node
+ * 功能: 解析按位或表达式
+ * 语法: bitor := bitxor ('|' bitxor)*
+ * --------------------------------------------------
+ * 输入参数: toks - Token列表
+ * 输出参数: 无
+ * --------------------------------------------------
+ * @return: 解析得到的AST节点
+ ***************************************************/
 static Node* parse_bitor_node(TokenList* toks)
 {
     Node* left = parse_bitxor_node(toks);
@@ -804,6 +971,16 @@ static Node* parse_bitor_node(TokenList* toks)
     return left;
 }
 
+/***************************************************
+ * 函数名: parse_bitxor_node
+ * 功能: 解析按位异或表达式
+ * 语法: bitxor := bitand ('^' bitand)*
+ * --------------------------------------------------
+ * 输入参数: toks - Token列表
+ * 输出参数: 无
+ * --------------------------------------------------
+ * @return: 解析得到的AST节点
+ ****************************************************/
 static Node* parse_bitxor_node(TokenList* toks)
 {
     Node* left = parse_bitand_node(toks);
@@ -816,6 +993,16 @@ static Node* parse_bitxor_node(TokenList* toks)
     return left;
 }
 
+/***************************************************
+ * 函数名: parse_bitand_node
+ * 功能: 解析按位与表达式
+ * 语法: bitand := equality ('&' equality)*
+ * --------------------------------------------------
+ * 输入参数: toks - Token列表
+ * 输出参数: 无
+ * --------------------------------------------------
+ * @return: 解析得到的AST节点
+ ****************************************************/
 static Node* parse_bitand_node(TokenList* toks)
 {
     Node* left = parse_equality_node(toks);
@@ -828,6 +1015,16 @@ static Node* parse_bitand_node(TokenList* toks)
     return left;
 }
 
+/***************************************************
+ * 函数名: parse_equality_node
+ * 功能: 解析相等/不等表达式
+ * 语法: equality := relational (('==' | '!=') relational)*
+ * --------------------------------------------------
+ * 输入参数: toks - Token列表
+ * 输出参数: 无
+ * --------------------------------------------------
+ * @return: 解析得到的AST节点
+ ****************************************************/
 static Node* parse_equality_node(TokenList* toks)
 {
     Node* left = parse_relational_node(toks);
@@ -850,6 +1047,16 @@ static Node* parse_equality_node(TokenList* toks)
     return left;
 }
 
+/***************************************************
+ * 函数名: parse_relational_node
+ * 功能: 解析关系表达式
+ * 语法: relational := shift (('>' | '>=' | '<' | '<=') shift)*
+ * --------------------------------------------------
+ * 输入参数: toks - Token列表
+ * 输出参数: 无
+ * --------------------------------------------------
+ * @return: 解析得到的AST节点
+ ****************************************************/
 static Node* parse_relational_node(TokenList* toks)
 {
     Node* left = parse_shift_node(toks);
@@ -882,6 +1089,16 @@ static Node* parse_relational_node(TokenList* toks)
     return left;
 }
 
+/***************************************************
+ * 函数名: parse_shift_node
+ * 功能: 解析移位表达式
+ * 语法: shift := add (('<<' | '>>') add)*
+ * --------------------------------------------------
+ * 输入参数: toks - Token列表
+ * 输出参数: 无
+ * --------------------------------------------------
+ * @return: 解析得到的AST节点
+ ****************************************************/
 static Node* parse_shift_node(TokenList* toks)
 {
     Node* left = parse_add_node(toks);
@@ -904,6 +1121,16 @@ static Node* parse_shift_node(TokenList* toks)
     return left;
 }
 
+/***************************************************
+ * 函数名: parse_add_node
+ * 功能: 解析加减表达式
+ * 语法: add := multiply (('+' | '-') multiply)*
+ * --------------------------------------------------
+ * 输入参数: toks - Token列表
+ * 输出参数: 无
+ * --------------------------------------------------
+ * @return: 解析得到的AST节点
+ ****************************************************/
 static Node* parse_add_node(TokenList* toks)
 {
     Node* left = parse_multiply_node(toks);
@@ -926,6 +1153,16 @@ static Node* parse_add_node(TokenList* toks)
     return left;
 }
 
+/***************************************************
+ * 函数名: parse_multiply_node
+ * 功能: 解析乘除表达式
+ * 语法: multiply := unary (('*' | '/') unary)*
+ * --------------------------------------------------
+ * 输入参数: toks - Token列表
+ * 输出参数: 无
+ * --------------------------------------------------
+ * @return: 解析得到的AST节点
+ ****************************************************/
 static Node* parse_multiply_node(TokenList* toks)
 {
     Node* left = parse_unary_node(toks);
@@ -948,6 +1185,16 @@ static Node* parse_multiply_node(TokenList* toks)
     return left;
 }
 
+/***************************************************
+ * 函数名: parse_unary_node
+ * 功能: 解析一元表达式
+ * 语法: unary := ('!' | '~' | '-') unary | power
+ * --------------------------------------------------
+ * 输入参数: toks - Token列表
+ * 输出参数: 无
+ * --------------------------------------------------
+ * @return: 解析得到的AST节点
+ ****************************************************/
 static Node* parse_unary_node(TokenList* toks)
 {
     if (match(toks, T_NOT))
@@ -971,42 +1218,19 @@ static Node* parse_unary_node(TokenList* toks)
     return parse_power_node(toks);
 }
 
+/***************************************************
+ * 函数名: parse_power_node
+ * 功能: 解析函数调用或基础表达式
+ * 语法: power := IDENT '(' (assign (',' assign)*)? ')' | primary
+ * --------------------------------------------------
+ * 输入参数: toks - Token列表
+ * 输出参数: 无
+ * --------------------------------------------------
+ * @return: 解析得到的AST节点
+ ****************************************************/
 static Node* parse_power_node(TokenList* toks)
 {
     Token cur = tlist_peek(toks);
-    //    if (cur.type == T_IDENT && strcmp(cur.text, "exp") == 0)
-    //    {
-    //        tlist_next(toks);
-    //        if (!match(toks, T_LP))
-    //        {
-    //            fprintf(stderr, "Syntax error: expected '(' after exp at %d\n", cur.pos);
-    //            exit(1);
-    //        }
-    //        Node *arg = parse_assign(toks);
-    //        if (!match(toks, T_RP))
-    //        {
-    //            fprintf(stderr, "Syntax error: expected ')' after exp at %d\n", cur.pos);
-    //            exit(1);
-    //        }
-    //        return node_func("exp", arg, cur.pos, exp);
-    //    }
-    //
-    //    if (cur.type == T_IDENT && (strcmp(cur.text, "sin") == 0 || strcmp(cur.text, "cos") == 0))
-    //    {
-    //        tlist_next(toks);
-    //        if (!match(toks, T_LP))
-    //        {
-    //            fprintf(stderr, "Syntax error: expected '(' after %s at %d\n", cur.text, cur.pos);
-    //            exit(1);
-    //        }
-    //        Node *arg = parse_assign(toks);
-    //        if (!match(toks, T_RP))
-    //        {
-    //            fprintf(stderr, "Syntax error: expected ')' after %s at %d\n", cur.text, cur.pos);
-    //            exit(1);
-    //        }
-    //        return node_func(cur.text, arg, cur.pos);
-    //    }
 
     const buildInFunc_s* func = findBuilDIn(cur.text, (int)strlen(cur.text));
     if (cur.type == T_IDENT && func != NULL)
@@ -1050,6 +1274,16 @@ static Node* parse_power_node(TokenList* toks)
     return parse_primary_node(toks);
 }
 
+/***************************************************
+ * 函数名: parse_primary_node
+ * 功能: 解析基础表达式
+ * 语法: primary := NUM | REALDB | '(' assign ')'
+ * --------------------------------------------------
+ * 输入参数: toks - Token列表
+ * 输出参数: 无
+ * --------------------------------------------------
+ * @return: 解析得到的AST节点
+ ****************************************************/
 static Node* parse_primary_node(TokenList* toks)
 {
     Token t = tlist_peek(toks);
@@ -1088,7 +1322,15 @@ static Node* parse_primary_node(TokenList* toks)
     exit(1);
 }
 
-// Tokenizer
+/***************************************************
+ * 函数名: tokenize
+ * 功能: 将输入字符串分解为Token列表
+ * --------------------------------------------------
+ * 输入参数: s - 输入字符串
+ * 输出参数: out - 输出Token列表
+ * --------------------------------------------------
+ * @return: 无
+ ****************************************************/
 static void tokenize(const char* s, TokenList* out)
 {
     int i = 0;
@@ -1357,7 +1599,16 @@ static void tokenize(const char* s, TokenList* out)
     }
 }
 
-// small helper to show error with caret
+/*****************************************************
+ * 函数名: print_error_with_caret
+ * 功能: 打印错误信息并在指定位置显示插入符号
+ * --------------------------------------------------
+ * 输入参数: line - 输入字符串
+ *          pos - 错误位置
+ * 输出参数: 无
+ * --------------------------------------------------
+ * @return: 无
+ ****************************************************/
 static void print_error_with_caret(const char* line, int pos)
 {
     fprintf(stderr, "%s\n", line);
@@ -1369,9 +1620,21 @@ static void print_error_with_caret(const char* line, int pos)
     fprintf(stderr, "^\n");
 }
 
-// Optimization: constant-fold subtrees that do not contain any real database id (#id)
-// Real database nodes (N_REAL_DATABASE) must not be folded because their values may change concurrently.
-// Return 1 if subtree contains a real database node, 0 otherwise
+/*****************************************************
+ * 函数名: node_contains_realDatabaseId
+ * 功能: 检查节点子树中是否包含真实数据库ID节点
+ * Optimization: constant-fold subtrees that do not
+ * contain any real database id (#id).
+ * Real database nodes (N_REAL_DATABASE) must not be
+ * folded because their values may change concurrently.
+ * Return 1 if subtree contains a real database node,
+ *        0 otherwise
+ * --------------------------------------------------
+ * 输入参数: n - AST节点
+ * 输出参数: 无
+ * --------------------------------------------------
+ * @return: 包含真实数据库ID节点返回1, 否则返回0
+ ****************************************************/
 static int node_contains_realDatabaseId(Node* n)
 {
     if (!n)
@@ -1406,13 +1669,34 @@ static int node_contains_realDatabaseId(Node* n)
     }
 }
 
-// Helper to get number from a node (assumes node->type == N_NUMBER)
+/******************************************************
+ * 函数名: node_get_number
+ * 功能: 获取数字节点的值
+ * Helper to get number from a node
+ * (assumes node->type == N_NUMBER)
+ * --------------------------------------------------
+ * 输入参数: n - AST节点
+ * 输出参数: 无
+ * --------------------------------------------------
+ * @return: 数字节点的值
+ ****************************************************/
 static double node_get_number(Node* n)
 {
     return n->v.number;
 }
 
-// Constant-folding optimizer; returns possibly new node (caller must use returned pointer).
+/******************************************************
+ * 函数名: optimize_node
+ * 功能: 优化AST节点
+ * Constant-folding optimizer;
+ * returns possibly new node
+ * (caller must use returned pointer).
+ * --------------------------------------------------
+ * 输入参数: n - AST节点
+ * 输出参数: 无
+ * --------------------------------------------------
+ * @return: 优化后的AST节点
+ ****************************************************/
 static Node* optimize_node(Node* n)
 {
     if (!n)
@@ -1605,12 +1889,29 @@ static Node* optimize_node(Node* n)
     }
 }
 
-// Top-level optimizer wrapper
+/******************************************************
+ * 函数名: optimize_ast
+ * 功能: 优化AST
+ * --------------------------------------------------
+ * 输入参数: root - AST根节点
+ * 输出参数: 无
+ * --------------------------------------------------
+ * @return: 优化后的AST根节点
+ ******************************************************/
 static Node* optimize_ast(Node* root)
 {
     return optimize_node(root);
 }
 
+/******************************************************
+ * 函数名: eval_main
+ * 功能: 主评估循环
+ * --------------------------------------------------
+ * 输入参数: 无
+ * 输出参数: 无
+ * --------------------------------------------------
+ * @return: 无
+ ******************************************************/
 void eval_main(void)
 {
     char line[8192];
