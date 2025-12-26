@@ -1344,6 +1344,307 @@ double tokenEvaluate(Token *postfix, pStackArray stack)
  * ---------------------------------------------------
  * @return - 无
  ******************************************************/
+typedef struct FoldNode {
+    Token tok;
+    int contains_real; /* whether subtree contains a TOKEN_REALDB leaf */
+    struct FoldNode *left;
+    struct FoldNode *right;
+} FoldNode;
+
+static FoldNode* foldnode_new_leaf(const Token *t)
+{
+    FoldNode *n = malloc(sizeof(FoldNode));
+    n->tok = *t; /* shallow copy is fine */
+    n->contains_real = (t->type == TOKEN_REALDB) ? 1 : 0;
+    n->left = n->right = NULL;
+    return n;
+}
+
+static FoldNode* foldnode_new_unary(const Token *op, FoldNode *child)
+{
+    FoldNode *n = malloc(sizeof(FoldNode));
+    n->tok = *op;
+    n->contains_real = child->contains_real;
+    n->left = child;
+    n->right = NULL;
+    return n;
+}
+
+static FoldNode* foldnode_new_binary(const Token *op, FoldNode *left, FoldNode *right)
+{
+    FoldNode *n = malloc(sizeof(FoldNode));
+    n->tok = *op;
+    n->contains_real = left->contains_real || right->contains_real;
+    n->left = left;
+    n->right = right;
+    return n;
+}
+
+static void foldnode_free(FoldNode *n)
+{
+    if (!n) return;
+    foldnode_free(n->left);
+    foldnode_free(n->right);
+    free(n);
+}
+
+static int is_unary_token(TokenType t)
+{
+    return (t == TOKEN_SIN || t == TOKEN_COS || t == TOKEN_BIT_NEGATION || t == TOKEN_LOGICAL_NOT);
+}
+
+static int is_binary_token(TokenType t)
+{
+    switch (t)
+    {
+        case TOKEN_PLUS:
+        case TOKEN_MINUS:
+        case TOKEN_MULTIPLY:
+        case TOKEN_DIVIDE:
+        case TOKEN_EXPONENTIAL:
+        case TOKEN_BIT_OR:
+        case TOKEN_BIT_AND:
+        case TOKEN_BIT_XOR:
+        case TOKEN_LEFT_SHIFT:
+        case TOKEN_RIGHT_SHIFT:
+        case TOKEN_LOGICAL_AND:
+        case TOKEN_LOGICAL_OR:
+        case TOKEN_LOGICA_EQUAL:
+        case TOKEN_LOGICA_NOT_EQUAL:
+        case TOKEN_LOGICA_GREATER:
+        case TOKEN_LOGICA_LESS:
+        case TOKEN_LOGICA_GREATER_EQUAL:
+        case TOKEN_LOGICA_LESS_EQUAL:
+        case TOKEN_ASSIGN:
+            return 1;
+        default:
+            return 0;
+    }
+}
+
+/* Helper: try to evaluate a node if it contains no real DB and children are numeric.
+ * On success, returns a new leaf FoldNode containing the folded constant (and frees old node).
+ * On failure, returns the original node unchanged. */
+static FoldNode* try_fold_node(FoldNode *n)
+{
+    if (!n) return NULL;
+    if (n->contains_real) return n; /* cannot fold if subtree refers to real DB */
+
+    /* If leaf already, nothing to fold */
+    if (!n->left && !n->right) return n;
+
+    /* Check children are numeric leaves */
+    if (n->left && (n->left->tok.type != TOKEN_INTEGER && n->left->tok.type != TOKEN_FLOAT)) return n;
+    if (n->right && (n->right->tok.type != TOKEN_INTEGER && n->right->tok.type != TOKEN_FLOAT))
+    {
+        /* unary case may have only left */
+        if (n->right) return n;
+    }
+
+    double lval = 0.0, rval = 0.0;
+    if (n->left)
+    {
+        if (n->left->tok.type == TOKEN_INTEGER) lval = (double)n->left->tok.value.intValue;
+        else lval = n->left->tok.value.numValue;
+    }
+    if (n->right)
+    {
+        if (n->right->tok.type == TOKEN_INTEGER) rval = (double)n->right->tok.value.intValue;
+        else rval = n->right->tok.value.numValue;
+    }
+
+    Token folded = {0};
+
+    /* Evaluate following tokenEvaluate semantics, avoid undefined ops (e.g., division by zero)
+     * Assignment is not folded because it is a side-effect unless we know LHS is realdb (we don't want to perform assignment at compile-time). */
+    switch (n->tok.type)
+    {
+        case TOKEN_SIN:
+            folded.type = TOKEN_FLOAT;
+            folded.value.numValue = sin(lval);
+            break;
+        case TOKEN_COS:
+            folded.type = TOKEN_FLOAT;
+            folded.value.numValue = cos(lval);
+            break;
+        case TOKEN_BIT_NEGATION:
+            folded.type = TOKEN_INTEGER;
+            folded.value.intValue = ~(int)lval;
+            break;
+        case TOKEN_LOGICAL_NOT:
+            folded.type = TOKEN_INTEGER;
+            folded.value.intValue = !((int)lval);
+            break;
+
+        case TOKEN_PLUS:
+            folded.type = TOKEN_FLOAT;
+            folded.value.numValue = lval + rval;
+            break;
+        case TOKEN_MINUS:
+            folded.type = TOKEN_FLOAT;
+            folded.value.numValue = lval - rval;
+            break;
+        case TOKEN_MULTIPLY:
+            folded.type = TOKEN_FLOAT;
+            folded.value.numValue = lval * rval;
+            break;
+        case TOKEN_DIVIDE:
+            if (rval == 0.0) return n; /* do not fold division by zero */
+            folded.type = TOKEN_FLOAT;
+            folded.value.numValue = lval / rval;
+            break;
+        case TOKEN_EXPONENTIAL:
+            folded.type = TOKEN_FLOAT;
+            folded.value.numValue = pow(lval, rval);
+            break;
+        case TOKEN_BIT_OR:
+            folded.type = TOKEN_INTEGER;
+            folded.value.intValue = ((int)lval) | ((int)rval);
+            break;
+        case TOKEN_BIT_AND:
+            folded.type = TOKEN_INTEGER;
+            folded.value.intValue = ((int)lval) & ((int)rval);
+            break;
+        case TOKEN_BIT_XOR:
+            folded.type = TOKEN_INTEGER;
+            folded.value.intValue = ((int)lval) ^ ((int)rval);
+            break;
+        case TOKEN_LEFT_SHIFT:
+            folded.type = TOKEN_INTEGER;
+            folded.value.intValue = ((int)lval) << ((int)rval);
+            break;
+        case TOKEN_RIGHT_SHIFT:
+            folded.type = TOKEN_INTEGER;
+            folded.value.intValue = ((int)lval) >> ((int)rval);
+            break;
+        case TOKEN_LOGICAL_AND:
+            folded.type = TOKEN_INTEGER;
+            folded.value.intValue = ((int)lval) && ((int)rval);
+            break;
+        case TOKEN_LOGICAL_OR:
+            folded.type = TOKEN_INTEGER;
+            folded.value.intValue = ((int)lval) || ((int)rval);
+            break;
+        case TOKEN_LOGICA_EQUAL:
+            folded.type = TOKEN_INTEGER;
+            folded.value.intValue = ((int)lval) == ((int)rval);
+            break;
+        case TOKEN_LOGICA_NOT_EQUAL:
+            folded.type = TOKEN_INTEGER;
+            folded.value.intValue = ((int)lval) != ((int)rval);
+            break;
+        case TOKEN_LOGICA_GREATER:
+            folded.type = TOKEN_INTEGER;
+            folded.value.intValue = ((int)lval) > ((int)rval);
+            break;
+        case TOKEN_LOGICA_LESS:
+            folded.type = TOKEN_INTEGER;
+            folded.value.intValue = ((int)lval) < ((int)rval);
+            break;
+        case TOKEN_LOGICA_GREATER_EQUAL:
+            folded.type = TOKEN_INTEGER;
+            folded.value.intValue = ((int)lval) >= ((int)rval);
+            break;
+        case TOKEN_LOGICA_LESS_EQUAL:
+            folded.type = TOKEN_INTEGER;
+            folded.value.intValue = ((int)lval) <= ((int)rval);
+            break;
+        case TOKEN_ASSIGN:
+            /* Do not fold assignment: side-effect. */
+            return n;
+        default:
+            return n; /* unknown op: cannot fold */
+    }
+
+    /* If we reach here, we successfully folded. Create a new leaf node and free subtree. */
+    FoldNode *leaf = malloc(sizeof(FoldNode));
+    leaf->tok = folded;
+    leaf->contains_real = 0;
+    leaf->left = leaf->right = NULL;
+
+    /* free original subtree */
+    if (n->left) foldnode_free(n->left);
+    if (n->right) foldnode_free(n->right);
+    free(n);
+
+    return leaf;
+}
+
+/* Convert a postfix token sequence into a folded postfix sequence.
+ * postfix_in and postfix_out must be large enough; returns number of tokens written (excluding final TOKEN_END). */
+static u32 optimize_postfix(Token *postfix_in, Token *postfix_out)
+{
+    /* We'll construct expression trees from postfix using a stack of FoldNode* */
+    u32 outCount = 0;
+    FoldNode **stack = calloc(256, sizeof(FoldNode*));
+    int top = -1;
+
+    for (u32 i = 0; ; ++i)
+    {
+        Token t = postfix_in[i];
+        if (t.type == TOKEN_END) break;
+
+        if (t.type == TOKEN_INTEGER || t.type == TOKEN_FLOAT || t.type == TOKEN_REALDB)
+        {
+            FoldNode *leaf = foldnode_new_leaf(&t);
+            stack[++top] = leaf;
+        }
+        else if (is_unary_token(t.type))
+        {
+            if (top < 0) { /* malformed postfix */ break; }
+            FoldNode *child = stack[top--];
+            FoldNode *node = foldnode_new_unary(&t, child);
+            /* try folding */
+            FoldNode *maybe = try_fold_node(node);
+            stack[++top] = maybe;
+        }
+        else if (is_binary_token(t.type))
+        {
+            if (top < 1) { /* malformed */ break; }
+            FoldNode *right = stack[top--];
+            FoldNode *left = stack[top--];
+            FoldNode *node = foldnode_new_binary(&t, left, right);
+            /* try folding */
+            FoldNode *maybe = try_fold_node(node);
+            stack[++top] = maybe;
+        }
+        else
+        {
+            /* unknown token: cannot handle - push as-is to output later. We'll create a leaf to preserve it. */
+            FoldNode *leaf = foldnode_new_leaf(&t);
+            stack[++top] = leaf;
+        }
+
+        /* grow stack if necessary */
+        if (top > 200) {
+            stack = realloc(stack, (top + 256) * sizeof(FoldNode*));
+        }
+    }
+
+    /* Now each element on stack is a top-level expression node; emit them in postfix order. */
+    /* helper recursive emitter */
+    void emit_node(FoldNode *n)
+    {
+        if (!n) return;
+        if (n->left) emit_node(n->left);
+        if (n->right) emit_node(n->right);
+        /* append token */
+        postfix_out[outCount++] = n->tok;
+    }
+
+    for (int i = 0; i <= top; ++i)
+    {
+        emit_node(stack[i]);
+        foldnode_free(stack[i]);
+    }
+
+    free(stack);
+
+    /* terminate */
+    postfix_out[outCount].type = TOKEN_END;
+    return outCount;
+}
+
 void ariMain(void)
 {
 //    char *input = "(2.5 + 3) * 4.2 - 10.1 / #201 + (8  | 4) + (#1<<3) + (16 >> 2) + (7&3) + sin(12) + cos(20) + 2exp(30)+(1==2) + (1!=2)+(1<2)+(1>2)+(1<=2)+(1>=2)";
@@ -1374,7 +1675,14 @@ void ariMain(void)
     DEBUG_TIME_LINE("\n-----------------after convertion:--------------------\n");
     printTokens(postfix, count);
 
-    DEBUG_TIME_LINE("result: %f\n", tokenEvaluate(postfix, stack));
+    /* New: optimize postfix by constant-folding subexpressions that do not reference real DB nodes */
+    Token *opt_postfix = calloc(count + 1, sizeof(Token));
+    optimize_postfix(postfix, opt_postfix);
+
+    DEBUG_TIME_LINE("\n-----------------after optimization:--------------------\n");
+    printTokens(opt_postfix, count);
+
+    DEBUG_TIME_LINE("result: %f\n", tokenEvaluate(opt_postfix, stack));
 
     stack->dispose(stack);
 }
