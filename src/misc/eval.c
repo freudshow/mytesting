@@ -43,19 +43,19 @@ typedef enum {
 
 typedef struct {
     TokenType type;
-    char* text;
+    char *text;
     double num;
     int pos;
 } Token;
 
 typedef struct {
-    Token* arr;
+    Token *arr;
     int sz;
     int cap;
     int idx;
 } TokenList;
 
-static void tlist_init(TokenList* t)
+static void tlist_init(TokenList *t)
 {
     t->sz = 0;
     t->cap = 16;
@@ -63,7 +63,7 @@ static void tlist_init(TokenList* t)
     t->idx = 0;
 }
 
-static void tlist_push(TokenList* t, Token tk)
+static void tlist_push(TokenList *t, Token tk)
 {
     if (t->sz == t->cap)
     {
@@ -83,7 +83,7 @@ static void tlist_push(TokenList* t, Token tk)
  * -----------------------------------
  * @return - 下一个Token
  */
-static Token tlist_peek(TokenList* t)
+static Token tlist_peek(TokenList *t)
 {
     if (t->idx < t->sz)
     {
@@ -103,7 +103,7 @@ static Token tlist_peek(TokenList* t)
  * -------------------------------------
  * @return - 下一个Token
  **************************************/
-static Token tlist_next(TokenList* t)
+static Token tlist_next(TokenList *t)
 {
     if (t->idx < t->sz)
     {
@@ -123,7 +123,7 @@ static Token tlist_next(TokenList* t)
  * -------------------------------------
  * return: 无
  ***************************************/
-static void tlist_free(TokenList* t)
+static void tlist_free(TokenList *t)
 {
     for (int i = 0; i < t->sz; i++)
     {
@@ -143,19 +143,19 @@ typedef struct {
 } RtEntry;
 
 typedef struct {
-    RtEntry* arr;
+    RtEntry *arr;
     int sz;
     int cap;
 } RtMap;
 
-static void rt_init(RtMap* m, int cap)
+static void rt_init(RtMap *m, int cap)
 {
     m->sz = 0;
     m->cap = cap;
     m->arr = malloc(sizeof(RtEntry) * m->cap);
 }
 
-static void rt_set(RtMap* m, int id, double v)
+static void rt_set(RtMap *m, int id, double v)
 {
     for (int i = 0; i < m->sz; i++)
     {
@@ -178,7 +178,7 @@ static void rt_set(RtMap* m, int id, double v)
     m->sz++;
 }
 
-static double rt_get(RtMap* m, int id)
+static double rt_get(RtMap *m, int id)
 {
     for (int i = 0; i < m->sz; i++)
     {
@@ -192,7 +192,7 @@ static double rt_get(RtMap* m, int id)
     return 0.0;
 }
 
-static void rt_free(RtMap* m)
+static void rt_free(RtMap *m)
 {
     free(m->arr);
 }
@@ -321,7 +321,7 @@ static double fac(double a)
         return INFINITY;
     }
 
-    unsigned int ua = (unsigned int)(a);
+    unsigned int ua = (unsigned int) (a);
     unsigned long int result = 1, i;
     for (i = 1; i <= ua; i++)
     {
@@ -329,7 +329,7 @@ static double fac(double a)
             return INFINITY;
         result *= i;
     }
-    return (double)result;
+    return (double) result;
 }
 
 /**********************************
@@ -348,7 +348,7 @@ static double ncr(double n, double r)
         return NAN;
     if (n > UINT_MAX || r > UINT_MAX)
         return INFINITY;
-    unsigned long int un = (unsigned int)(n), ur = (unsigned int)(r), i;
+    unsigned long int un = (unsigned int) (n), ur = (unsigned int) (r), i;
     unsigned long int result = 1;
     if (ur > un / 2)
         ur = un - ur;
@@ -388,34 +388,34 @@ typedef struct {
 } buildInFunc_s;
 
 static const buildInFunc_s s_buildInFunctions[] = {
-    { "abs", fabs, 1 },
-    { "acos", acos, 1 },
-    { "asin", asin, 1 },
-    { "atan", atan, 1 },
-    { "atan2", atan2, 2 },
-    { "ceil", ceil, 1 },
-    { "cos", cos, 1 },
-    { "cosh", cosh, 1 },
-    { "e", e, 0 },
-    { "exp", exp, 1 },
-    { "fac", fac, 1 },
-    { "floor", floor, 1 },
-    { "ln", log, 1 },
-    { "log", log, 1 },
-    { "log10", log10, 1 },
-    { "ncr", ncr, 2 },
-    { "npr", npr, 2 },
-    { "pi", pi, 0 },
-    { "pow", pow, 2 },
-    { "sin", sin, 1 },
-    { "sinh", sinh, 1 },
-    { "sqrt", sqrt, 1 },
-    { "tan", tan, 1 },
-    { "tanh", tanh, 1 },
-    { NULL, NULL, 0 }
+                                                    { "abs", fabs, 1 },
+                                                    { "acos", acos, 1 },
+                                                    { "asin", asin, 1 },
+                                                    { "atan", atan, 1 },
+                                                    { "atan2", atan2, 2 },
+                                                    { "ceil", ceil, 1 },
+                                                    { "cos", cos, 1 },
+                                                    { "cosh", cosh, 1 },
+                                                    { "e", e, 0 },
+                                                    { "exp", exp, 1 },
+                                                    { "fac", fac, 1 },
+                                                    { "floor", floor, 1 },
+                                                    { "ln", log, 1 },
+                                                    { "log", log, 1 },
+                                                    { "log10", log10, 1 },
+                                                    { "ncr", ncr, 2 },
+                                                    { "npr", npr, 2 },
+                                                    { "pi", pi, 0 },
+                                                    { "pow", pow, 2 },
+                                                    { "sin", sin, 1 },
+                                                    { "sinh", sinh, 1 },
+                                                    { "sqrt", sqrt, 1 },
+                                                    { "tan", tan, 1 },
+                                                    { "tanh", tanh, 1 },
+                                                    { NULL, NULL, 0 }
 };
 
-static const buildInFunc_s* findBuilDIn(const char* name, int len)
+static const buildInFunc_s* findBuilDIn(const char *name, int len)
 {
     int imin = 0;
     int imax = sizeof(s_buildInFunctions) / sizeof(buildInFunc_s) - 2;
@@ -467,7 +467,7 @@ static const buildInFunc_s* findBuilDIn(const char* name, int len)
 
 static Node* node_number(double val, int pos)
 {
-    Node* n = malloc(sizeof(Node));
+    Node *n = malloc(sizeof(Node));
     n->type = N_NUMBER;
     n->pos = pos;
     n->v.number = val;
@@ -476,16 +476,16 @@ static Node* node_number(double val, int pos)
 
 static Node* node_realDataBase(int id, int pos)
 {
-    Node* n = malloc(sizeof(Node));
+    Node *n = malloc(sizeof(Node));
     n->type = N_REAL_DATABASE;
     n->pos = pos;
     n->v.realDataBaseId = id;
     return n;
 }
 
-static Node* node_unary(UnaryOp op, Node* child, int pos)
+static Node* node_unary(UnaryOp op, Node *child, int pos)
 {
-    Node* n = malloc(sizeof(Node));
+    Node *n = malloc(sizeof(Node));
     n->type = N_UNARY;
     n->pos = pos;
     n->v.unary.op = op;
@@ -493,9 +493,9 @@ static Node* node_unary(UnaryOp op, Node* child, int pos)
     return n;
 }
 
-static Node* node_binary(BinaryOp op, Node* l, Node* r, int pos)
+static Node* node_binary(BinaryOp op, Node *l, Node *r, int pos)
 {
-    Node* n = malloc(sizeof(Node));
+    Node *n = malloc(sizeof(Node));
     n->type = N_BINARY;
     n->pos = pos;
     n->v.binary.op = op;
@@ -504,9 +504,9 @@ static Node* node_binary(BinaryOp op, Node* l, Node* r, int pos)
     return n;
 }
 
-static Node* node_func(const char* name, Node** args, int argc, int pos, void* funcPtr)
+static Node* node_func(const char *name, Node **args, int argc, int pos, void *funcPtr)
 {
-    Node* n = malloc(sizeof(Node));
+    Node *n = malloc(sizeof(Node));
     n->type = N_FUNC;
     n->pos = pos;
     n->v.func.name = strdup(name);
@@ -517,9 +517,9 @@ static Node* node_func(const char* name, Node** args, int argc, int pos, void* f
     return n;
 }
 
-static Node* node_assign(int id, Node* rhs, int pos)
+static Node* node_assign(int id, Node *rhs, int pos)
 {
-    Node* n = malloc(sizeof(Node));
+    Node *n = malloc(sizeof(Node));
     n->type = N_ASSIGN;
     n->pos = pos;
     n->v.assign.id = id;
@@ -527,7 +527,7 @@ static Node* node_assign(int id, Node* rhs, int pos)
     return n;
 }
 
-static void free_node(Node* n)
+static void free_node(Node *n)
 {
     if (!n)
     {
@@ -536,36 +536,36 @@ static void free_node(Node* n)
 
     switch (n->type)
     {
-    case N_NUMBER:
-        break;
-    case N_REAL_DATABASE:
-        break;
-    case N_UNARY:
-        free_node(n->v.unary.child);
-        break;
-    case N_BINARY:
-        free_node(n->v.binary.left);
-        free_node(n->v.binary.right);
-        break;
-    case N_FUNC:
-        free(n->v.func.name);
-        if (n->v.func.args)
-        {
-            for (int i = 0; i < n->v.func.argc; ++i)
-                free_node(n->v.func.args[i]);
-            free(n->v.func.args);
-        }
-        break;
-    case N_ASSIGN:
-        free_node(n->v.assign.rhs);
-        break;
+        case N_NUMBER:
+            break;
+        case N_REAL_DATABASE:
+            break;
+        case N_UNARY:
+            free_node(n->v.unary.child);
+            break;
+        case N_BINARY:
+            free_node(n->v.binary.left);
+            free_node(n->v.binary.right);
+            break;
+        case N_FUNC:
+            free(n->v.func.name);
+            if (n->v.func.args)
+            {
+                for (int i = 0; i < n->v.func.argc; ++i)
+                    free_node(n->v.func.args[i]);
+                free(n->v.func.args);
+            }
+            break;
+        case N_ASSIGN:
+            free_node(n->v.assign.rhs);
+            break;
     }
 
     free(n);
 }
 
 // printing AST
-static void print_node(Node* n, const char* indent, int last)
+static void print_node(Node *n, const char *indent, int last)
 {
     if (!n)
     {
@@ -575,104 +575,104 @@ static void print_node(Node* n, const char* indent, int last)
     printf("%s%s", indent, last ? "└─ " : "├─ ");
     switch (n->type)
     {
-    case N_NUMBER:
-        printf("%g\n", n->v.number);
-        break;
-    case N_REAL_DATABASE:
-        printf("#%d\n", n->v.realDataBaseId);
-        break;
-    case N_UNARY:
-        printf("Unary(%s)\n", n->v.unary.op == U_NEG ? "-" : (n->v.unary.op == U_NOT ? "!" : "~"));
-        {
-            char buf[256];
-            snprintf(buf, sizeof(buf), "%s%s", indent, last ? "   " : "│  ");
-            print_node(n->v.unary.child, buf, 1);
-        }
-        break;
-    case N_BINARY:
-    {
-        const char* name = "?";
-        switch (n->v.binary.op)
-        {
-        case B_ADD:
-            name = "+";
+        case N_NUMBER:
+            printf("%g\n", n->v.number);
             break;
-        case B_SUB:
-            name = "-";
+        case N_REAL_DATABASE:
+            printf("#%d\n", n->v.realDataBaseId);
             break;
-        case B_MUL:
-            name = "*";
-            break;
-        case B_DIV:
-            name = "/";
-            break;
-        case B_LSHIFT:
-            name = "<<";
-            break;
-        case B_RSHIFT:
-            name = ">>";
-            break;
-        case B_GT:
-            name = ">";
-            break;
-        case B_GTE:
-            name = ">=";
-            break;
-        case B_LT:
-            name = "<";
-            break;
-        case B_LTE:
-            name = "<=";
-            break;
-        case B_EQ:
-            name = "==";
-            break;
-        case B_NEQ:
-            name = "!=";
-            break;
-        case B_BITAND:
-            name = "&";
-            break;
-        case B_BITXOR:
-            name = "^";
-            break;
-        case B_BITOR:
-            name = "|";
-            break;
-        case B_ANDAND:
-            name = "&&";
-            break;
-        case B_OROR:
-            name = "||";
-            break;
-        }
-
-        printf("Binary(%s)\n", name);
-        char buf[256];
-        snprintf(buf, sizeof(buf), "%s%s", indent, last ? "   " : "│  ");
-        print_node(n->v.binary.left, buf, 0);
-        print_node(n->v.binary.right, buf, 1);
-    }
-    break;
-    case N_FUNC:
-        printf("Func(%s)\n", n->v.func.name);
-        {
-            char buf[256];
-            snprintf(buf, sizeof(buf), "%s%s", indent, last ? "   " : "│  ");
-            for (int i = 0; i < n->v.func.argc; ++i)
+        case N_UNARY:
+            printf("Unary(%s)\n", n->v.unary.op == U_NEG ? "-" : (n->v.unary.op == U_NOT ? "!" : "~"));
             {
-                print_node(n->v.func.args[i], buf, i == n->v.func.argc - 1);
+                char buf[256];
+                snprintf(buf, sizeof(buf), "%s%s", indent, last ? "   " : "│  ");
+                print_node(n->v.unary.child, buf, 1);
             }
-        }
-        break;
-    case N_ASSIGN:
-        printf("Assign(#%d)\n", n->v.assign.id);
-        {
+            break;
+        case N_BINARY:
+            {
+            const char *name = "?";
+            switch (n->v.binary.op)
+            {
+                case B_ADD:
+                    name = "+";
+                    break;
+                case B_SUB:
+                    name = "-";
+                    break;
+                case B_MUL:
+                    name = "*";
+                    break;
+                case B_DIV:
+                    name = "/";
+                    break;
+                case B_LSHIFT:
+                    name = "<<";
+                    break;
+                case B_RSHIFT:
+                    name = ">>";
+                    break;
+                case B_GT:
+                    name = ">";
+                    break;
+                case B_GTE:
+                    name = ">=";
+                    break;
+                case B_LT:
+                    name = "<";
+                    break;
+                case B_LTE:
+                    name = "<=";
+                    break;
+                case B_EQ:
+                    name = "==";
+                    break;
+                case B_NEQ:
+                    name = "!=";
+                    break;
+                case B_BITAND:
+                    name = "&";
+                    break;
+                case B_BITXOR:
+                    name = "^";
+                    break;
+                case B_BITOR:
+                    name = "|";
+                    break;
+                case B_ANDAND:
+                    name = "&&";
+                    break;
+                case B_OROR:
+                    name = "||";
+                    break;
+            }
+
+            printf("Binary(%s)\n", name);
             char buf[256];
             snprintf(buf, sizeof(buf), "%s%s", indent, last ? "   " : "│  ");
-            print_node(n->v.assign.rhs, buf, 1);
+            print_node(n->v.binary.left, buf, 0);
+            print_node(n->v.binary.right, buf, 1);
         }
-        break;
+            break;
+        case N_FUNC:
+            printf("Func(%s)\n", n->v.func.name);
+            {
+                char buf[256];
+                snprintf(buf, sizeof(buf), "%s%s", indent, last ? "   " : "│  ");
+                for (int i = 0; i < n->v.func.argc; ++i)
+                {
+                    print_node(n->v.func.args[i], buf, i == n->v.func.argc - 1);
+                }
+            }
+            break;
+        case N_ASSIGN:
+            printf("Assign(#%d)\n", n->v.assign.id);
+            {
+                char buf[256];
+                snprintf(buf, sizeof(buf), "%s%s", indent, last ? "   " : "│  ");
+                print_node(n->v.assign.rhs, buf, 1);
+            }
+            break;
     }
 }
 
@@ -699,7 +699,7 @@ static void print_node(Node* n, const char* indent, int last)
  * ---------------------------------------------------------
  * @return: 计算结果
  ***********************************************************/
-static double eval_node(Node* n, RtMap* rt)
+static double eval_node(Node *n, RtMap *rt)
 {
     if (!n)
     {
@@ -713,7 +713,7 @@ static double eval_node(Node* n, RtMap* rt)
         case N_REAL_DATABASE:
             return rt_get(rt, n->v.realDataBaseId);
         case N_UNARY:
-        {
+            {
             double v = eval_node(n->v.unary.child, rt);
             if (n->v.unary.op == U_NEG)
             {
@@ -728,7 +728,7 @@ static double eval_node(Node* n, RtMap* rt)
             return (double) (~((long) v));
         }
         case N_BINARY:
-        {
+            {
             switch (n->v.binary.op)
             {
                 case B_ADD:
@@ -738,7 +738,7 @@ static double eval_node(Node* n, RtMap* rt)
                 case B_MUL:
                     return eval_node(n->v.binary.left, rt) * eval_node(n->v.binary.right, rt);
                 case B_DIV:
-                {
+                    {
                     double r = eval_node(n->v.binary.right, rt);
                     if (r == 0)
                     {
@@ -771,7 +771,7 @@ static double eval_node(Node* n, RtMap* rt)
                 case B_BITOR:
                     return (double) (((long) eval_node(n->v.binary.left, rt)) | ((long) eval_node(n->v.binary.right, rt)));
                 case B_ANDAND:
-                {
+                    {
                     double lv = eval_node(n->v.binary.left, rt);
                     if (EVAL_USE_SHORT_CIRCUIT && lv == 0.0)
                         return 0.0;
@@ -779,7 +779,7 @@ static double eval_node(Node* n, RtMap* rt)
                     return rv != 0.0 ? 1.0 : 0.0;
                 }
                 case B_OROR:
-                {
+                    {
                     double lv = eval_node(n->v.binary.left, rt);
                     if (EVAL_USE_SHORT_CIRCUIT && lv != 0.0)
                         return 1.0;
@@ -790,7 +790,7 @@ static double eval_node(Node* n, RtMap* rt)
             break;
         }
         case N_FUNC:
-        {
+            {
             // evaluate args
             double args_vals[4];
             for (int i = 0; i < n->v.func.argc; ++i)
@@ -842,20 +842,20 @@ static double eval_node(Node* n, RtMap* rt)
 /*-------------------------------------------------- Parser functions follow grammar and precedence --------------------------------------------------*/
 
 // Forward declarations
-static Node* parse_assign(TokenList* toks);
-static Node* parse_logical_or_node(TokenList* toks);
-static Node* parse_logical_and_node(TokenList* toks);
-static Node* parse_bitor_node(TokenList* toks);
-static Node* parse_bitxor_node(TokenList* toks);
-static Node* parse_bitand_node(TokenList* toks);
-static Node* parse_equality_node(TokenList* toks);
-static Node* parse_relational_node(TokenList* toks);
-static Node* parse_shift_node(TokenList* toks);
-static Node* parse_add_node(TokenList* toks);
-static Node* parse_multiply_node(TokenList* toks);
-static Node* parse_unary_node(TokenList* toks);
-static Node* parse_power_node(TokenList* toks);
-static Node* parse_primary_node(TokenList* toks);
+static Node* parse_assign(TokenList *toks);
+static Node* parse_logical_or_node(TokenList *toks);
+static Node* parse_logical_and_node(TokenList *toks);
+static Node* parse_bitor_node(TokenList *toks);
+static Node* parse_bitxor_node(TokenList *toks);
+static Node* parse_bitand_node(TokenList *toks);
+static Node* parse_equality_node(TokenList *toks);
+static Node* parse_relational_node(TokenList *toks);
+static Node* parse_shift_node(TokenList *toks);
+static Node* parse_add_node(TokenList *toks);
+static Node* parse_multiply_node(TokenList *toks);
+static Node* parse_unary_node(TokenList *toks);
+static Node* parse_power_node(TokenList *toks);
+static Node* parse_primary_node(TokenList *toks);
 
 /***************************************
  * 函数名: match
@@ -867,7 +867,7 @@ static Node* parse_primary_node(TokenList* toks);
  * -------------------------------------
  * @return: 匹配成功返回1, 否则返回0
  **************************************/
-static int match(TokenList* t, TokenType ty)
+static int match(TokenList *t, TokenType ty)
 {
     if (tlist_peek(t).type == ty)
     {
@@ -888,7 +888,7 @@ static int match(TokenList* t, TokenType ty)
  * --------------------------------------------------
  * @return: 解析得到的AST节点
  **************************************************/
-static Node* parse_assign(TokenList* toks)
+static Node* parse_assign(TokenList *toks)
 {
     Token cur = tlist_peek(toks);
     if (cur.type == T_REALDB &&
@@ -897,7 +897,7 @@ static Node* parse_assign(TokenList* toks)
     {
         Token h = tlist_next(toks); // consume REAL_DATABASE
         Token a = tlist_next(toks); // consume ASSIGN
-        Node* rhs = parse_assign(toks); // right-assoc
+        Node *rhs = parse_assign(toks); // right-assoc
         int id = atoi(h.text);
         return node_assign(id, rhs, a.pos);
     }
@@ -915,12 +915,12 @@ static Node* parse_assign(TokenList* toks)
  * --------------------------------------------------
  * @return: 解析得到的AST节点
  **************************************************/
-static Node* parse_logical_or_node(TokenList* toks)
+static Node* parse_logical_or_node(TokenList *toks)
 {
-    Node* left = parse_logical_and_node(toks);
+    Node *left = parse_logical_and_node(toks);
     while (match(toks, T_OROR))
     {
-        Node* right = parse_logical_and_node(toks);
+        Node *right = parse_logical_and_node(toks);
         left = node_binary(B_OROR, left, right, left->pos);
     }
 
@@ -937,12 +937,12 @@ static Node* parse_logical_or_node(TokenList* toks)
  * --------------------------------------------------
  * @return: 解析得到的AST节点
  **************************************************/
-static Node* parse_logical_and_node(TokenList* toks)
+static Node* parse_logical_and_node(TokenList *toks)
 {
-    Node* left = parse_bitor_node(toks);
+    Node *left = parse_bitor_node(toks);
     while (match(toks, T_ANDAND))
     {
-        Node* right = parse_bitor_node(toks);
+        Node *right = parse_bitor_node(toks);
         left = node_binary(B_ANDAND, left, right, left->pos);
     }
 
@@ -959,12 +959,12 @@ static Node* parse_logical_and_node(TokenList* toks)
  * --------------------------------------------------
  * @return: 解析得到的AST节点
  ***************************************************/
-static Node* parse_bitor_node(TokenList* toks)
+static Node* parse_bitor_node(TokenList *toks)
 {
-    Node* left = parse_bitxor_node(toks);
+    Node *left = parse_bitxor_node(toks);
     while (match(toks, T_PIPE))
     {
-        Node* r = parse_bitxor_node(toks);
+        Node *r = parse_bitxor_node(toks);
         left = node_binary(B_BITOR, left, r, left->pos);
     }
 
@@ -981,12 +981,12 @@ static Node* parse_bitor_node(TokenList* toks)
  * --------------------------------------------------
  * @return: 解析得到的AST节点
  ****************************************************/
-static Node* parse_bitxor_node(TokenList* toks)
+static Node* parse_bitxor_node(TokenList *toks)
 {
-    Node* left = parse_bitand_node(toks);
+    Node *left = parse_bitand_node(toks);
     while (match(toks, T_CARET))
     {
-        Node* r = parse_bitand_node(toks);
+        Node *r = parse_bitand_node(toks);
         left = node_binary(B_BITXOR, left, r, left->pos);
     }
 
@@ -1003,12 +1003,12 @@ static Node* parse_bitxor_node(TokenList* toks)
  * --------------------------------------------------
  * @return: 解析得到的AST节点
  ****************************************************/
-static Node* parse_bitand_node(TokenList* toks)
+static Node* parse_bitand_node(TokenList *toks)
 {
-    Node* left = parse_equality_node(toks);
+    Node *left = parse_equality_node(toks);
     while (match(toks, T_AMP))
     {
-        Node* r = parse_equality_node(toks);
+        Node *r = parse_equality_node(toks);
         left = node_binary(B_BITAND, left, r, left->pos);
     }
 
@@ -1025,19 +1025,19 @@ static Node* parse_bitand_node(TokenList* toks)
  * --------------------------------------------------
  * @return: 解析得到的AST节点
  ****************************************************/
-static Node* parse_equality_node(TokenList* toks)
+static Node* parse_equality_node(TokenList *toks)
 {
-    Node* left = parse_relational_node(toks);
+    Node *left = parse_relational_node(toks);
     while (1)
     {
         if (match(toks, T_EQ))
         {
-            Node* r = parse_relational_node(toks);
+            Node *r = parse_relational_node(toks);
             left = node_binary(B_EQ, left, r, left->pos);
         }
         else if (match(toks, T_NEQ))
         {
-            Node* r = parse_relational_node(toks);
+            Node *r = parse_relational_node(toks);
             left = node_binary(B_NEQ, left, r, left->pos);
         }
         else
@@ -1057,29 +1057,29 @@ static Node* parse_equality_node(TokenList* toks)
  * --------------------------------------------------
  * @return: 解析得到的AST节点
  ****************************************************/
-static Node* parse_relational_node(TokenList* toks)
+static Node* parse_relational_node(TokenList *toks)
 {
-    Node* left = parse_shift_node(toks);
+    Node *left = parse_shift_node(toks);
     while (1)
     {
         if (match(toks, T_GT))
         {
-            Node* r = parse_shift_node(toks);
+            Node *r = parse_shift_node(toks);
             left = node_binary(B_GT, left, r, left->pos);
         }
         else if (match(toks, T_GTE))
         {
-            Node* r = parse_shift_node(toks);
+            Node *r = parse_shift_node(toks);
             left = node_binary(B_GTE, left, r, left->pos);
         }
         else if (match(toks, T_LT))
         {
-            Node* r = parse_shift_node(toks);
+            Node *r = parse_shift_node(toks);
             left = node_binary(B_LT, left, r, left->pos);
         }
         else if (match(toks, T_LTE))
         {
-            Node* r = parse_shift_node(toks);
+            Node *r = parse_shift_node(toks);
             left = node_binary(B_LTE, left, r, left->pos);
         }
         else
@@ -1099,19 +1099,19 @@ static Node* parse_relational_node(TokenList* toks)
  * --------------------------------------------------
  * @return: 解析得到的AST节点
  ****************************************************/
-static Node* parse_shift_node(TokenList* toks)
+static Node* parse_shift_node(TokenList *toks)
 {
-    Node* left = parse_add_node(toks);
+    Node *left = parse_add_node(toks);
     while (1)
     {
         if (match(toks, T_LSHIFT))
         {
-            Node* r = parse_add_node(toks);
+            Node *r = parse_add_node(toks);
             left = node_binary(B_LSHIFT, left, r, left->pos);
         }
         else if (match(toks, T_RSHIFT))
         {
-            Node* r = parse_add_node(toks);
+            Node *r = parse_add_node(toks);
             left = node_binary(B_RSHIFT, left, r, left->pos);
         }
         else
@@ -1131,19 +1131,19 @@ static Node* parse_shift_node(TokenList* toks)
  * --------------------------------------------------
  * @return: 解析得到的AST节点
  ****************************************************/
-static Node* parse_add_node(TokenList* toks)
+static Node* parse_add_node(TokenList *toks)
 {
-    Node* left = parse_multiply_node(toks);
+    Node *left = parse_multiply_node(toks);
     while (1)
     {
         if (match(toks, T_PLUS))
         {
-            Node* r = parse_multiply_node(toks);
+            Node *r = parse_multiply_node(toks);
             left = node_binary(B_ADD, left, r, left->pos);
         }
         else if (match(toks, T_MINUS))
         {
-            Node* r = parse_multiply_node(toks);
+            Node *r = parse_multiply_node(toks);
             left = node_binary(B_SUB, left, r, left->pos);
         }
         else
@@ -1163,19 +1163,19 @@ static Node* parse_add_node(TokenList* toks)
  * --------------------------------------------------
  * @return: 解析得到的AST节点
  ****************************************************/
-static Node* parse_multiply_node(TokenList* toks)
+static Node* parse_multiply_node(TokenList *toks)
 {
-    Node* left = parse_unary_node(toks);
+    Node *left = parse_unary_node(toks);
     while (1)
     {
         if (match(toks, T_MUL))
         {
-            Node* r = parse_unary_node(toks);
+            Node *r = parse_unary_node(toks);
             left = node_binary(B_MUL, left, r, left->pos);
         }
         else if (match(toks, T_DIV))
         {
-            Node* r = parse_unary_node(toks);
+            Node *r = parse_unary_node(toks);
             left = node_binary(B_DIV, left, r, left->pos);
         }
         else
@@ -1195,23 +1195,23 @@ static Node* parse_multiply_node(TokenList* toks)
  * --------------------------------------------------
  * @return: 解析得到的AST节点
  ****************************************************/
-static Node* parse_unary_node(TokenList* toks)
+static Node* parse_unary_node(TokenList *toks)
 {
     if (match(toks, T_NOT))
     {
-        Node* op = parse_unary_node(toks);
+        Node *op = parse_unary_node(toks);
         return node_unary(U_NOT, op, op->pos);
     }
 
     if (match(toks, T_TILDE))
     {
-        Node* op = parse_unary_node(toks);
+        Node *op = parse_unary_node(toks);
         return node_unary(U_BITNOT, op, op->pos);
     }
 
     if (match(toks, T_MINUS))
     {
-        Node* op = parse_unary_node(toks);
+        Node *op = parse_unary_node(toks);
         return node_unary(U_NEG, op, op->pos);
     }
 
@@ -1228,11 +1228,11 @@ static Node* parse_unary_node(TokenList* toks)
  * --------------------------------------------------
  * @return: 解析得到的AST节点
  ****************************************************/
-static Node* parse_power_node(TokenList* toks)
+static Node* parse_power_node(TokenList *toks)
 {
     Token cur = tlist_peek(toks);
 
-    const buildInFunc_s* func = findBuilDIn(cur.text, (int)strlen(cur.text));
+    const buildInFunc_s *func = findBuilDIn(cur.text, (int) strlen(cur.text));
     if (cur.type == T_IDENT && func != NULL)
     {
         tlist_next(toks);
@@ -1242,13 +1242,13 @@ static Node* parse_power_node(TokenList* toks)
             exit(1);
         }
         // parse argument list (comma separated)
-        Node** args = NULL;
+        Node **args = NULL;
         int argc = 0;
         if (!match(toks, T_RP))
         {
             while (1)
             {
-                Node* a = parse_assign(toks);
+                Node *a = parse_assign(toks);
                 args = realloc(args, sizeof(Node*) * (argc + 1));
                 args[argc++] = a;
                 if (match(toks, T_RP))
@@ -1267,7 +1267,7 @@ static Node* parse_power_node(TokenList* toks)
             exit(1);
         }
 
-        Node* fn = node_func(cur.text, args, argc, cur.pos, (void*)func->funcPtr);
+        Node *fn = node_func(cur.text, args, argc, cur.pos, (void*) func->funcPtr);
         return fn;
     }
 
@@ -1284,7 +1284,7 @@ static Node* parse_power_node(TokenList* toks)
  * --------------------------------------------------
  * @return: 解析得到的AST节点
  ****************************************************/
-static Node* parse_primary_node(TokenList* toks)
+static Node* parse_primary_node(TokenList *toks)
 {
     Token t = tlist_peek(toks);
     if (t.type == T_NUM)
@@ -1308,7 +1308,7 @@ static Node* parse_primary_node(TokenList* toks)
 
     if (match(toks, T_LP))
     {
-        Node* v = parse_assign(toks);
+        Node *v = parse_assign(toks);
         Token r = tlist_peek(toks);
         if (!match(toks, T_RP))
         {
@@ -1331,13 +1331,13 @@ static Node* parse_primary_node(TokenList* toks)
  * --------------------------------------------------
  * @return: 无
  ****************************************************/
-static void tokenize(const char* s, TokenList* out)
+static void tokenize(const char *s, TokenList *out)
 {
     int i = 0;
-    int n = (int)strlen(s);
+    int n = (int) strlen(s);
     while (1)
     {
-        while (i < n && isspace((unsigned char)s[i]))
+        while (i < n && isspace((unsigned char )s[i]))
         {
             i++;
         }
@@ -1416,21 +1416,21 @@ static void tokenize(const char* s, TokenList* out)
         }
 
         // numbers: must start with a digit. If '.' present, it must be followed by one or more digits.
-        if (isdigit((unsigned char)c))
+        if (isdigit((unsigned char )c))
         {
             int start = i;
             // integer part
-            while (i < n && isdigit((unsigned char)s[i]))
+            while (i < n && isdigit((unsigned char )s[i]))
                 i++;
             // optional fractional part: only accept if '.' followed by at least one digit
             if (i < n && s[i] == '.')
             {
                 int dot = i;
-                if (i + 1 < n && isdigit((unsigned char)s[i + 1]))
+                if (i + 1 < n && isdigit((unsigned char )s[i + 1]))
                 {
                     // consume '.' and fractional digits
                     i++; // consume '.'
-                    while (i < n && isdigit((unsigned char)s[i]))
+                    while (i < n && isdigit((unsigned char )s[i]))
                         i++;
                 }
                 else
@@ -1440,7 +1440,7 @@ static void tokenize(const char* s, TokenList* out)
                 }
             }
             int len = i - start;
-            char* txt = strndup(s + start, len);
+            char *txt = strndup(s + start, len);
             double v = strtod(txt, NULL);
             Token t = { T_NUM, txt, v, start };
             tlist_push(out, t);
@@ -1451,7 +1451,7 @@ static void tokenize(const char* s, TokenList* out)
         {
             i++;
             int start = i;
-            while (i < n && isdigit((unsigned char)s[i]))
+            while (i < n && isdigit((unsigned char )s[i]))
                 i++;
             if (start == i)
             {
@@ -1460,7 +1460,7 @@ static void tokenize(const char* s, TokenList* out)
                 break;
             }
             int len = i - start;
-            char* txt = strndup(s + start, len);
+            char *txt = strndup(s + start, len);
             Token t = { T_REALDB, txt, 0, start - 1 };
             tlist_push(out, t);
             continue;
@@ -1474,7 +1474,7 @@ static void tokenize(const char* s, TokenList* out)
             while (i < n && (isalnum((unsigned char)s[i]) || s[i] == '_'))
                 i++;
             int len = i - start;
-            char* txt = strndup(s + start, len);
+            char *txt = strndup(s + start, len);
             Token t = { T_IDENT, txt, 0, start };
             tlist_push(out, t);
             continue;
@@ -1483,118 +1483,118 @@ static void tokenize(const char* s, TokenList* out)
         // single char
         switch (c)
         {
-        case '+':
-        {
-            Token t = { T_PLUS, strdup("+"), 0, i };
-            tlist_push(out, t);
-            i++;
-            break;
-        }
-        case '-':
-        {
-            Token t = { T_MINUS, strdup("-"), 0, i };
-            tlist_push(out, t);
-            i++;
-            break;
-        }
-        case '*':
-        {
-            Token t = { T_MUL, strdup("*"), 0, i };
-            tlist_push(out, t);
-            i++;
-            break;
-        }
-        case '/':
-        {
-            Token t = { T_DIV, strdup("/"), 0, i };
-            tlist_push(out, t);
-            i++;
-            break;
-        }
-        case '(':
-        {
-            Token t = { T_LP, strdup("("), 0, i };
-            tlist_push(out, t);
-            i++;
-            break;
-        }
-        case ')':
-        {
-            Token t = { T_RP, strdup(")"), 0, i };
-            tlist_push(out, t);
-            i++;
-            break;
-        }
-        case '!':
-        {
-            Token t = { T_NOT, strdup("!"), 0, i };
-            tlist_push(out, t);
-            i++;
-            break;
-        }
-        case '>':
-        {
-            Token t = { T_GT, strdup(">"), 0, i };
-            tlist_push(out, t);
-            i++;
-            break;
-        }
-        case '<':
-        {
-            Token t = { T_LT, strdup("<"), 0, i };
-            tlist_push(out, t);
-            i++;
-            break;
-        }
-        case '&':
-        {
-            Token t = { T_AMP, strdup("&"), 0, i };
-            tlist_push(out, t);
-            i++;
-            break;
-        }
-        case '|':
-        {
-            Token t = { T_PIPE, strdup("|"), 0, i };
-            tlist_push(out, t);
-            i++;
-            break;
-        }
-        case '^':
-        {
-            Token t = { T_CARET, strdup("^"), 0, i };
-            tlist_push(out, t);
-            i++;
-            break;
-        }
-        case '~':
-        {
-            Token t = { T_TILDE, strdup("~"), 0, i };
-            tlist_push(out, t);
-            i++;
-            break;
-        }
-        case '=':
-        {
-            Token t = { T_ASSIGN, strdup("="), 0, i };
-            tlist_push(out, t);
-            i++;
-            break;
-        }
-        case ',':
-        {
-            Token t = { T_COMMA, strdup(","), 0, i };
-            tlist_push(out, t);
-            i++;
-            break;
-        }
-        default:
-        {
-            Token t = { T_INVALID, NULL, 0, i };
-            tlist_push(out, t);
-            i++;
-            break;
-        }
+            case '+':
+            {
+                Token t = { T_PLUS, strdup("+"), 0, i };
+                tlist_push(out, t);
+                i++;
+                break;
+            }
+            case '-':
+            {
+                Token t = { T_MINUS, strdup("-"), 0, i };
+                tlist_push(out, t);
+                i++;
+                break;
+            }
+            case '*':
+            {
+                Token t = { T_MUL, strdup("*"), 0, i };
+                tlist_push(out, t);
+                i++;
+                break;
+            }
+            case '/':
+            {
+                Token t = { T_DIV, strdup("/"), 0, i };
+                tlist_push(out, t);
+                i++;
+                break;
+            }
+            case '(':
+            {
+                Token t = { T_LP, strdup("("), 0, i };
+                tlist_push(out, t);
+                i++;
+                break;
+            }
+            case ')':
+            {
+                Token t = { T_RP, strdup(")"), 0, i };
+                tlist_push(out, t);
+                i++;
+                break;
+            }
+            case '!':
+            {
+                Token t = { T_NOT, strdup("!"), 0, i };
+                tlist_push(out, t);
+                i++;
+                break;
+            }
+            case '>':
+            {
+                Token t = { T_GT, strdup(">"), 0, i };
+                tlist_push(out, t);
+                i++;
+                break;
+            }
+            case '<':
+            {
+                Token t = { T_LT, strdup("<"), 0, i };
+                tlist_push(out, t);
+                i++;
+                break;
+            }
+            case '&':
+            {
+                Token t = { T_AMP, strdup("&"), 0, i };
+                tlist_push(out, t);
+                i++;
+                break;
+            }
+            case '|':
+            {
+                Token t = { T_PIPE, strdup("|"), 0, i };
+                tlist_push(out, t);
+                i++;
+                break;
+            }
+            case '^':
+            {
+                Token t = { T_CARET, strdup("^"), 0, i };
+                tlist_push(out, t);
+                i++;
+                break;
+            }
+            case '~':
+            {
+                Token t = { T_TILDE, strdup("~"), 0, i };
+                tlist_push(out, t);
+                i++;
+                break;
+            }
+            case '=':
+            {
+                Token t = { T_ASSIGN, strdup("="), 0, i };
+                tlist_push(out, t);
+                i++;
+                break;
+            }
+            case ',':
+            {
+                Token t = { T_COMMA, strdup(","), 0, i };
+                tlist_push(out, t);
+                i++;
+                break;
+            }
+            default:
+            {
+                Token t = { T_INVALID, NULL, 0, i };
+                tlist_push(out, t);
+                i++;
+                break;
+            }
         }
     }
 }
@@ -1609,7 +1609,7 @@ static void tokenize(const char* s, TokenList* out)
  * --------------------------------------------------
  * @return: 无
  ****************************************************/
-static void print_error_with_caret(const char* line, int pos)
+static void print_error_with_caret(const char *line, int pos)
 {
     fprintf(stderr, "%s\n", line);
     for (int i = 0; i < pos && line[i]; i++)
@@ -1635,7 +1635,7 @@ static void print_error_with_caret(const char* line, int pos)
  * --------------------------------------------------
  * @return: 包含真实数据库ID节点返回1, 否则返回0
  ****************************************************/
-static int node_contains_realDatabaseId(Node* n)
+static int node_contains_realDatabaseId(Node *n)
 {
     if (!n)
     {
@@ -1644,28 +1644,29 @@ static int node_contains_realDatabaseId(Node* n)
 
     switch (n->type)
     {
-    case N_REAL_DATABASE:
-        return 1;
-    case N_NUMBER:
-        return 0;
-    case N_UNARY:
-        return node_contains_realDatabaseId(n->v.unary.child);
-    case N_BINARY:
-        return node_contains_realDatabaseId(n->v.binary.left) || node_contains_realDatabaseId(n->v.binary.right);
-    case N_FUNC:
-    {
-        if (!n->v.func.args) return 0;
-        for (int i = 0; i < n->v.func.argc; ++i)
+        case N_REAL_DATABASE:
+            return 1;
+        case N_NUMBER:
+            return 0;
+        case N_UNARY:
+            return node_contains_realDatabaseId(n->v.unary.child);
+        case N_BINARY:
+            return node_contains_realDatabaseId(n->v.binary.left) || node_contains_realDatabaseId(n->v.binary.right);
+        case N_FUNC:
         {
-            if (node_contains_realDatabaseId(n->v.func.args[i]))
-                return 1;
+            if (!n->v.func.args)
+                return 0;
+            for (int i = 0; i < n->v.func.argc; ++i)
+            {
+                if (node_contains_realDatabaseId(n->v.func.args[i]))
+                    return 1;
+            }
+            return 0;
         }
-        return 0;
-    }
-    case N_ASSIGN:
+        case N_ASSIGN:
             return node_contains_realDatabaseId(n->v.assign.rhs); // assignment lhs is id, not a real database node
-    default:
-        return 0;
+        default:
+            return 0;
     }
 }
 
@@ -1680,7 +1681,7 @@ static int node_contains_realDatabaseId(Node* n)
  * --------------------------------------------------
  * @return: 数字节点的值
  ****************************************************/
-static double node_get_number(Node* n)
+static double node_get_number(Node *n)
 {
     return n->v.number;
 }
@@ -1697,7 +1698,7 @@ static double node_get_number(Node* n)
  * --------------------------------------------------
  * @return: 优化后的AST节点
  ****************************************************/
-static Node* optimize_node(Node* n)
+static Node* optimize_node(Node *n)
 {
     if (!n)
     {
@@ -1706,186 +1707,186 @@ static Node* optimize_node(Node* n)
 
     switch (n->type)
     {
-    case N_NUMBER:
-    case N_REAL_DATABASE:
-        return n;
+        case N_NUMBER:
+            case N_REAL_DATABASE:
+            return n;
 
-    case N_UNARY:
-    {
-        n->v.unary.child = optimize_node(n->v.unary.child);
-        if (!node_contains_realDatabaseId(n) && n->v.unary.child && n->v.unary.child->type == N_NUMBER)
+        case N_UNARY:
         {
-            double c = node_get_number(n->v.unary.child);
-            double res;
-            if (n->v.unary.op == U_NEG)
-                res = -c;
-            else if (n->v.unary.op == U_NOT)
-                res = (c != 0.0) ? 0.0 : 1.0;
-            else
-                /* U_BITNOT */res = (double)(~((long)c));
-            int pos = n->pos;
-            free_node(n);
-            return node_number(res, pos);
-        }
-
-        return n;
-    }
-
-    case N_BINARY:
-    {
-        n->v.binary.left = optimize_node(n->v.binary.left);
-        n->v.binary.right = optimize_node(n->v.binary.right);
-        if (!node_contains_realDatabaseId(n) && n->v.binary.left && n->v.binary.right
-            && n->v.binary.left->type == N_NUMBER && n->v.binary.right->type == N_NUMBER)
-        {
-            double l = node_get_number(n->v.binary.left);
-            double r = node_get_number(n->v.binary.right);
-            double res = 0.0;
-            int can_fold = 1;
-            switch (n->v.binary.op)
+            n->v.unary.child = optimize_node(n->v.unary.child);
+            if (!node_contains_realDatabaseId(n) && n->v.unary.child && n->v.unary.child->type == N_NUMBER)
             {
-            case B_ADD:
-                res = l + r;
-                break;
-            case B_SUB:
-                res = l - r;
-                break;
-            case B_MUL:
-                res = l * r;
-                break;
-            case B_DIV:
-                if (r == 0.0)
-                    can_fold = 0;
+                double c = node_get_number(n->v.unary.child);
+                double res;
+                if (n->v.unary.op == U_NEG)
+                    res = -c;
+                else if (n->v.unary.op == U_NOT)
+                    res = (c != 0.0) ? 0.0 : 1.0;
                 else
-                    res = l / r;
-                break;
-            case B_LSHIFT:
-                res = (double)(((long)l) << (int)r);
-                break;
-            case B_RSHIFT:
-                res = (double)(((long)l) >> (int)r);
-                break;
-            case B_GT:
-                res = l > r ? 1.0 : 0.0;
-                break;
-            case B_GTE:
-                res = l >= r ? 1.0 : 0.0;
-                break;
-            case B_LT:
-                res = l < r ? 1.0 : 0.0;
-                break;
-            case B_LTE:
-                res = l <= r ? 1.0 : 0.0;
-                break;
-            case B_EQ:
-                res = l == r ? 1.0 : 0.0;
-                break;
-            case B_NEQ:
-                res = l != r ? 1.0 : 0.0;
-                break;
-            case B_BITAND:
-                res = (double)(((long)l) & ((long)r));
-                break;
-            case B_BITXOR:
-                res = (double)(((long)l) ^ ((long)r));
-                break;
-            case B_BITOR:
-                res = (double)(((long)l) | ((long)r));
-                break;
-            case B_ANDAND:
-                res = (l == 0.0) ? 0.0 : (r != 0.0 ? 1.0 : 0.0);
-                break;
-            case B_OROR:
-                res = (l != 0.0) ? 1.0 : (r != 0.0 ? 1.0 : 0.0);
-                break;
-            default:
-                can_fold = 0;
-                break;
-            }
-            if (can_fold)
-            {
+                    /* U_BITNOT */res = (double) (~((long) c));
                 int pos = n->pos;
                 free_node(n);
                 return node_number(res, pos);
             }
+
+            return n;
         }
 
-        return n;
-    }
-
-    case N_FUNC:
-    {
-        /* optimize each argument */
-        for (int i = 0; i < n->v.func.argc; ++i)
+        case N_BINARY:
         {
-            n->v.func.args[i] = optimize_node(n->v.func.args[i]);
-        }
-
-            /* if subtree contains no real database nodes and all args are numbers, constant-fold */
-        if (!node_contains_realDatabaseId(n))
-        {
-            int all_number = 1;
-            for (int i = 0; i < n->v.func.argc; ++i)
+            n->v.binary.left = optimize_node(n->v.binary.left);
+            n->v.binary.right = optimize_node(n->v.binary.right);
+            if (!node_contains_realDatabaseId(n) && n->v.binary.left && n->v.binary.right
+                    && n->v.binary.left->type == N_NUMBER && n->v.binary.right->type == N_NUMBER)
             {
-                if (!n->v.func.args[i] || n->v.func.args[i]->type != N_NUMBER)
+                double l = node_get_number(n->v.binary.left);
+                double r = node_get_number(n->v.binary.right);
+                double res = 0.0;
+                int can_fold = 1;
+                switch (n->v.binary.op)
                 {
-                    all_number = 0;
-                    break;
+                    case B_ADD:
+                        res = l + r;
+                        break;
+                    case B_SUB:
+                        res = l - r;
+                        break;
+                    case B_MUL:
+                        res = l * r;
+                        break;
+                    case B_DIV:
+                        if (r == 0.0)
+                            can_fold = 0;
+                        else
+                            res = l / r;
+                        break;
+                    case B_LSHIFT:
+                        res = (double) (((long) l) << (int) r);
+                        break;
+                    case B_RSHIFT:
+                        res = (double) (((long) l) >> (int) r);
+                        break;
+                    case B_GT:
+                        res = l > r ? 1.0 : 0.0;
+                        break;
+                    case B_GTE:
+                        res = l >= r ? 1.0 : 0.0;
+                        break;
+                    case B_LT:
+                        res = l < r ? 1.0 : 0.0;
+                        break;
+                    case B_LTE:
+                        res = l <= r ? 1.0 : 0.0;
+                        break;
+                    case B_EQ:
+                        res = l == r ? 1.0 : 0.0;
+                        break;
+                    case B_NEQ:
+                        res = l != r ? 1.0 : 0.0;
+                        break;
+                    case B_BITAND:
+                        res = (double) (((long) l) & ((long) r));
+                        break;
+                    case B_BITXOR:
+                        res = (double) (((long) l) ^ ((long) r));
+                        break;
+                    case B_BITOR:
+                        res = (double) (((long) l) | ((long) r));
+                        break;
+                    case B_ANDAND:
+                        res = (l == 0.0) ? 0.0 : (r != 0.0 ? 1.0 : 0.0);
+                        break;
+                    case B_OROR:
+                        res = (l != 0.0) ? 1.0 : (r != 0.0 ? 1.0 : 0.0);
+                        break;
+                    default:
+                        can_fold = 0;
+                        break;
                 }
-            }
-
-            if (all_number)
-            {
-                double vals[4] = {0.0, 0.0, 0.0, 0.0};
-                for (int i = 0; i < n->v.func.argc && i < 4; ++i)
-                    vals[i] = node_get_number(n->v.func.args[i]);
-
-                if (n->v.func.funcPtr)
+                if (can_fold)
                 {
-                    double res = 0.0;
-                    if (n->v.func.argc == 0)
-                    {
-                        double (*f0)(void) = (double (*)(void))n->v.func.funcPtr;
-                        res = f0();
-                    }
-                    else if (n->v.func.argc == 1)
-                    {
-                        double (*f1)(double) = (double (*)(double))n->v.func.funcPtr;
-                        res = f1(vals[0]);
-                    }
-                    else if (n->v.func.argc == 2)
-                    {
-                        double (*f2)(double, double) = (double (*)(double, double))n->v.func.funcPtr;
-                        res = f2(vals[0], vals[1]);
-                    }
-                    else
-                    {
-                        return n; /* unsupported arity for folding */
-                    }
-
                     int pos = n->pos;
                     free_node(n);
                     return node_number(res, pos);
                 }
-                else
-                {
-                    return n; /* unknown func */
-                }
             }
+
+            return n;
         }
 
-        return n;
-    }
+        case N_FUNC:
+        {
+            /* optimize each argument */
+            for (int i = 0; i < n->v.func.argc; ++i)
+            {
+                n->v.func.args[i] = optimize_node(n->v.func.args[i]);
+            }
 
-    case N_ASSIGN:
-    {
-        // do not fold assignment itself (side-effect), but optimize its rhs
-        n->v.assign.rhs = optimize_node(n->v.assign.rhs);
-        return n;
-    }
+            /* if subtree contains no real database nodes and all args are numbers, constant-fold */
+            if (!node_contains_realDatabaseId(n))
+            {
+                int all_number = 1;
+                for (int i = 0; i < n->v.func.argc; ++i)
+                {
+                    if (!n->v.func.args[i] || n->v.func.args[i]->type != N_NUMBER)
+                    {
+                        all_number = 0;
+                        break;
+                    }
+                }
 
-    default:
-        return n;
+                if (all_number)
+                {
+                    double vals[4] = { 0.0, 0.0, 0.0, 0.0 };
+                    for (int i = 0; i < n->v.func.argc && i < 4; ++i)
+                        vals[i] = node_get_number(n->v.func.args[i]);
+
+                    if (n->v.func.funcPtr)
+                    {
+                        double res = 0.0;
+                        if (n->v.func.argc == 0)
+                        {
+                            double (*f0)(void) = (double (*)(void))n->v.func.funcPtr;
+                            res = f0();
+                        }
+                        else if (n->v.func.argc == 1)
+                        {
+                            double (*f1)(double) = (double (*)(double))n->v.func.funcPtr;
+                            res = f1(vals[0]);
+                        }
+                        else if (n->v.func.argc == 2)
+                        {
+                            double (*f2)(double, double) = (double (*)(double, double))n->v.func.funcPtr;
+                            res = f2(vals[0], vals[1]);
+                        }
+                        else
+                        {
+                            return n; /* unsupported arity for folding */
+                        }
+
+                        int pos = n->pos;
+                        free_node(n);
+                        return node_number(res, pos);
+                    }
+                    else
+                    {
+                        return n; /* unknown func */
+                    }
+                }
+            }
+
+            return n;
+        }
+
+        case N_ASSIGN:
+        {
+            // do not fold assignment itself (side-effect), but optimize its rhs
+            n->v.assign.rhs = optimize_node(n->v.assign.rhs);
+            return n;
+        }
+
+        default:
+            return n;
     }
 }
 
@@ -1898,7 +1899,7 @@ static Node* optimize_node(Node* n)
  * --------------------------------------------------
  * @return: 优化后的AST根节点
  ******************************************************/
-static Node* optimize_ast(Node* root)
+static Node* optimize_ast(Node *root)
 {
     return optimize_node(root);
 }
@@ -1953,7 +1954,7 @@ void eval_main(void)
         }
 
         toks.idx = 0;
-        Node* ast = NULL;
+        Node *ast = NULL;
 
         // parse
         // protect from parse errors with checks
