@@ -148,15 +148,20 @@ typedef struct {
     int cap;
 } RtMap;
 
-static void rt_init(RtMap *m, int cap)
+static RtMap s_rt = { 0 };
+
+static void rt_init(int cap)
 {
+    RtMap *m = &s_rt;
     m->sz = 0;
     m->cap = cap;
     m->arr = malloc(sizeof(RtEntry) * m->cap);
 }
 
-static void rt_set(RtMap *m, int id, double v)
+static void rt_set(int id, double v)
 {
+    RtMap *m = &s_rt;
+
     for (int i = 0; i < m->sz; i++)
     {
         if (m->arr[i].id == id)
@@ -178,8 +183,10 @@ static void rt_set(RtMap *m, int id, double v)
     m->sz++;
 }
 
-static double rt_get(RtMap *m, int id)
+static double rt_get(int id)
 {
+    RtMap *m = &s_rt;
+
     for (int i = 0; i < m->sz; i++)
     {
         if (m->arr[i].id == id)
@@ -192,8 +199,10 @@ static double rt_get(RtMap *m, int id)
     return 0.0;
 }
 
-static void rt_free(RtMap *m)
+static void rt_free()
 {
+    RtMap *m = &s_rt;
+
     free(m->arr);
 }
 
@@ -244,7 +253,7 @@ typedef enum {
 /********************************************
  * AST(Abstract Syntax Tree) Node definition
  ********************************************/
-typedef struct Node {
+typedef struct ASTNodeStruct {
     NodeType type;                  // node type
     int pos;                        // position in input for errors
     union {
@@ -252,25 +261,25 @@ typedef struct Node {
         int realDataBaseId;         // for N_REAL_DATABASE
         struct {
             UnaryOp op;             // operator
-            struct Node *child;     // operand
+            struct ASTNodeStruct *child;     // operand
         } unary;                    // for N_UNARY
         struct {
             BinaryOp op;            // operator
-            struct Node *left;      // left operand
-            struct Node *right;     // right operand
+            struct ASTNodeStruct *left;      // left operand
+            struct ASTNodeStruct *right;     // right operand
         } binary;                   // for N_BINARY
         struct {
             char *name;             // function name
             void *funcPtr;          // function pointer
-            struct Node **args;     // argument nodes
+            struct ASTNodeStruct **args;     // argument nodes
             int argc;               // number of arguments
         } func;                     // for N_FUNC
         struct {
             int id;                 // real database id
-            struct Node *rhs;       // right-hand side expression
+            struct ASTNodeStruct *rhs;       // right-hand side expression
         } assign;                   // for N_ASSIGN
     } v;                            // value
-} Node;
+} ASTNode_s;
 
 /**********************************
  * 函数名: pi
@@ -465,27 +474,27 @@ static const buildInFunc_s* findBuilDIn(const char *name, int len)
 //    return 0;
 //}
 
-static Node* node_number(double val, int pos)
+static ASTNode_s* node_number(double val, int pos)
 {
-    Node *n = malloc(sizeof(Node));
+    ASTNode_s *n = malloc(sizeof(ASTNode_s));
     n->type = N_NUMBER;
     n->pos = pos;
     n->v.number = val;
     return n;
 }
 
-static Node* node_realDataBase(int id, int pos)
+static ASTNode_s* node_realDataBase(int id, int pos)
 {
-    Node *n = malloc(sizeof(Node));
+    ASTNode_s *n = malloc(sizeof(ASTNode_s));
     n->type = N_REAL_DATABASE;
     n->pos = pos;
     n->v.realDataBaseId = id;
     return n;
 }
 
-static Node* node_unary(UnaryOp op, Node *child, int pos)
+static ASTNode_s* node_unary(UnaryOp op, ASTNode_s *child, int pos)
 {
-    Node *n = malloc(sizeof(Node));
+    ASTNode_s *n = malloc(sizeof(ASTNode_s));
     n->type = N_UNARY;
     n->pos = pos;
     n->v.unary.op = op;
@@ -493,9 +502,9 @@ static Node* node_unary(UnaryOp op, Node *child, int pos)
     return n;
 }
 
-static Node* node_binary(BinaryOp op, Node *l, Node *r, int pos)
+static ASTNode_s* node_binary(BinaryOp op, ASTNode_s *l, ASTNode_s *r, int pos)
 {
-    Node *n = malloc(sizeof(Node));
+    ASTNode_s *n = malloc(sizeof(ASTNode_s));
     n->type = N_BINARY;
     n->pos = pos;
     n->v.binary.op = op;
@@ -504,9 +513,9 @@ static Node* node_binary(BinaryOp op, Node *l, Node *r, int pos)
     return n;
 }
 
-static Node* node_func(const char *name, Node **args, int argc, int pos, void *funcPtr)
+static ASTNode_s* node_func(const char *name, ASTNode_s **args, int argc, int pos, void *funcPtr)
 {
-    Node *n = malloc(sizeof(Node));
+    ASTNode_s *n = malloc(sizeof(ASTNode_s));
     n->type = N_FUNC;
     n->pos = pos;
     n->v.func.name = strdup(name);
@@ -517,9 +526,9 @@ static Node* node_func(const char *name, Node **args, int argc, int pos, void *f
     return n;
 }
 
-static Node* node_assign(int id, Node *rhs, int pos)
+static ASTNode_s* node_assign(int id, ASTNode_s *rhs, int pos)
 {
-    Node *n = malloc(sizeof(Node));
+    ASTNode_s *n = malloc(sizeof(ASTNode_s));
     n->type = N_ASSIGN;
     n->pos = pos;
     n->v.assign.id = id;
@@ -527,7 +536,7 @@ static Node* node_assign(int id, Node *rhs, int pos)
     return n;
 }
 
-static void free_node(Node *n)
+static void free_node(ASTNode_s *n)
 {
     if (!n)
     {
@@ -565,7 +574,7 @@ static void free_node(Node *n)
 }
 
 // printing AST
-static void print_node(Node *n, const char *indent, int last)
+static void print_node(ASTNode_s *n, const char *indent, int last)
 {
     if (!n)
     {
@@ -699,7 +708,7 @@ static void print_node(Node *n, const char *indent, int last)
  * ---------------------------------------------------------
  * @return: 计算结果
  ***********************************************************/
-static double eval_node(Node *n, RtMap *rt)
+static double eval_node(ASTNode_s *n)
 {
     if (!n)
     {
@@ -711,10 +720,10 @@ static double eval_node(Node *n, RtMap *rt)
         case N_NUMBER:
             return n->v.number;
         case N_REAL_DATABASE:
-            return rt_get(rt, n->v.realDataBaseId);
+            return rt_get(n->v.realDataBaseId);
         case N_UNARY:
             {
-            double v = eval_node(n->v.unary.child, rt);
+            double v = eval_node(n->v.unary.child);
             if (n->v.unary.op == U_NEG)
             {
                 return -v;
@@ -732,58 +741,58 @@ static double eval_node(Node *n, RtMap *rt)
             switch (n->v.binary.op)
             {
                 case B_ADD:
-                    return eval_node(n->v.binary.left, rt) + eval_node(n->v.binary.right, rt);
+                    return eval_node(n->v.binary.left) + eval_node(n->v.binary.right);
                 case B_SUB:
-                    return eval_node(n->v.binary.left, rt) - eval_node(n->v.binary.right, rt);
+                    return eval_node(n->v.binary.left) - eval_node(n->v.binary.right);
                 case B_MUL:
-                    return eval_node(n->v.binary.left, rt) * eval_node(n->v.binary.right, rt);
+                    return eval_node(n->v.binary.left) * eval_node(n->v.binary.right);
                 case B_DIV:
                     {
-                    double r = eval_node(n->v.binary.right, rt);
+                    double r = eval_node(n->v.binary.right);
                     if (r == 0)
                     {
                         fprintf(stderr, "Runtime error: division by zero at pos %d\n", n->pos);
                         exit(1);
                     }
 
-                    return eval_node(n->v.binary.left, rt) / r;
+                    return eval_node(n->v.binary.left) / r;
                 }
                 case B_LSHIFT:
-                    return (double) (((long) eval_node(n->v.binary.left, rt)) << (int) eval_node(n->v.binary.right, rt));
+                    return (double) (((long) eval_node(n->v.binary.left)) << (int) eval_node(n->v.binary.right));
                 case B_RSHIFT:
-                    return (double) (((long) eval_node(n->v.binary.left, rt)) >> (int) eval_node(n->v.binary.right, rt));
+                    return (double) (((long) eval_node(n->v.binary.left)) >> (int) eval_node(n->v.binary.right));
                 case B_GT:
-                    return eval_node(n->v.binary.left, rt) > eval_node(n->v.binary.right, rt) ? 1.0 : 0.0;
+                    return eval_node(n->v.binary.left) > eval_node(n->v.binary.right) ? 1.0 : 0.0;
                 case B_GTE:
-                    return eval_node(n->v.binary.left, rt) >= eval_node(n->v.binary.right, rt) ? 1.0 : 0.0;
+                    return eval_node(n->v.binary.left) >= eval_node(n->v.binary.right) ? 1.0 : 0.0;
                 case B_LT:
-                    return eval_node(n->v.binary.left, rt) < eval_node(n->v.binary.right, rt) ? 1.0 : 0.0;
+                    return eval_node(n->v.binary.left) < eval_node(n->v.binary.right) ? 1.0 : 0.0;
                 case B_LTE:
-                    return eval_node(n->v.binary.left, rt) <= eval_node(n->v.binary.right, rt) ? 1.0 : 0.0;
+                    return eval_node(n->v.binary.left) <= eval_node(n->v.binary.right) ? 1.0 : 0.0;
                 case B_EQ:
-                    return eval_node(n->v.binary.left, rt) == eval_node(n->v.binary.right, rt) ? 1.0 : 0.0;
+                    return eval_node(n->v.binary.left) == eval_node(n->v.binary.right) ? 1.0 : 0.0;
                 case B_NEQ:
-                    return eval_node(n->v.binary.left, rt) != eval_node(n->v.binary.right, rt) ? 1.0 : 0.0;
+                    return eval_node(n->v.binary.left) != eval_node(n->v.binary.right) ? 1.0 : 0.0;
                 case B_BITAND:
-                    return (double) (((long) eval_node(n->v.binary.left, rt)) & ((long) eval_node(n->v.binary.right, rt)));
+                    return (double) (((long) eval_node(n->v.binary.left)) & ((long) eval_node(n->v.binary.right)));
                 case B_BITXOR:
-                    return (double) (((long) eval_node(n->v.binary.left, rt)) ^ ((long) eval_node(n->v.binary.right, rt)));
+                    return (double) (((long) eval_node(n->v.binary.left)) ^ ((long) eval_node(n->v.binary.right)));
                 case B_BITOR:
-                    return (double) (((long) eval_node(n->v.binary.left, rt)) | ((long) eval_node(n->v.binary.right, rt)));
+                    return (double) (((long) eval_node(n->v.binary.left)) | ((long) eval_node(n->v.binary.right)));
                 case B_ANDAND:
                     {
-                    double lv = eval_node(n->v.binary.left, rt);
+                    double lv = eval_node(n->v.binary.left);
                     if (EVAL_USE_SHORT_CIRCUIT && lv == 0.0)
                         return 0.0;
-                    double rv = eval_node(n->v.binary.right, rt);
+                    double rv = eval_node(n->v.binary.right);
                     return rv != 0.0 ? 1.0 : 0.0;
                 }
                 case B_OROR:
                     {
-                    double lv = eval_node(n->v.binary.left, rt);
+                    double lv = eval_node(n->v.binary.left);
                     if (EVAL_USE_SHORT_CIRCUIT && lv != 0.0)
                         return 1.0;
-                    double rv = eval_node(n->v.binary.right, rt);
+                    double rv = eval_node(n->v.binary.right);
                     return rv != 0.0 ? 1.0 : 0.0;
                 }
             }
@@ -796,7 +805,7 @@ static double eval_node(Node *n, RtMap *rt)
             for (int i = 0; i < n->v.func.argc; ++i)
             {
                 if (i < 4)
-                    args_vals[i] = eval_node(n->v.func.args[i], rt);
+                    args_vals[i] = eval_node(n->v.func.args[i]);
             }
 
             // dispatch based on arity
@@ -830,8 +839,8 @@ static double eval_node(Node *n, RtMap *rt)
         }
         case N_ASSIGN:
         {
-            double v = eval_node(n->v.assign.rhs, rt);
-            rt_set(rt, n->v.assign.id, v);
+            double v = eval_node(n->v.assign.rhs);
+            rt_set(n->v.assign.id, v);
             return v;
         }
     }
@@ -842,20 +851,20 @@ static double eval_node(Node *n, RtMap *rt)
 /*-------------------------------------------------- Parser functions follow grammar and precedence --------------------------------------------------*/
 
 // Forward declarations
-static Node* parse_assign(TokenList *toks);
-static Node* parse_logical_or_node(TokenList *toks);
-static Node* parse_logical_and_node(TokenList *toks);
-static Node* parse_bitor_node(TokenList *toks);
-static Node* parse_bitxor_node(TokenList *toks);
-static Node* parse_bitand_node(TokenList *toks);
-static Node* parse_equality_node(TokenList *toks);
-static Node* parse_relational_node(TokenList *toks);
-static Node* parse_shift_node(TokenList *toks);
-static Node* parse_add_node(TokenList *toks);
-static Node* parse_multiply_node(TokenList *toks);
-static Node* parse_unary_node(TokenList *toks);
-static Node* parse_power_node(TokenList *toks);
-static Node* parse_primary_node(TokenList *toks);
+static ASTNode_s* parse_assign(TokenList *toks);
+static ASTNode_s* parse_logical_or_node(TokenList *toks);
+static ASTNode_s* parse_logical_and_node(TokenList *toks);
+static ASTNode_s* parse_bitor_node(TokenList *toks);
+static ASTNode_s* parse_bitxor_node(TokenList *toks);
+static ASTNode_s* parse_bitand_node(TokenList *toks);
+static ASTNode_s* parse_equality_node(TokenList *toks);
+static ASTNode_s* parse_relational_node(TokenList *toks);
+static ASTNode_s* parse_shift_node(TokenList *toks);
+static ASTNode_s* parse_add_node(TokenList *toks);
+static ASTNode_s* parse_multiply_node(TokenList *toks);
+static ASTNode_s* parse_unary_node(TokenList *toks);
+static ASTNode_s* parse_power_node(TokenList *toks);
+static ASTNode_s* parse_primary_node(TokenList *toks);
 
 /***************************************
  * 函数名: match
@@ -888,7 +897,7 @@ static int match(TokenList *t, TokenType ty)
  * --------------------------------------------------
  * @return: 解析得到的AST节点
  **************************************************/
-static Node* parse_assign(TokenList *toks)
+static ASTNode_s* parse_assign(TokenList *toks)
 {
     Token cur = tlist_peek(toks);
     if (cur.type == T_REALDB &&
@@ -897,7 +906,7 @@ static Node* parse_assign(TokenList *toks)
     {
         Token h = tlist_next(toks); // consume REAL_DATABASE
         Token a = tlist_next(toks); // consume ASSIGN
-        Node *rhs = parse_assign(toks); // right-assoc
+        ASTNode_s *rhs = parse_assign(toks); // right-assoc
         int id = atoi(h.text);
         return node_assign(id, rhs, a.pos);
     }
@@ -915,12 +924,12 @@ static Node* parse_assign(TokenList *toks)
  * --------------------------------------------------
  * @return: 解析得到的AST节点
  **************************************************/
-static Node* parse_logical_or_node(TokenList *toks)
+static ASTNode_s* parse_logical_or_node(TokenList *toks)
 {
-    Node *left = parse_logical_and_node(toks);
+    ASTNode_s *left = parse_logical_and_node(toks);
     while (match(toks, T_OROR))
     {
-        Node *right = parse_logical_and_node(toks);
+        ASTNode_s *right = parse_logical_and_node(toks);
         left = node_binary(B_OROR, left, right, left->pos);
     }
 
@@ -937,12 +946,12 @@ static Node* parse_logical_or_node(TokenList *toks)
  * --------------------------------------------------
  * @return: 解析得到的AST节点
  **************************************************/
-static Node* parse_logical_and_node(TokenList *toks)
+static ASTNode_s* parse_logical_and_node(TokenList *toks)
 {
-    Node *left = parse_bitor_node(toks);
+    ASTNode_s *left = parse_bitor_node(toks);
     while (match(toks, T_ANDAND))
     {
-        Node *right = parse_bitor_node(toks);
+        ASTNode_s *right = parse_bitor_node(toks);
         left = node_binary(B_ANDAND, left, right, left->pos);
     }
 
@@ -959,12 +968,12 @@ static Node* parse_logical_and_node(TokenList *toks)
  * --------------------------------------------------
  * @return: 解析得到的AST节点
  ***************************************************/
-static Node* parse_bitor_node(TokenList *toks)
+static ASTNode_s* parse_bitor_node(TokenList *toks)
 {
-    Node *left = parse_bitxor_node(toks);
+    ASTNode_s *left = parse_bitxor_node(toks);
     while (match(toks, T_PIPE))
     {
-        Node *r = parse_bitxor_node(toks);
+        ASTNode_s *r = parse_bitxor_node(toks);
         left = node_binary(B_BITOR, left, r, left->pos);
     }
 
@@ -981,12 +990,12 @@ static Node* parse_bitor_node(TokenList *toks)
  * --------------------------------------------------
  * @return: 解析得到的AST节点
  ****************************************************/
-static Node* parse_bitxor_node(TokenList *toks)
+static ASTNode_s* parse_bitxor_node(TokenList *toks)
 {
-    Node *left = parse_bitand_node(toks);
+    ASTNode_s *left = parse_bitand_node(toks);
     while (match(toks, T_CARET))
     {
-        Node *r = parse_bitand_node(toks);
+        ASTNode_s *r = parse_bitand_node(toks);
         left = node_binary(B_BITXOR, left, r, left->pos);
     }
 
@@ -1003,12 +1012,12 @@ static Node* parse_bitxor_node(TokenList *toks)
  * --------------------------------------------------
  * @return: 解析得到的AST节点
  ****************************************************/
-static Node* parse_bitand_node(TokenList *toks)
+static ASTNode_s* parse_bitand_node(TokenList *toks)
 {
-    Node *left = parse_equality_node(toks);
+    ASTNode_s *left = parse_equality_node(toks);
     while (match(toks, T_AMP))
     {
-        Node *r = parse_equality_node(toks);
+        ASTNode_s *r = parse_equality_node(toks);
         left = node_binary(B_BITAND, left, r, left->pos);
     }
 
@@ -1025,19 +1034,19 @@ static Node* parse_bitand_node(TokenList *toks)
  * --------------------------------------------------
  * @return: 解析得到的AST节点
  ****************************************************/
-static Node* parse_equality_node(TokenList *toks)
+static ASTNode_s* parse_equality_node(TokenList *toks)
 {
-    Node *left = parse_relational_node(toks);
+    ASTNode_s *left = parse_relational_node(toks);
     while (1)
     {
         if (match(toks, T_EQ))
         {
-            Node *r = parse_relational_node(toks);
+            ASTNode_s *r = parse_relational_node(toks);
             left = node_binary(B_EQ, left, r, left->pos);
         }
         else if (match(toks, T_NEQ))
         {
-            Node *r = parse_relational_node(toks);
+            ASTNode_s *r = parse_relational_node(toks);
             left = node_binary(B_NEQ, left, r, left->pos);
         }
         else
@@ -1057,29 +1066,29 @@ static Node* parse_equality_node(TokenList *toks)
  * --------------------------------------------------
  * @return: 解析得到的AST节点
  ****************************************************/
-static Node* parse_relational_node(TokenList *toks)
+static ASTNode_s* parse_relational_node(TokenList *toks)
 {
-    Node *left = parse_shift_node(toks);
+    ASTNode_s *left = parse_shift_node(toks);
     while (1)
     {
         if (match(toks, T_GT))
         {
-            Node *r = parse_shift_node(toks);
+            ASTNode_s *r = parse_shift_node(toks);
             left = node_binary(B_GT, left, r, left->pos);
         }
         else if (match(toks, T_GTE))
         {
-            Node *r = parse_shift_node(toks);
+            ASTNode_s *r = parse_shift_node(toks);
             left = node_binary(B_GTE, left, r, left->pos);
         }
         else if (match(toks, T_LT))
         {
-            Node *r = parse_shift_node(toks);
+            ASTNode_s *r = parse_shift_node(toks);
             left = node_binary(B_LT, left, r, left->pos);
         }
         else if (match(toks, T_LTE))
         {
-            Node *r = parse_shift_node(toks);
+            ASTNode_s *r = parse_shift_node(toks);
             left = node_binary(B_LTE, left, r, left->pos);
         }
         else
@@ -1099,19 +1108,19 @@ static Node* parse_relational_node(TokenList *toks)
  * --------------------------------------------------
  * @return: 解析得到的AST节点
  ****************************************************/
-static Node* parse_shift_node(TokenList *toks)
+static ASTNode_s* parse_shift_node(TokenList *toks)
 {
-    Node *left = parse_add_node(toks);
+    ASTNode_s *left = parse_add_node(toks);
     while (1)
     {
         if (match(toks, T_LSHIFT))
         {
-            Node *r = parse_add_node(toks);
+            ASTNode_s *r = parse_add_node(toks);
             left = node_binary(B_LSHIFT, left, r, left->pos);
         }
         else if (match(toks, T_RSHIFT))
         {
-            Node *r = parse_add_node(toks);
+            ASTNode_s *r = parse_add_node(toks);
             left = node_binary(B_RSHIFT, left, r, left->pos);
         }
         else
@@ -1131,19 +1140,19 @@ static Node* parse_shift_node(TokenList *toks)
  * --------------------------------------------------
  * @return: 解析得到的AST节点
  ****************************************************/
-static Node* parse_add_node(TokenList *toks)
+static ASTNode_s* parse_add_node(TokenList *toks)
 {
-    Node *left = parse_multiply_node(toks);
+    ASTNode_s *left = parse_multiply_node(toks);
     while (1)
     {
         if (match(toks, T_PLUS))
         {
-            Node *r = parse_multiply_node(toks);
+            ASTNode_s *r = parse_multiply_node(toks);
             left = node_binary(B_ADD, left, r, left->pos);
         }
         else if (match(toks, T_MINUS))
         {
-            Node *r = parse_multiply_node(toks);
+            ASTNode_s *r = parse_multiply_node(toks);
             left = node_binary(B_SUB, left, r, left->pos);
         }
         else
@@ -1163,19 +1172,19 @@ static Node* parse_add_node(TokenList *toks)
  * --------------------------------------------------
  * @return: 解析得到的AST节点
  ****************************************************/
-static Node* parse_multiply_node(TokenList *toks)
+static ASTNode_s* parse_multiply_node(TokenList *toks)
 {
-    Node *left = parse_unary_node(toks);
+    ASTNode_s *left = parse_unary_node(toks);
     while (1)
     {
         if (match(toks, T_MUL))
         {
-            Node *r = parse_unary_node(toks);
+            ASTNode_s *r = parse_unary_node(toks);
             left = node_binary(B_MUL, left, r, left->pos);
         }
         else if (match(toks, T_DIV))
         {
-            Node *r = parse_unary_node(toks);
+            ASTNode_s *r = parse_unary_node(toks);
             left = node_binary(B_DIV, left, r, left->pos);
         }
         else
@@ -1195,23 +1204,23 @@ static Node* parse_multiply_node(TokenList *toks)
  * --------------------------------------------------
  * @return: 解析得到的AST节点
  ****************************************************/
-static Node* parse_unary_node(TokenList *toks)
+static ASTNode_s* parse_unary_node(TokenList *toks)
 {
     if (match(toks, T_NOT))
     {
-        Node *op = parse_unary_node(toks);
+        ASTNode_s *op = parse_unary_node(toks);
         return node_unary(U_NOT, op, op->pos);
     }
 
     if (match(toks, T_TILDE))
     {
-        Node *op = parse_unary_node(toks);
+        ASTNode_s *op = parse_unary_node(toks);
         return node_unary(U_BITNOT, op, op->pos);
     }
 
     if (match(toks, T_MINUS))
     {
-        Node *op = parse_unary_node(toks);
+        ASTNode_s *op = parse_unary_node(toks);
         return node_unary(U_NEG, op, op->pos);
     }
 
@@ -1228,7 +1237,7 @@ static Node* parse_unary_node(TokenList *toks)
  * --------------------------------------------------
  * @return: 解析得到的AST节点
  ****************************************************/
-static Node* parse_power_node(TokenList *toks)
+static ASTNode_s* parse_power_node(TokenList *toks)
 {
     Token cur = tlist_peek(toks);
 
@@ -1242,14 +1251,14 @@ static Node* parse_power_node(TokenList *toks)
             exit(1);
         }
         // parse argument list (comma separated)
-        Node **args = NULL;
+        ASTNode_s **args = NULL;
         int argc = 0;
         if (!match(toks, T_RP))
         {
             while (1)
             {
-                Node *a = parse_assign(toks);
-                args = realloc(args, sizeof(Node*) * (argc + 1));
+                ASTNode_s *a = parse_assign(toks);
+                args = realloc(args, sizeof(ASTNode_s*) * (argc + 1));
                 args[argc++] = a;
                 if (match(toks, T_RP))
                     break;
@@ -1267,7 +1276,7 @@ static Node* parse_power_node(TokenList *toks)
             exit(1);
         }
 
-        Node *fn = node_func(cur.text, args, argc, cur.pos, (void*) func->funcPtr);
+        ASTNode_s *fn = node_func(cur.text, args, argc, cur.pos, (void*) func->funcPtr);
         return fn;
     }
 
@@ -1284,7 +1293,7 @@ static Node* parse_power_node(TokenList *toks)
  * --------------------------------------------------
  * @return: 解析得到的AST节点
  ****************************************************/
-static Node* parse_primary_node(TokenList *toks)
+static ASTNode_s* parse_primary_node(TokenList *toks)
 {
     Token t = tlist_peek(toks);
     if (t.type == T_NUM)
@@ -1308,7 +1317,7 @@ static Node* parse_primary_node(TokenList *toks)
 
     if (match(toks, T_LP))
     {
-        Node *v = parse_assign(toks);
+        ASTNode_s *v = parse_assign(toks);
         Token r = tlist_peek(toks);
         if (!match(toks, T_RP))
         {
@@ -1635,7 +1644,7 @@ static void print_error_with_caret(const char *line, int pos)
  * --------------------------------------------------
  * @return: 包含真实数据库ID节点返回1, 否则返回0
  ****************************************************/
-static int node_contains_realDatabaseId(Node *n)
+static int node_contains_realDatabaseId(ASTNode_s *n)
 {
     if (!n)
     {
@@ -1681,7 +1690,7 @@ static int node_contains_realDatabaseId(Node *n)
  * --------------------------------------------------
  * @return: 数字节点的值
  ****************************************************/
-static double node_get_number(Node *n)
+static double node_get_number(ASTNode_s *n)
 {
     return n->v.number;
 }
@@ -1698,7 +1707,7 @@ static double node_get_number(Node *n)
  * --------------------------------------------------
  * @return: 优化后的AST节点
  ****************************************************/
-static Node* optimize_node(Node *n)
+static ASTNode_s* optimize_node(ASTNode_s *n)
 {
     if (!n)
     {
@@ -1899,7 +1908,7 @@ static Node* optimize_node(Node *n)
  * --------------------------------------------------
  * @return: 优化后的AST根节点
  ******************************************************/
-static Node* optimize_ast(Node *root)
+static ASTNode_s* optimize_ast(ASTNode_s *root)
 {
     return optimize_node(root);
 }
@@ -1916,9 +1925,7 @@ static Node* optimize_ast(Node *root)
 void eval_main(void)
 {
     char line[8192];
-    RtMap rt = { 0 };
-
-    rt_init(&rt, 8192);
+    rt_init(8192);
     printf("expr> ");
 
     while (fgets(line, sizeof(line), stdin))
@@ -1954,7 +1961,7 @@ void eval_main(void)
         }
 
         toks.idx = 0;
-        Node *ast = NULL;
+        ASTNode_s *ast = NULL;
 
         // parse
         // protect from parse errors with checks
@@ -1980,12 +1987,12 @@ void eval_main(void)
         print_node(ast, "", 1);
 
         // evaluate
-        double res = eval_node(ast, &rt);
+        double res = eval_node(ast);
         printf("Result: %g\n", res);
         free_node(ast);
         tlist_free(&toks);
         printf("expr> ");
     }
 
-    rt_free(&rt);
+    rt_free();
 }
