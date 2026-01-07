@@ -1950,20 +1950,6 @@ static ASTNode_s* optimize_node(ASTNode_s *n)
 }
 
 /******************************************************
- * 函数名: optimize_ast
- * 功能: 优化AST
- * --------------------------------------------------
- * 输入参数: root - AST根节点
- * 输出参数: 无
- * --------------------------------------------------
- * @return: 优化后的AST根节点
- ******************************************************/
-static ASTNode_s* optimize_ast(ASTNode_s *root)
-{
-    return optimize_node(root);
-}
-
-/******************************************************
  * 函数名: eval_main
  * 功能: 主评估循环
  * --------------------------------------------------
@@ -2032,7 +2018,7 @@ void eval_main(void)
         print_node(ast, "", 1);
 
         // optimize
-        ast = optimize_ast(ast);
+        ast = optimize_node(ast);
         printf("Optimized AST:\n");
         print_node(ast, "", 1);
 
