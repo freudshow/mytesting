@@ -5,6 +5,11 @@
 #include <math.h>
 #include <stdint.h>
 #include <limits.h>
+#include <stdarg.h>
+
+/* strdup/strndup may require feature macros on some platforms; declare them to avoid implicit declaration warnings */
+char* strdup(const char *s);
+char* strndup(const char *s, size_t n);
 
 #define EVAL_USE_SHORT_CIRCUIT      0       // enable short-circuit evaluation
 
@@ -394,31 +399,31 @@ typedef struct {
 } funcType_s;
 
 static const funcType_s s_buildInFunctions[] = {
-                                                    { "abs", fabs, 1 },
-                                                    { "acos", acos, 1 },
-                                                    { "asin", asin, 1 },
-                                                    { "atan", atan, 1 },
-                                                    { "atan2", atan2, 2 },
-                                                    { "ceil", ceil, 1 },
-                                                    { "cos", cos, 1 },
-                                                    { "cosh", cosh, 1 },
-                                                    { "e", e, 0 },
-                                                    { "exp", exp, 1 },
-                                                    { "fac", fac, 1 },
-                                                    { "floor", floor, 1 },
-                                                    { "ln", log, 1 },
-                                                    { "log", log, 1 },
-                                                    { "log10", log10, 1 },
-                                                    { "ncr", ncr, 2 },
-                                                    { "npr", npr, 2 },
-                                                    { "pi", pi, 0 },
-                                                    { "pow", pow, 2 },
-                                                    { "sin", sin, 1 },
-                                                    { "sinh", sinh, 1 },
-                                                    { "sqrt", sqrt, 1 },
-                                                    { "tan", tan, 1 },
-                                                    { "tanh", tanh, 1 },
-                                                    { NULL, NULL, 0 }
+                                                 { "abs", fabs, 1 },
+                                                 { "acos", acos, 1 },
+                                                 { "asin", asin, 1 },
+                                                 { "atan", atan, 1 },
+                                                 { "atan2", atan2, 2 },
+                                                 { "ceil", ceil, 1 },
+                                                 { "cos", cos, 1 },
+                                                 { "cosh", cosh, 1 },
+                                                 { "e", e, 0 },
+                                                 { "exp", exp, 1 },
+                                                 { "fac", fac, 1 },
+                                                 { "floor", floor, 1 },
+                                                 { "ln", log, 1 },
+                                                 { "log", log, 1 },
+                                                 { "log10", log10, 1 },
+                                                 { "ncr", ncr, 2 },
+                                                 { "npr", npr, 2 },
+                                                 { "pi", pi, 0 },
+                                                 { "pow", pow, 2 },
+                                                 { "sin", sin, 1 },
+                                                 { "sinh", sinh, 1 },
+                                                 { "sqrt", sqrt, 1 },
+                                                 { "tan", tan, 1 },
+                                                 { "tanh", tanh, 1 },
+                                                 { NULL, NULL, 0 }
 };
 
 double max(double a, double b)
@@ -435,7 +440,7 @@ double min(double a, double b)
 static funcType_s customFunctions[] = {
                                         { "max", max, 2 },
                                         { "min", min, 2 },  //按需向下面扩展函数
-};
+        };
 
 /***************************************************
  * 函数名: findBuilDIn
@@ -919,6 +924,23 @@ static ASTNode_s* parse_unary_node(TokenList *toks);
 static ASTNode_s* parse_power_node(TokenList *toks);
 static ASTNode_s* parse_primary_node(TokenList *toks);
 
+// parse error state (non-fatal)
+static int s_parse_error = 0;
+static int s_parse_error_pos = 0;
+static char s_parse_error_msg[256];
+
+static void set_parse_error(const char *fmt, int pos, ...)
+{
+    if (s_parse_error)
+        return; // keep first error
+    s_parse_error = 1;
+    s_parse_error_pos = pos;
+    va_list ap;
+    va_start(ap, pos);
+    vsnprintf(s_parse_error_msg, sizeof(s_parse_error_msg), fmt, ap);
+    va_end(ap);
+}
+
 /***************************************
  * 函数名: match
  * 功能: 如果下一个Token类型匹配则消耗掉它
@@ -960,6 +982,11 @@ static ASTNode_s* parse_assign(TokenList *toks)
         Token h = tlist_next(toks); // consume REAL_DATABASE
         Token a = tlist_next(toks); // consume ASSIGN
         ASTNode_s *rhs = parse_assign(toks); // right-assoc
+        if (!rhs)
+        {
+            // parse error propagated
+            return NULL;
+        }
         int id = atoi(h.text);
         return node_assign(id, rhs, a.pos);
     }
@@ -980,9 +1007,20 @@ static ASTNode_s* parse_assign(TokenList *toks)
 static ASTNode_s* parse_logical_or_node(TokenList *toks)
 {
     ASTNode_s *left = parse_logical_and_node(toks);
+    if (!left)
+    {
+        return NULL;
+    }
+
     while (match(toks, T_OROR))
     {
         ASTNode_s *right = parse_logical_and_node(toks);
+        if (!right)
+        {
+            free_node(left);
+            return NULL;
+        }
+
         left = node_binary(B_OROR, left, right, left->pos);
     }
 
@@ -1002,9 +1040,20 @@ static ASTNode_s* parse_logical_or_node(TokenList *toks)
 static ASTNode_s* parse_logical_and_node(TokenList *toks)
 {
     ASTNode_s *left = parse_bitor_node(toks);
+    if (!left)
+    {
+        return NULL;
+    }
+
     while (match(toks, T_ANDAND))
     {
         ASTNode_s *right = parse_bitor_node(toks);
+        if (!right)
+        {
+            free_node(left);
+            return NULL;
+        }
+
         left = node_binary(B_ANDAND, left, right, left->pos);
     }
 
@@ -1024,9 +1073,20 @@ static ASTNode_s* parse_logical_and_node(TokenList *toks)
 static ASTNode_s* parse_bitor_node(TokenList *toks)
 {
     ASTNode_s *left = parse_bitxor_node(toks);
+    if (!left)
+    {
+        return NULL;
+    }
+
     while (match(toks, T_PIPE))
     {
         ASTNode_s *r = parse_bitxor_node(toks);
+        if (!r)
+        {
+            free_node(left);
+            return NULL;
+        }
+
         left = node_binary(B_BITOR, left, r, left->pos);
     }
 
@@ -1046,9 +1106,20 @@ static ASTNode_s* parse_bitor_node(TokenList *toks)
 static ASTNode_s* parse_bitxor_node(TokenList *toks)
 {
     ASTNode_s *left = parse_bitand_node(toks);
+    if (!left)
+    {
+        return NULL;
+    }
+
     while (match(toks, T_CARET))
     {
         ASTNode_s *r = parse_bitand_node(toks);
+        if (!r)
+        {
+            free_node(left);
+            return NULL;
+        }
+
         left = node_binary(B_BITXOR, left, r, left->pos);
     }
 
@@ -1068,9 +1139,20 @@ static ASTNode_s* parse_bitxor_node(TokenList *toks)
 static ASTNode_s* parse_bitand_node(TokenList *toks)
 {
     ASTNode_s *left = parse_equality_node(toks);
+    if (!left)
+    {
+        return NULL;
+    }
+
     while (match(toks, T_AMP))
     {
         ASTNode_s *r = parse_equality_node(toks);
+        if (!r)
+        {
+            free_node(left);
+            return NULL;
+        }
+
         left = node_binary(B_BITAND, left, r, left->pos);
     }
 
@@ -1090,16 +1172,33 @@ static ASTNode_s* parse_bitand_node(TokenList *toks)
 static ASTNode_s* parse_equality_node(TokenList *toks)
 {
     ASTNode_s *left = parse_relational_node(toks);
+    if (!left)
+    {
+        return NULL;
+    }
+
     while (1)
     {
         if (match(toks, T_EQ))
         {
             ASTNode_s *r = parse_relational_node(toks);
+            if (!r)
+            {
+                free_node(left);
+                return NULL;
+            }
+
             left = node_binary(B_EQ, left, r, left->pos);
         }
         else if (match(toks, T_NEQ))
         {
             ASTNode_s *r = parse_relational_node(toks);
+            if (!r)
+            {
+                free_node(left);
+                return NULL;
+            }
+
             left = node_binary(B_NEQ, left, r, left->pos);
         }
         else
@@ -1122,26 +1221,55 @@ static ASTNode_s* parse_equality_node(TokenList *toks)
 static ASTNode_s* parse_relational_node(TokenList *toks)
 {
     ASTNode_s *left = parse_shift_node(toks);
+    if (!left)
+    {
+        return NULL;
+    }
+
     while (1)
     {
         if (match(toks, T_GT))
         {
             ASTNode_s *r = parse_shift_node(toks);
+            if (!r)
+            {
+                free_node(left);
+                return NULL;
+            }
+
             left = node_binary(B_GT, left, r, left->pos);
         }
         else if (match(toks, T_GTE))
         {
             ASTNode_s *r = parse_shift_node(toks);
+            if (!r)
+            {
+                free_node(left);
+                return NULL;
+            }
+
             left = node_binary(B_GTE, left, r, left->pos);
         }
         else if (match(toks, T_LT))
         {
             ASTNode_s *r = parse_shift_node(toks);
+            if (!r)
+            {
+                free_node(left);
+                return NULL;
+            }
+
             left = node_binary(B_LT, left, r, left->pos);
         }
         else if (match(toks, T_LTE))
         {
             ASTNode_s *r = parse_shift_node(toks);
+            if (!r)
+            {
+                free_node(left);
+                return NULL;
+            }
+
             left = node_binary(B_LTE, left, r, left->pos);
         }
         else
@@ -1164,16 +1292,33 @@ static ASTNode_s* parse_relational_node(TokenList *toks)
 static ASTNode_s* parse_shift_node(TokenList *toks)
 {
     ASTNode_s *left = parse_add_node(toks);
+    if (!left)
+    {
+        return NULL;
+    }
+
     while (1)
     {
         if (match(toks, T_LSHIFT))
         {
             ASTNode_s *r = parse_add_node(toks);
+            if (!r)
+            {
+                free_node(left);
+                return NULL;
+            }
+
             left = node_binary(B_LSHIFT, left, r, left->pos);
         }
         else if (match(toks, T_RSHIFT))
         {
             ASTNode_s *r = parse_add_node(toks);
+            if (!r)
+            {
+                free_node(left);
+                return NULL;
+            }
+
             left = node_binary(B_RSHIFT, left, r, left->pos);
         }
         else
@@ -1196,16 +1341,33 @@ static ASTNode_s* parse_shift_node(TokenList *toks)
 static ASTNode_s* parse_add_node(TokenList *toks)
 {
     ASTNode_s *left = parse_multiply_node(toks);
+    if (!left)
+    {
+        return NULL;
+    }
+
     while (1)
     {
         if (match(toks, T_PLUS))
         {
             ASTNode_s *r = parse_multiply_node(toks);
+            if (!r)
+            {
+                free_node(left);
+                return NULL;
+            }
+
             left = node_binary(B_ADD, left, r, left->pos);
         }
         else if (match(toks, T_MINUS))
         {
             ASTNode_s *r = parse_multiply_node(toks);
+            if (!r)
+            {
+                free_node(left);
+                return NULL;
+            }
+
             left = node_binary(B_SUB, left, r, left->pos);
         }
         else
@@ -1228,16 +1390,33 @@ static ASTNode_s* parse_add_node(TokenList *toks)
 static ASTNode_s* parse_multiply_node(TokenList *toks)
 {
     ASTNode_s *left = parse_unary_node(toks);
+    if (!left)
+    {
+        return NULL;
+    }
+
     while (1)
     {
         if (match(toks, T_MUL))
         {
             ASTNode_s *r = parse_unary_node(toks);
+            if (!r)
+            {
+                free_node(left);
+                return NULL;
+            }
+
             left = node_binary(B_MUL, left, r, left->pos);
         }
         else if (match(toks, T_DIV))
         {
             ASTNode_s *r = parse_unary_node(toks);
+            if (!r)
+            {
+                free_node(left);
+                return NULL;
+            }
+
             left = node_binary(B_DIV, left, r, left->pos);
         }
         else
@@ -1262,18 +1441,33 @@ static ASTNode_s* parse_unary_node(TokenList *toks)
     if (match(toks, T_NOT))
     {
         ASTNode_s *op = parse_unary_node(toks);
+        if (!op)
+        {
+            return NULL;
+        }
+
         return node_unary(U_NOT, op, op->pos);
     }
 
     if (match(toks, T_TILDE))
     {
         ASTNode_s *op = parse_unary_node(toks);
+        if (!op)
+        {
+            return NULL;
+        }
+
         return node_unary(U_BITNOT, op, op->pos);
     }
 
     if (match(toks, T_MINUS))
     {
         ASTNode_s *op = parse_unary_node(toks);
+        if (!op)
+        {
+            return NULL;
+        }
+
         return node_unary(U_NEG, op, op->pos);
     }
 
@@ -1294,12 +1488,16 @@ static ASTNode_s* parse_power_node(TokenList *toks)
 {
     Token cur = tlist_peek(toks);
 
-    const funcType_s *func = findBuilDIn(cur.text, (int) strlen(cur.text));
+    const funcType_s *func = NULL;
 
-    if (!func)
+    if (cur.type == T_IDENT && cur.text)
     {
-        int customFunctionCount = sizeof(customFunctions) / sizeof(customFunctions[0]);
-        func = find_customFunction(customFunctions, customFunctionCount, cur.text, (int) strlen(cur.text));
+        func = findBuilDIn(cur.text, (int) strlen(cur.text));
+        if (!func)
+        {
+            int customFunctionCount = sizeof(customFunctions) / sizeof(customFunctions[0]);
+            func = find_customFunction(customFunctions, customFunctionCount, cur.text, (int) strlen(cur.text));
+        }
     }
 
     if (cur.type == T_IDENT && func != NULL)
@@ -1307,9 +1505,10 @@ static ASTNode_s* parse_power_node(TokenList *toks)
         tlist_next(toks);
         if (!match(toks, T_LP))
         {
-            fprintf(stderr, "Syntax error: expected '(' after %s at %d\n", cur.text, cur.pos);
-            exit(1);
+            set_parse_error("Syntax error: expected '(' after %s", cur.pos, cur.text);
+            return NULL;
         }
+
         // parse argument list (comma separated)
         ASTNode_s **args = NULL;
         int argc = 0;
@@ -1318,22 +1517,51 @@ static ASTNode_s* parse_power_node(TokenList *toks)
             while (1)
             {
                 ASTNode_s *a = parse_assign(toks);
+                if (!a)
+                {
+                    // free existing args
+                    for (int j = 0; j < argc; ++j)
+                    {
+                        free_node(args[j]);
+                    }
+
+                    free(args);
+                    return NULL;
+                }
+
                 args = realloc(args, sizeof(ASTNode_s*) * (argc + 1));
                 args[argc++] = a;
                 if (match(toks, T_RP))
+                {
                     break;
+                }
+
                 if (!match(toks, T_COMMA))
                 {
-                    fprintf(stderr, "Syntax error: expected ',' or ')' after %s at %d\n", cur.text, cur.pos);
-                    exit(1);
+                    set_parse_error("Syntax error: expected ',' or ')' after %s", cur.pos, cur.text);
+                    // free args
+                    for (int j = 0; j < argc; ++j)
+                    {
+                        free_node(args[j]);
+                    }
+
+                    free(args);
+                    return NULL;
                 }
             }
         }
+
         // validate arity
         if (func->arity >= 0 && func->arity != argc)
         {
-            fprintf(stderr, "Syntax error: function %s expects %d args, got %d at %d\n", cur.text, func->arity, argc, cur.pos);
-            exit(1);
+            set_parse_error("Syntax error: function %s expects %d args, got %d", cur.pos, cur.text, func->arity, argc);
+            for (int j = 0; j < argc; ++j)
+            {
+                free_node(args[j]);
+            }
+
+            free(args);
+            return NULL;
         }
 
         ASTNode_s *fn = node_func(cur.text, args, argc, cur.pos, (void*) func->funcPtr);
@@ -1371,24 +1599,31 @@ static ASTNode_s* parse_primary_node(TokenList *toks)
 
     if (t.type == T_IDENT)
     {
-        fprintf(stderr, "Syntax error: unexpected identifier '%s' at %d\n", t.text, t.pos);
-        exit(1);
+        set_parse_error("Syntax error: unexpected identifier '%s'", t.pos, t.text);
+        return NULL;
     }
 
     if (match(toks, T_LP))
     {
         ASTNode_s *v = parse_assign(toks);
+        if (!v)
+        {
+            return NULL;
+        }
+
         Token r = tlist_peek(toks);
         if (!match(toks, T_RP))
         {
-            fprintf(stderr, "Syntax error: expected ')' at %d\n", r.pos);
-            exit(1);
+            set_parse_error("Syntax error: expected ')'", r.pos);
+            free_node(v);
+            return NULL;
         }
+
         return v;
     }
 
-    fprintf(stderr, "Syntax error: unexpected token at pos %d\n", t.pos);
-    exit(1);
+    set_parse_error("Syntax error: unexpected token at pos %d", t.pos);
+    return NULL;
 }
 
 /***************************************************
@@ -1777,7 +2012,7 @@ static ASTNode_s* optimize_node(ASTNode_s *n)
     switch (n->type)
     {
         case N_NUMBER:
-            case N_REAL_DATABASE:
+        case N_REAL_DATABASE:
             return n;
 
         case N_UNARY:
@@ -2025,7 +2260,18 @@ void eval_main(void)
         // parse
         // protect from parse errors with checks
         // using exit on errors inside parser
+        s_parse_error = 0; // reset parse error state
         ast = parse_assign(&toks);
+        if (!ast && s_parse_error)
+        {
+            fprintf(stderr, "%s\n", s_parse_error_msg);
+            print_error_with_caret(line, s_parse_error_pos);
+            s_parse_error = 0;
+            tlist_free(&toks);
+            printf("expr> ");
+            continue;
+        }
+
         Token after = tlist_peek(&toks);
         if (after.type != T_EOF)
         {
