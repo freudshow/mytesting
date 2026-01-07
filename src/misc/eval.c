@@ -1,5 +1,3 @@
-#define _POSIX_C_SOURCE 200809L
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -8,7 +6,7 @@
 #include <stdint.h>
 #include <limits.h>
 
-#define EVAL_USE_SHORT_CIRCUIT      1       // enable short-circuit evaluation
+#define EVAL_USE_SHORT_CIRCUIT      0       // enable short-circuit evaluation
 
 typedef enum {
     T_NUM,          // integer number or real number
@@ -165,7 +163,6 @@ static void rt_set(int id, double v)
     for (int i = 0; i < m->sz; i++)
     {
         if (m->arr[i].id == id)
-
         {
             m->arr[i].val = v;
             return;
@@ -394,9 +391,9 @@ typedef struct {
     const char *name;       // function name
     const void *funcPtr;    // function pointer
     int arity;              // number of arguments
-} buildInFunc_s;
+} funcType_s;
 
-static const buildInFunc_s s_buildInFunctions[] = {
+static const funcType_s s_buildInFunctions[] = {
                                                     { "abs", fabs, 1 },
                                                     { "acos", acos, 1 },
                                                     { "asin", asin, 1 },
@@ -424,10 +421,36 @@ static const buildInFunc_s s_buildInFunctions[] = {
                                                     { NULL, NULL, 0 }
 };
 
-static const buildInFunc_s* findBuilDIn(const char *name, int len)
+double max(double a, double b)
+{
+    return a > b ? a : b;
+}
+
+double min(double a, double b)
+{
+    return a < b ? a : b;
+}
+
+// 自定义的函数
+static funcType_s customFunctions[] = {
+                                        { "max", max, 2 },
+                                        { "min", min, 2 },  //按需向下面扩展函数
+};
+
+/***************************************************
+ * 函数名: findBuilDIn
+ * 功能: 查找内置函数
+ * --------------------------------------------------
+ * 输入参数: name - 函数名
+ *          len - 函数名长度
+ * 输出参数: 无
+ * --------------------------------------------------
+ * @return: 找到返回函数指针, 否则返回NULL
+ ****************************************************/
+static const funcType_s* findBuilDIn(const char *name, int len)
 {
     int imin = 0;
-    int imax = sizeof(s_buildInFunctions) / sizeof(buildInFunc_s) - 2;
+    int imax = sizeof(s_buildInFunctions) / sizeof(funcType_s) - 2;
 
     // binary search
     while (imax >= imin)
@@ -456,23 +479,35 @@ static const buildInFunc_s* findBuilDIn(const char *name, int len)
     return NULL;
 }
 
-//static const te_variable* find_lookup(const state *s, const char *name, int len)
-//{
-//    int iters;
-//    const te_variable *var;
-//    if (!s->lookup)
-//        return 0;
-//
-//    for (var = s->lookup, iters = s->lookup_len; iters; ++var, --iters)
-//    {
-//        if (strncmp(name, var->name, len) == 0 && var->name[len] == '\0')
-//        {
-//            return var;
-//        }
-//    }
-//
-//    return 0;
-//}
+/***************************************************
+ * 函数名: find_customFunction
+ * 功能: 查找自定义函数
+ * --------------------------------------------------
+ * 输入参数: s - 自定义函数数组
+ *          lookupLen - 自定义函数数组长度
+ *          name - 函数名
+ *          len - 函数名长度
+ * 输出参数: 无
+ * --------------------------------------------------
+ * @return: 找到返回函数指针, 否则返回NULL
+ ****************************************************/
+static const funcType_s* find_customFunction(const funcType_s *s, int lookupLen, const char *name, int len)
+{
+    if (!s || lookupLen <= 0)
+    {
+        return NULL;
+    }
+
+    for (int i; i < lookupLen; i++)
+    {
+        if (strncmp(name, s[i].name, len) == 0 && s[i].name[len] == '\0')
+        {
+            return (s + i);
+        }
+    }
+
+    return NULL;
+}
 
 static ASTNode_s* node_number(double val, int pos)
 {
@@ -599,7 +634,7 @@ static void print_node(ASTNode_s *n, const char *indent, int last)
             }
             break;
         case N_BINARY:
-            {
+        {
             const char *name = "?";
             switch (n->v.binary.op)
             {
@@ -685,7 +720,6 @@ static void print_node(ASTNode_s *n, const char *indent, int last)
     }
 }
 
-// evaluation with short-circuit
 /***********************************************************
  * 函数名: eval_node
  * 功能: 计算AST节点的值. 支持短路求值.
@@ -722,7 +756,7 @@ static double eval_node(ASTNode_s *n)
         case N_REAL_DATABASE:
             return rt_get(n->v.realDataBaseId);
         case N_UNARY:
-            {
+        {
             double v = eval_node(n->v.unary.child);
             if (n->v.unary.op == U_NEG)
             {
@@ -737,7 +771,7 @@ static double eval_node(ASTNode_s *n)
             return (double) (~((long) v));
         }
         case N_BINARY:
-            {
+        {
             switch (n->v.binary.op)
             {
                 case B_ADD:
@@ -747,7 +781,7 @@ static double eval_node(ASTNode_s *n)
                 case B_MUL:
                     return eval_node(n->v.binary.left) * eval_node(n->v.binary.right);
                 case B_DIV:
-                    {
+                {
                     double r = eval_node(n->v.binary.right);
                     if (r == 0)
                     {
@@ -780,32 +814,40 @@ static double eval_node(ASTNode_s *n)
                 case B_BITOR:
                     return (double) (((long) eval_node(n->v.binary.left)) | ((long) eval_node(n->v.binary.right)));
                 case B_ANDAND:
-                    {
+                {
                     double lv = eval_node(n->v.binary.left);
                     if (EVAL_USE_SHORT_CIRCUIT && lv == 0.0)
+                    {
                         return 0.0;
+                    }
+
                     double rv = eval_node(n->v.binary.right);
-                    return rv != 0.0 ? 1.0 : 0.0;
+                    return (lv == 0.0 || rv == 0.0) ? 0.0 : 1.0;
                 }
                 case B_OROR:
-                    {
+                {
                     double lv = eval_node(n->v.binary.left);
                     if (EVAL_USE_SHORT_CIRCUIT && lv != 0.0)
+                    {
                         return 1.0;
+                    }
+
                     double rv = eval_node(n->v.binary.right);
-                    return rv != 0.0 ? 1.0 : 0.0;
+                    return (lv == 0.0 && rv == 0.0) ? 0.0 : 1.0;
                 }
             }
             break;
         }
         case N_FUNC:
-            {
+        {
             // evaluate args
             double args_vals[4];
             for (int i = 0; i < n->v.func.argc; ++i)
             {
                 if (i < 4)
+                {
                     args_vals[i] = eval_node(n->v.func.args[i]);
+                }
             }
 
             // dispatch based on arity
@@ -1241,7 +1283,14 @@ static ASTNode_s* parse_power_node(TokenList *toks)
 {
     Token cur = tlist_peek(toks);
 
-    const buildInFunc_s *func = findBuilDIn(cur.text, (int) strlen(cur.text));
+    const funcType_s *func = findBuilDIn(cur.text, (int) strlen(cur.text));
+
+    if (!func)
+    {
+        int customFunctionCount = sizeof(customFunctions) / sizeof(customFunctions[0]);
+        func = find_customFunction(customFunctions, customFunctionCount, cur.text, (int) strlen(cur.text));
+    }
+
     if (cur.type == T_IDENT && func != NULL)
     {
         tlist_next(toks);
@@ -1812,6 +1861,7 @@ static ASTNode_s* optimize_node(ASTNode_s *n)
                         can_fold = 0;
                         break;
                 }
+
                 if (can_fold)
                 {
                     int pos = n->pos;
