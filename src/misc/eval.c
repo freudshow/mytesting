@@ -498,7 +498,7 @@ static const funcType_s* find_customFunction(const funcType_s *s, int lookupLen,
         return NULL;
     }
 
-    for (int i; i < lookupLen; i++)
+    for (int i = 0; i < lookupLen; i++)
     {
         if (strncmp(name, s[i].name, len) == 0 && s[i].name[len] == '\0')
         {
