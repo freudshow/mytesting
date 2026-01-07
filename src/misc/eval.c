@@ -866,6 +866,17 @@ static double eval_node(ASTNode_s *n)
             else if (n->v.func.argc == 1)
             {
                 double (*f1)(double) = (double (*)(double))n->v.func.funcPtr;
+
+                if(f1 == sin || f1 == cos || f1 == tan)
+                {
+                    return f1((double)(args_vals[0] * pi() / 180.0));
+                }
+
+                if(f1 == asin || f1 == acos || f1 == atan)
+                {
+                    return f1(args_vals[0]) * 180.0 / pi();
+                }
+
                 return f1(args_vals[0]);
             }
             else if (n->v.func.argc == 2)
@@ -1911,7 +1922,19 @@ static ASTNode_s* optimize_node(ASTNode_s *n)
                         else if (n->v.func.argc == 1)
                         {
                             double (*f1)(double) = (double (*)(double))n->v.func.funcPtr;
-                            res = f1(vals[0]);
+
+                            if(f1 == sin || f1 == cos || f1 == tan)
+                            {
+                                res = f1((double)(vals[0] * pi() / 180.0));
+                            }
+                            else if(f1 == asin || f1 == acos || f1 == atan)
+                            {
+                                res = f1(vals[0]) * 180.0 / pi();
+                            }
+                            else
+                            {
+                                res = f1(vals[0]);
+                            }
                         }
                         else if (n->v.func.argc == 2)
                         {
