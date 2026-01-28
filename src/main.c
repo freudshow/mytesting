@@ -14,10 +14,11 @@ void visitormain(void);
 void testbaud(void);
 void testDateTime(void);
 void eval_main(void);
-
+void jmpmain(void);
 int main(int argc, char **argv)
 {
 //    testDateTime();
-    eval_main();
+//    eval_main();
+    jmpmain();
     return 0;
 }

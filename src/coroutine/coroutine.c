@@ -8,9 +8,9 @@
 
 #if __APPLE__ && __MACH__
 	#include <sys/ucontext.h>
-#else 
+#else
 #include <ucontext.h>
-#endif 
+#endif
 
 #define STACK_SIZE (1024*1024)
 #define DEFAULT_COROUTINE 16
@@ -37,8 +37,7 @@ struct coroutine {
     char *stack;
 };
 
-struct coroutine*
-_co_new(struct schedule *S, coroutine_func func, void *ud)
+struct coroutine* _co_new(struct schedule *S, coroutine_func func, void *ud)
 {
     struct coroutine *co = malloc(sizeof(*co));
     co->func = func;
@@ -57,8 +56,7 @@ void _co_delete(struct coroutine *co)
     free(co);
 }
 
-struct schedule*
-coroutine_open(void)
+struct schedule* coroutine_open(void)
 {
     struct schedule *S = malloc(sizeof(*S));
     S->nco = 0;
@@ -112,6 +110,7 @@ int coroutine_new(struct schedule *S, coroutine_func func, void *ud)
             }
         }
     }
+
     assert(0);
     return -1;
 }
