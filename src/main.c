@@ -18,7 +18,7 @@ void jmpmain(void);
 int main(int argc, char **argv)
 {
 //    testDateTime();
-//    eval_main();
-    jmpmain();
+    eval_main();
+//    jmpmain();
     return 0;
 }

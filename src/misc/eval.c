@@ -2468,3 +2468,31 @@ double get_result(void *evaluator)
 
     return  ev->eval(ev->ast);
 }
+
+void eval_main(void)
+{
+    char input[4096];
+    while(1)
+    {
+        printf("Enter an arithmetic expression (or '.exit' to quit): ");
+        if (!fgets(input, sizeof(input), stdin))
+        {
+            break;
+        }
+
+        // remove trailing newline
+        input[strcspn(input, "\n")] = 0;
+
+        if (strcmp(input, ".exit") == 0)
+        {
+            break;
+        }
+
+        void *evaluator = get_newEvaluator(input, -1);
+        if (evaluator)
+        {
+            printf("Result: %f\n", get_result(evaluator));
+            free(evaluator);
+        }
+    }
+}
