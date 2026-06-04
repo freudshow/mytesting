@@ -1,3 +1,34 @@
+/******************************************************************************************************************
+ * 文件名: eval.c
+ * 功能: 计算算术表达式的值
+ * 作者: 宋宝善
+ * 时间: 2026年01月08日
+ * 版本: 1.0
+ * ----------------------------------------------------------------------------------------------------------------
+ * 算术表达式的语法(按照运算符的优先级从低到高):
+ * ----------------------------------------------------------------------------------------------------------------
+ * arithmetic: AssignExpr EOF
+ * AssignExpr: (RealDbRef | LinkDevRegRef) "=" AssignExpr | LogicalOrExpr
+ * LogicalOrExpr: LogicalAndExpr { "||" LogicalAndExpr }
+ * LogicalAndExpr: BitOrExpr { "&&" BitOrExpr }
+ * BitOrExpr: BitXorExpr { "|" BitXorExpr }
+ * BitXorExpr: BitAndExpr { "^" BitAndExpr }
+ * BitAndExpr: EqualityExpr { "&" EqualityExpr }
+ * EqualityExpr: RelationalExpr { ("==" | "!=") RelationalExpr }
+ * RelationalExpr: ShiftExpr { (">" | ">=" | "<" | "<=") ShiftExpr }
+ * ShiftExpr: AddExpr { ("<<" | ">>") AddExpr }
+ * AddExpr: MultiplyExpr { ("+" | "-") MultiplyExpr }
+ * MultiplyExpr: UnaryExpr { ("*" | "/") UnaryExpr }
+ * UnaryExpr: "!" UnaryExpr | "~" UnaryExpr | "-" UnaryExpr | PowerExpr
+ * PowerExpr: // this function level handles function calls and then falls through to FunctionCall | PrimaryExpr
+ * FunctionCall: IDENT "(" [ AssignExpr { "," AssignExpr } ] ")" // note: parser checks that IDENT matches a builtin function table or custom function table; otherwise it's an error
+ * PrimaryExpr: NUM | RealDbRef | LinkDevRegRef | "(" AssignExpr ")" // IDENT alone is a syntax error in the implemented parser (only allowed as function-call followed by '(')
+ * RealDbRef: '#' [0-9]+ // token T_REALDB
+ * LinkDevRegRef: '#' '(' INT ',' INT ',' INT ')' // token T_REALDB_LINK_DEV_REG, e.g. #(3, 12, 50)
+ * NUM: DIGITS | DIGITS "." DIGITS // token T_NUM
+ * DIGITS: [0-9]+ {'.' [0-9]+}
+ * IDENT: [a-zA-Z|_][a-zA-Z]*
+ *****************************************************************************************************************/
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -5,17 +36,21 @@
 #include <math.h>
 #include <stdint.h>
 #include <limits.h>
-#include <stdarg.h>
 
-/* strdup/strndup may require feature macros on some platforms; declare them to avoid implicit declaration warnings */
-char* strdup(const char *s);
-char* strndup(const char *s, size_t n);
+#define myprintk printf
 
 #define EVAL_USE_SHORT_CIRCUIT      0       // enable short-circuit evaluation
+
+void debugBufFormat2fp(FILE *fp, const char *file, const char *func, int line,
+        char *buf, int len, const char *fmt, ...);
+
+
+#define debug_error(format, ...)    debugBufFormat2fp(stdout, __FILE__, __func__, __LINE__, NULL, 0, format, ##__VA_ARGS__)
 
 typedef enum {
     T_NUM,          // integer number or real number
     T_REALDB,       // real database reference #id
+    T_REALDB_LINK_DEV_REG,  // real database reference by link, device and register
     T_IDENT,        // identifier (function name or variable)
     T_PLUS,         // '+'
     T_MINUS,        // '-'
@@ -44,11 +79,18 @@ typedef enum {
     T_INVALID       // invalid token
 } TokenType;
 
+typedef struct RealDbLinkDevRegStruct {
+    int linkNo;      // real database id
+    int devNo;         // device id
+    int regNo;         // register id
+} RealDbLinkDevReg_s;
+
 typedef struct {
     TokenType type;
     char *text;
     double num;
     int pos;
+    RealDbLinkDevReg_s realDbRef;  // only valid if type == T_REALDB
 } Token;
 
 typedef struct {
@@ -139,81 +181,13 @@ static void tlist_free(TokenList *t)
     free(t->arr);
 }
 
-// runtime mapping
-typedef struct {
-    int id;
-    double val;
-} RtEntry;
-
-typedef struct {
-    RtEntry *arr;
-    int sz;
-    int cap;
-} RtMap;
-
-static RtMap s_rt = { 0 };
-
-static void rt_init(int cap)
-{
-    RtMap *m = &s_rt;
-    m->sz = 0;
-    m->cap = cap;
-    m->arr = malloc(sizeof(RtEntry) * m->cap);
-}
-
-static void rt_set(int id, double v)
-{
-    RtMap *m = &s_rt;
-
-    for (int i = 0; i < m->sz; i++)
-    {
-        if (m->arr[i].id == id)
-        {
-            m->arr[i].val = v;
-            return;
-        }
-    }
-
-    if (m->sz == m->cap)
-    {
-        m->cap *= 2;
-        m->arr = realloc(m->arr, sizeof(RtEntry) * m->cap);
-    }
-
-    m->arr[m->sz].id = id;
-    m->arr[m->sz].val = v;
-    m->sz++;
-}
-
-static double rt_get(int id)
-{
-    RtMap *m = &s_rt;
-
-    for (int i = 0; i < m->sz; i++)
-    {
-        if (m->arr[i].id == id)
-        {
-            printf("rt_get: id=%d, val=%g\n", id, m->arr[i].val);
-            return m->arr[i].val;
-        }
-    }
-
-    return 0.0;
-}
-
-static void rt_free()
-{
-    RtMap *m = &s_rt;
-
-    free(m->arr);
-}
-
 /******************
  * AST node types
  ******************/
 typedef enum {
     N_NUMBER,           // numeric literal
-    N_REAL_DATABASE,    // real database reference
+    N_REAL_DATABASE,    // real database reference by rtdb number (#id)
+    N_REALDB_LINK_DEV_REG,  // real database reference by link, device, register (#(l,d,r))
     N_UNARY,            // unary operation
     N_BINARY,           // binary operation
     N_FUNC,             // function call
@@ -256,31 +230,33 @@ typedef enum {
  * AST(Abstract Syntax Tree) Node definition
  ********************************************/
 typedef struct ASTNodeStruct {
-    NodeType type;                  // node type
-    int pos;                        // position in input for errors
+    NodeType type;                              // node type
+    int pos;                                    // position in input for errors
     union {
-        double number;              // for N_NUMBER
-        int realDataBaseId;         // for N_REAL_DATABASE
+    double number;                              // for N_NUMBER
+    int realDataBaseId;                         // for N_REAL_DATABASE
+    RealDbLinkDevReg_s linkDevReg;              // for N_REALDB_LINK_DEV_REG
         struct {
-            UnaryOp op;             // operator
-            struct ASTNodeStruct *child;     // operand
-        } unary;                    // for N_UNARY
+            UnaryOp op;                         // operator
+            struct ASTNodeStruct *child;        // operand
+        } unary;                                // for N_UNARY
         struct {
-            BinaryOp op;            // operator
-            struct ASTNodeStruct *left;      // left operand
-            struct ASTNodeStruct *right;     // right operand
-        } binary;                   // for N_BINARY
+            BinaryOp op;                        // operator
+            struct ASTNodeStruct *left;         // left operand
+            struct ASTNodeStruct *right;        // right operand
+        } binary;                               // for N_BINARY
         struct {
-            char *name;             // function name
-            void *funcPtr;          // function pointer
-            struct ASTNodeStruct **args;     // argument nodes
-            int argc;               // number of arguments
-        } func;                     // for N_FUNC
+            char *name;                         // function name
+            void *funcPtr;                      // function pointer
+            struct ASTNodeStruct **args;        // argument nodes
+            int argc;                           // number of arguments
+        } func;                                 // for N_FUNC
         struct {
-            int id;                 // real database id
-            struct ASTNodeStruct *rhs;       // right-hand side expression
-        } assign;                   // for N_ASSIGN
-    } v;                            // value
+            int id;                             // real database id (-1 means use linkDevReg)
+            RealDbLinkDevReg_s linkDevReg;      // link/dev/reg reference (valid when id == -1)
+            struct ASTNodeStruct *rhs;          // right-hand side expression
+        } assign;                               // for N_ASSIGN
+    } v;                                        // value
 } ASTNode_s;
 
 /**********************************
@@ -399,31 +375,31 @@ typedef struct {
 } funcType_s;
 
 static const funcType_s s_buildInFunctions[] = {
-                                                 { "abs", fabs, 1 },
-                                                 { "acos", acos, 1 },
-                                                 { "asin", asin, 1 },
-                                                 { "atan", atan, 1 },
-                                                 { "atan2", atan2, 2 },
-                                                 { "ceil", ceil, 1 },
-                                                 { "cos", cos, 1 },
-                                                 { "cosh", cosh, 1 },
-                                                 { "e", e, 0 },
-                                                 { "exp", exp, 1 },
-                                                 { "fac", fac, 1 },
-                                                 { "floor", floor, 1 },
-                                                 { "ln", log, 1 },
-                                                 { "log", log, 1 },
-                                                 { "log10", log10, 1 },
-                                                 { "ncr", ncr, 2 },
-                                                 { "npr", npr, 2 },
-                                                 { "pi", pi, 0 },
-                                                 { "pow", pow, 2 },
-                                                 { "sin", sin, 1 },
-                                                 { "sinh", sinh, 1 },
-                                                 { "sqrt", sqrt, 1 },
-                                                 { "tan", tan, 1 },
-                                                 { "tanh", tanh, 1 },
-                                                 { NULL, NULL, 0 }
+                                                    { "abs", fabs, 1 },
+                                                    { "acos", acos, 1 },
+                                                    { "asin", asin, 1 },
+                                                    { "atan", atan, 1 },
+                                                    { "atan2", atan2, 2 },
+                                                    { "ceil", ceil, 1 },
+                                                    { "cos", cos, 1 },
+                                                    { "cosh", cosh, 1 },
+                                                    { "e", e, 0 },
+                                                    { "exp", exp, 1 },
+                                                    { "fac", fac, 1 },
+                                                    { "floor", floor, 1 },
+                                                    { "ln", log, 1 },
+                                                    { "log", log, 1 },
+                                                    { "log10", log10, 1 },
+                                                    { "ncr", ncr, 2 },
+                                                    { "npr", npr, 2 },
+                                                    { "pi", pi, 0 },
+                                                    { "pow", pow, 2 },
+                                                    { "sin", sin, 1 },
+                                                    { "sinh", sinh, 1 },
+                                                    { "sqrt", sqrt, 1 },
+                                                    { "tan", tan, 1 },
+                                                    { "tanh", tanh, 1 },
+                                                    { NULL, NULL, 0 }
 };
 
 double max(double a, double b)
@@ -440,7 +416,7 @@ double min(double a, double b)
 static funcType_s customFunctions[] = {
                                         { "max", max, 2 },
                                         { "min", min, 2 },  //按需向下面扩展函数
-        };
+};
 
 /***************************************************
  * 函数名: findBuilDIn
@@ -514,6 +490,25 @@ static const funcType_s* find_customFunction(const funcType_s *s, int lookupLen,
     return NULL;
 }
 
+int FastGetRtdbNo(int linkNo, int devNo, int regNo)
+{
+    printf("linkNo=%d, devNo=%d, regNo=%d\n", linkNo, devNo, regNo);
+
+    return 132;
+}
+
+double GetValueByRealNo(int realNo)
+{
+    printf("realNo=%d\n", realNo);
+
+    return 42.0;
+}
+
+void SetValueByRealNo(int realNo, float value)
+{
+    printf("Set realNo=%d to value=%f\n", realNo, value);
+}
+
 static ASTNode_s* node_number(double val, int pos)
 {
     ASTNode_s *n = malloc(sizeof(ASTNode_s));
@@ -529,6 +524,17 @@ static ASTNode_s* node_realDataBase(int id, int pos)
     n->type = N_REAL_DATABASE;
     n->pos = pos;
     n->v.realDataBaseId = id;
+    return n;
+}
+
+static ASTNode_s* node_realDbLinkDevReg(int linkNo, int devNo, int regNo, int pos)
+{
+    ASTNode_s *n = malloc(sizeof(ASTNode_s));
+    n->type = N_REALDB_LINK_DEV_REG;
+    n->pos = pos;
+    n->v.linkDevReg.linkNo = linkNo;
+    n->v.linkDevReg.devNo = devNo;
+    n->v.linkDevReg.regNo = regNo;
     return n;
 }
 
@@ -576,6 +582,17 @@ static ASTNode_s* node_assign(int id, ASTNode_s *rhs, int pos)
     return n;
 }
 
+static ASTNode_s* node_assign_linkDevReg(RealDbLinkDevReg_s ref, ASTNode_s *rhs, int pos)
+{
+    ASTNode_s *n = malloc(sizeof(ASTNode_s));
+    n->type = N_ASSIGN;
+    n->pos = pos;
+    n->v.assign.id = -1;
+    n->v.assign.linkDevReg = ref;
+    n->v.assign.rhs = rhs;
+    return n;
+}
+
 static void free_node(ASTNode_s *n)
 {
     if (!n)
@@ -588,6 +605,8 @@ static void free_node(ASTNode_s *n)
         case N_NUMBER:
             break;
         case N_REAL_DATABASE:
+            break;
+        case N_REALDB_LINK_DEV_REG:
             break;
         case N_UNARY:
             free_node(n->v.unary.child);
@@ -629,6 +648,9 @@ static void print_node(ASTNode_s *n, const char *indent, int last)
             break;
         case N_REAL_DATABASE:
             printf("#%d\n", n->v.realDataBaseId);
+            break;
+        case N_REALDB_LINK_DEV_REG:
+            printf("#(%d, %d, %d)\n", n->v.linkDevReg.linkNo, n->v.linkDevReg.devNo, n->v.linkDevReg.regNo);
             break;
         case N_UNARY:
             printf("Unary(%s)\n", n->v.unary.op == U_NEG ? "-" : (n->v.unary.op == U_NOT ? "!" : "~"));
@@ -715,7 +737,10 @@ static void print_node(ASTNode_s *n, const char *indent, int last)
             }
             break;
         case N_ASSIGN:
-            printf("Assign(#%d)\n", n->v.assign.id);
+            if (n->v.assign.id >= 0)
+                printf("Assign(#%d)\n", n->v.assign.id);
+            else
+                printf("Assign(#(%d, %d, %d))\n", n->v.assign.linkDevReg.linkNo, n->v.assign.linkDevReg.devNo, n->v.assign.linkDevReg.regNo);
             {
                 char buf[256];
                 snprintf(buf, sizeof(buf), "%s%s", indent, last ? "   " : "│  ");
@@ -751,7 +776,7 @@ static double eval_node(ASTNode_s *n)
 {
     if (!n)
     {
-        return 0.0;
+        return NAN;
     }
 
     switch (n->type)
@@ -759,7 +784,18 @@ static double eval_node(ASTNode_s *n)
         case N_NUMBER:
             return n->v.number;
         case N_REAL_DATABASE:
-            return rt_get(n->v.realDataBaseId);
+            return (double)GetValueByRealNo(n->v.realDataBaseId);
+        case N_REALDB_LINK_DEV_REG:
+        {
+            int32_t rtdbNo = FastGetRtdbNo(n->v.linkDevReg.linkNo, n->v.linkDevReg.devNo, n->v.linkDevReg.regNo);
+            if (rtdbNo < 0)
+            {
+                debug_error("Runtime error: rtdb not found for #(%d, %d, %d) at pos %d",
+                    n->v.linkDevReg.linkNo, n->v.linkDevReg.devNo, n->v.linkDevReg.regNo, n->pos);
+                return NAN;
+            }
+            return (double)GetValueByRealNo(rtdbNo);
+        }
         case N_UNARY:
         {
             double v = eval_node(n->v.unary.child);
@@ -790,8 +826,8 @@ static double eval_node(ASTNode_s *n)
                     double r = eval_node(n->v.binary.right);
                     if (r == 0)
                     {
-                        fprintf(stderr, "Runtime error: division by zero at pos %d\n", n->pos);
-                        exit(1);
+                        debug_error("Runtime error: division by zero at pos %d", n->pos);
+                        return NAN;
                     }
 
                     return eval_node(n->v.binary.left) / r;
@@ -821,22 +857,12 @@ static double eval_node(ASTNode_s *n)
                 case B_ANDAND:
                 {
                     double lv = eval_node(n->v.binary.left);
-                    if (EVAL_USE_SHORT_CIRCUIT && lv == 0.0)
-                    {
-                        return 0.0;
-                    }
-
                     double rv = eval_node(n->v.binary.right);
                     return (lv == 0.0 || rv == 0.0) ? 0.0 : 1.0;
                 }
                 case B_OROR:
                 {
                     double lv = eval_node(n->v.binary.left);
-                    if (EVAL_USE_SHORT_CIRCUIT && lv != 0.0)
-                    {
-                        return 1.0;
-                    }
-
                     double rv = eval_node(n->v.binary.right);
                     return (lv == 0.0 && rv == 0.0) ? 0.0 : 1.0;
                 }
@@ -858,8 +884,8 @@ static double eval_node(ASTNode_s *n)
             // dispatch based on arity
             if (!n->v.func.funcPtr)
             {
-                fprintf(stderr, "Runtime error: unknown function %s at pos %d\n", n->v.func.name, n->pos);
-                exit(1);
+                debug_error("Runtime error: unknown function %s at pos %d", n->v.func.name, n->pos);
+                return NAN;
             }
 
             // support up to 2-arg functions; constants like pi/e have argc==0
@@ -874,7 +900,7 @@ static double eval_node(ASTNode_s *n)
 
                 if(f1 == sin || f1 == cos || f1 == tan)
                 {
-                    return f1((double)(args_vals[0] * pi() / 180.0));
+                    return f1((double)(args_vals[0] * pi() / 180));
                 }
 
                 if(f1 == asin || f1 == acos || f1 == atan)
@@ -884,26 +910,46 @@ static double eval_node(ASTNode_s *n)
 
                 return f1(args_vals[0]);
             }
-            else if (n->v.func.argc == 2)
+            else if (n->v.func.argc == 2) //todo: 注意角度与弧度的转换
             {
                 double (*f2)(double, double) = (double (*)(double, double))n->v.func.funcPtr;
                 return f2(args_vals[0], args_vals[1]);
             }
             else
             {
-                fprintf(stderr, "Runtime error: function %s with arity %d not supported at pos %d\n", n->v.func.name, n->v.func.argc, n->pos);
-                exit(1);
+                debug_error("Runtime error: function %s with arity %d not supported at pos %d", n->v.func.name, n->v.func.argc, n->pos);
+                return NAN;
             }
         }
         case N_ASSIGN:
         {
             double v = eval_node(n->v.assign.rhs);
-            rt_set(n->v.assign.id, v);
+            if (n->v.assign.id >= 0)
+            {
+                SetValueByRealNo(n->v.assign.id, (float)v);
+            }
+            else
+            {
+                int32_t rtdbNo = FastGetRtdbNo(
+                    n->v.assign.linkDevReg.linkNo,
+                    n->v.assign.linkDevReg.devNo,
+                    n->v.assign.linkDevReg.regNo);
+                if (rtdbNo < 0)
+                {
+                    debug_error("Runtime error: rtdb not found for assign #(%d, %d, %d) at pos %d",
+                        n->v.assign.linkDevReg.linkNo, n->v.assign.linkDevReg.devNo,
+                        n->v.assign.linkDevReg.regNo, n->pos);
+                    return NAN;
+                }
+
+                SetValueByRealNo(rtdbNo, (float)v);
+            }
+
             return v;
         }
     }
 
-    return 0.0;
+    return NAN;
 }
 
 /*-------------------------------------------------- Parser functions follow grammar and precedence --------------------------------------------------*/
@@ -923,23 +969,6 @@ static ASTNode_s* parse_multiply_node(TokenList *toks);
 static ASTNode_s* parse_unary_node(TokenList *toks);
 static ASTNode_s* parse_power_node(TokenList *toks);
 static ASTNode_s* parse_primary_node(TokenList *toks);
-
-// parse error state (non-fatal)
-static int s_parse_error = 0;
-static int s_parse_error_pos = 0;
-static char s_parse_error_msg[256];
-
-static void set_parse_error(const char *fmt, int pos, ...)
-{
-    if (s_parse_error)
-        return; // keep first error
-    s_parse_error = 1;
-    s_parse_error_pos = pos;
-    va_list ap;
-    va_start(ap, pos);
-    vsnprintf(s_parse_error_msg, sizeof(s_parse_error_msg), fmt, ap);
-    va_end(ap);
-}
 
 /***************************************
  * 函数名: match
@@ -984,11 +1013,26 @@ static ASTNode_s* parse_assign(TokenList *toks)
         ASTNode_s *rhs = parse_assign(toks); // right-assoc
         if (!rhs)
         {
-            // parse error propagated
             return NULL;
         }
+
         int id = atoi(h.text);
         return node_assign(id, rhs, a.pos);
+    }
+
+    if (cur.type == T_REALDB_LINK_DEV_REG &&
+            toks->idx + 1 < toks->sz &&
+            toks->arr[toks->idx + 1].type == T_ASSIGN)
+    {
+        Token h = tlist_next(toks); // consume LINK_DEV_REG
+        Token a = tlist_next(toks); // consume ASSIGN
+        ASTNode_s *rhs = parse_assign(toks); // right-assoc
+        if (!rhs)
+        {
+            return NULL;
+        }
+
+        return node_assign_linkDevReg(h.realDbRef, rhs, a.pos);
     }
 
     return parse_logical_or_node(toks);
@@ -1202,7 +1246,9 @@ static ASTNode_s* parse_equality_node(TokenList *toks)
             left = node_binary(B_NEQ, left, r, left->pos);
         }
         else
+        {
             break;
+        }
     }
 
     return left;
@@ -1273,7 +1319,9 @@ static ASTNode_s* parse_relational_node(TokenList *toks)
             left = node_binary(B_LTE, left, r, left->pos);
         }
         else
+        {
             break;
+        }
     }
 
     return left;
@@ -1322,7 +1370,9 @@ static ASTNode_s* parse_shift_node(TokenList *toks)
             left = node_binary(B_RSHIFT, left, r, left->pos);
         }
         else
+        {
             break;
+        }
     }
 
     return left;
@@ -1371,7 +1421,9 @@ static ASTNode_s* parse_add_node(TokenList *toks)
             left = node_binary(B_SUB, left, r, left->pos);
         }
         else
+        {
             break;
+        }
     }
 
     return left;
@@ -1420,7 +1472,9 @@ static ASTNode_s* parse_multiply_node(TokenList *toks)
             left = node_binary(B_DIV, left, r, left->pos);
         }
         else
+        {
             break;
+        }
     }
 
     return left;
@@ -1505,7 +1559,7 @@ static ASTNode_s* parse_power_node(TokenList *toks)
         tlist_next(toks);
         if (!match(toks, T_LP))
         {
-            set_parse_error("Syntax error: expected '(' after %s", cur.pos, cur.text);
+            debug_error("Syntax error: expected '(' after %s at %d", cur.text, cur.pos);
             return NULL;
         }
 
@@ -1538,8 +1592,7 @@ static ASTNode_s* parse_power_node(TokenList *toks)
 
                 if (!match(toks, T_COMMA))
                 {
-                    set_parse_error("Syntax error: expected ',' or ')' after %s", cur.pos, cur.text);
-                    // free args
+                    debug_error("Syntax error: expected ',' or ')' after %s at %d", cur.text, cur.pos);
                     for (int j = 0; j < argc; ++j)
                     {
                         free_node(args[j]);
@@ -1554,7 +1607,7 @@ static ASTNode_s* parse_power_node(TokenList *toks)
         // validate arity
         if (func->arity >= 0 && func->arity != argc)
         {
-            set_parse_error("Syntax error: function %s expects %d args, got %d", cur.pos, cur.text, func->arity, argc);
+            debug_error("Syntax error: function %s expects %d args, got %d at %d", cur.text, func->arity, argc, cur.pos);
             for (int j = 0; j < argc; ++j)
             {
                 free_node(args[j]);
@@ -1597,9 +1650,15 @@ static ASTNode_s* parse_primary_node(TokenList *toks)
         return node_realDataBase(id, tk.pos);
     }
 
+    if (t.type == T_REALDB_LINK_DEV_REG)
+    {
+        Token tk = tlist_next(toks);
+        return node_realDbLinkDevReg(tk.realDbRef.linkNo, tk.realDbRef.devNo, tk.realDbRef.regNo, tk.pos);
+    }
+
     if (t.type == T_IDENT)
     {
-        set_parse_error("Syntax error: unexpected identifier '%s'", t.pos, t.text);
+        debug_error("Syntax error: unexpected identifier '%s' at %d", t.text, t.pos);
         return NULL;
     }
 
@@ -1614,7 +1673,7 @@ static ASTNode_s* parse_primary_node(TokenList *toks)
         Token r = tlist_peek(toks);
         if (!match(toks, T_RP))
         {
-            set_parse_error("Syntax error: expected ')'", r.pos);
+            debug_error("Syntax error: expected ')' at %d", r.pos);
             free_node(v);
             return NULL;
         }
@@ -1622,7 +1681,8 @@ static ASTNode_s* parse_primary_node(TokenList *toks)
         return v;
     }
 
-    set_parse_error("Syntax error: unexpected token at pos %d", t.pos);
+    debug_error("Syntax error: unexpected token at pos %d", t.pos);
+
     return NULL;
 }
 
@@ -1635,7 +1695,7 @@ static ASTNode_s* parse_primary_node(TokenList *toks)
  * --------------------------------------------------
  * @return: 无
  ****************************************************/
-static void tokenize(const char *s, TokenList *out)
+static void tokenize(const char *s, TokenList *out, int configIndex)
 {
     int i = 0;
     int n = (int) strlen(s);
@@ -1753,19 +1813,100 @@ static void tokenize(const char *s, TokenList *out)
 
         if (c == '#')
         {
+            int hashPos = i;
             i++;
+
+            // check for #(linkNo, devNo, regNo) format
+            if (i < n && s[i] == '(')
+            {
+                i++; // consume '('
+                // parse three comma-separated integers
+                int vals[3] = {0, 0, 0};
+                int vi = 0;
+                int parseOk = 1;
+                for (vi = 0; vi < 3 && parseOk; vi++)
+                {
+                    // skip whitespace
+                    while (i < n && isspace((unsigned char)s[i])) i++;
+                    // parse integer
+                    int numStart = i;
+                    if (i < n && s[i] == '-') i++; // allow negative
+                    while (i < n && isdigit((unsigned char)s[i])) i++;
+                    if (i == numStart || (i == numStart + 1 && s[numStart] == '-'))
+                    {
+                        parseOk = 0;
+                        break;
+                    }
+                    char *numTxt = strndup(s + numStart, i - numStart);
+                    vals[vi] = atoi(numTxt);
+                    free(numTxt);
+                    // skip whitespace
+                    while (i < n && isspace((unsigned char)s[i])) i++;
+                    // expect ',' after first two, ')' after third
+                    if (vi < 2)
+                    {
+                        if (i < n && s[i] == ',') i++;
+                        else { parseOk = 0; break; }
+                    }
+                    else
+                    {
+                        if (i < n && s[i] == ')') i++;
+                        else { parseOk = 0; break; }
+                    }
+                }
+
+                if (!parseOk)
+                {
+                    debug_error("Lexical error: malformed #(linkNo, devNo, regNo) at pos %d", hashPos);
+                    Token t = { T_INVALID, NULL, 0, hashPos };
+                    tlist_push(out, t);
+                    break;
+                }
+
+                Token t = { T_REALDB_LINK_DEV_REG, NULL, 0, hashPos, { 0 } };
+                t.realDbRef.linkNo = vals[0];
+                t.realDbRef.devNo = vals[1];
+                t.realDbRef.regNo = vals[2];
+                tlist_push(out, t);
+                continue;
+            }
+
+            // original #id format
             int start = i;
-            while (i < n && isdigit((unsigned char )s[i]))
-                i++;
+            while (i < n && isdigit((unsigned char )s[i])) i++;
+
             if (start == i)
             {
                 Token t = { T_INVALID, NULL, 0, start - 1 };
                 tlist_push(out, t);
                 break;
             }
+
             int len = i - start;
             char *txt = strndup(s + start, len);
-            Token t = { T_REALDB, txt, 0, start - 1 };
+
+            int realNo = atol(txt);
+            float val = GetValueByRealNo(realNo);
+            if (isnan(val))
+            {
+                free(txt);
+
+                if (configIndex >= 0)
+                {
+                    myprintk("数据计算及转换规约的第[%d]个配置, 实时库号[%d], 不存在, 请检查配置\n",
+                                              configIndex, realNo);
+                }
+                else
+                {
+                    myprintk("可视化编程算术表达式器件, 实时库号[%d], 不存在, 请检查配置\n", realNo);
+                }
+
+                Token t = { T_INVALID, NULL, 0, start - 1 };
+                            tlist_push(out, t);
+                            continue;
+            }
+
+            Token t = { T_REALDB, txt, 0, start - 1, { 0 } };
             tlist_push(out, t);
             continue;
         }
@@ -1915,13 +2056,13 @@ static void tokenize(const char *s, TokenList *out)
  ****************************************************/
 static void print_error_with_caret(const char *line, int pos)
 {
-    fprintf(stderr, "%s\n", line);
+    debug_error("%s\n", line);
     for (int i = 0; i < pos && line[i]; i++)
     {
         fputc(line[i] == '\t' ? '\t' : ' ', stderr);
     }
 
-    fprintf(stderr, "^\n");
+    debug_error("^\n");
 }
 
 /*****************************************************
@@ -1950,6 +2091,8 @@ static int node_contains_realDatabaseId(ASTNode_s *n)
     {
         case N_REAL_DATABASE:
             return 1;
+        case N_REALDB_LINK_DEV_REG:
+            return 1;
         case N_NUMBER:
             return 0;
         case N_UNARY:
@@ -1959,12 +2102,18 @@ static int node_contains_realDatabaseId(ASTNode_s *n)
         case N_FUNC:
         {
             if (!n->v.func.args)
+            {
                 return 0;
+            }
+
             for (int i = 0; i < n->v.func.argc; ++i)
             {
                 if (node_contains_realDatabaseId(n->v.func.args[i]))
+                {
                     return 1;
+                }
             }
+
             return 0;
         }
         case N_ASSIGN:
@@ -2013,6 +2162,7 @@ static ASTNode_s* optimize_node(ASTNode_s *n)
     {
         case N_NUMBER:
         case N_REAL_DATABASE:
+        case N_REALDB_LINK_DEV_REG:
             return n;
 
         case N_UNARY:
@@ -2023,11 +2173,18 @@ static ASTNode_s* optimize_node(ASTNode_s *n)
                 double c = node_get_number(n->v.unary.child);
                 double res;
                 if (n->v.unary.op == U_NEG)
+                {
                     res = -c;
+                }
                 else if (n->v.unary.op == U_NOT)
+                {
                     res = (c != 0.0) ? 0.0 : 1.0;
+                }
                 else
-                    /* U_BITNOT */res = (double) (~((long) c));
+                {
+                    res = (double) (~((long) c));
+                }
+
                 int pos = n->pos;
                 free_node(n);
                 return node_number(res, pos);
@@ -2040,8 +2197,11 @@ static ASTNode_s* optimize_node(ASTNode_s *n)
         {
             n->v.binary.left = optimize_node(n->v.binary.left);
             n->v.binary.right = optimize_node(n->v.binary.right);
-            if (!node_contains_realDatabaseId(n) && n->v.binary.left && n->v.binary.right
-                    && n->v.binary.left->type == N_NUMBER && n->v.binary.right->type == N_NUMBER)
+            if (!node_contains_realDatabaseId(n) &&
+                    n->v.binary.left &&
+                    n->v.binary.right &&
+                    n->v.binary.left->type == N_NUMBER &&
+                    n->v.binary.right->type == N_NUMBER)
             {
                 double l = node_get_number(n->v.binary.left);
                 double r = node_get_number(n->v.binary.right);
@@ -2060,9 +2220,14 @@ static ASTNode_s* optimize_node(ASTNode_s *n)
                         break;
                     case B_DIV:
                         if (r == 0.0)
+                        {
                             can_fold = 0;
+                        }
                         else
+                        {
                             res = l / r;
+                        }
+
                         break;
                     case B_LSHIFT:
                         res = (double) (((long) l) << (int) r);
@@ -2144,7 +2309,9 @@ static ASTNode_s* optimize_node(ASTNode_s *n)
                 {
                     double vals[4] = { 0.0, 0.0, 0.0, 0.0 };
                     for (int i = 0; i < n->v.func.argc && i < 4; ++i)
+                    {
                         vals[i] = node_get_number(n->v.func.args[i]);
+                    }
 
                     if (n->v.func.funcPtr)
                     {
@@ -2170,6 +2337,8 @@ static ASTNode_s* optimize_node(ASTNode_s *n)
                             {
                                 res = f1(vals[0]);
                             }
+
+                            res = f1(vals[0]);
                         }
                         else if (n->v.func.argc == 2)
                         {
@@ -2207,97 +2376,95 @@ static ASTNode_s* optimize_node(ASTNode_s *n)
     }
 }
 
-/******************************************************
- * 函数名: eval_main
- * 功能: 主评估循环
- * --------------------------------------------------
- * 输入参数: 无
- * 输出参数: 无
- * --------------------------------------------------
- * @return: 无
- ******************************************************/
-void eval_main(void)
-{
-    char line[8192];
-    rt_init(8192);
-    printf("expr> ");
+typedef double (*evalFunc)(ASTNode_s *ast);
 
-    while (fgets(line, sizeof(line), stdin))
+typedef struct arithmeticEvaluatorStruct {
+    ASTNode_s *ast;
+    evalFunc eval;
+} arithmeticEvaluator_s;
+
+void *get_newEvaluator(const char* arithmetic, int configIndex)
+{
+    TokenList toks;
+    tlist_init(&toks);
+
+    tokenize(arithmetic, &toks, configIndex);
+    int invalid_idx = -1;
+    for (int i = 0; i < toks.sz; i++)
     {
-        if (line[0] == '\n' || line[0] == 0)
+        if (toks.arr[i].type == T_INVALID)
         {
+            invalid_idx = toks.arr[i].pos;
             break;
         }
-
-        TokenList toks;
-        tlist_init(&toks);
-        // tokenize directly using the tokenizer function above
-        // (we already have tokenize implemented earlier, reuse)
-        tokenize(line, &toks);
-        // find invalid
-        int invalid_idx = -1;
-        for (int i = 0; i < toks.sz; i++)
-        {
-            if (toks.arr[i].type == T_INVALID)
-            {
-                invalid_idx = toks.arr[i].pos;
-                break;
-            }
-        }
-
-        if (invalid_idx >= 0)
-        {
-            fprintf(stderr, "Lexical error at position %d\n", invalid_idx);
-            print_error_with_caret(line, invalid_idx);
-            tlist_free(&toks);
-            printf("expr> ");
-            continue;
-        }
-
-        toks.idx = 0;
-        ASTNode_s *ast = NULL;
-
-        // parse
-        // protect from parse errors with checks
-        // using exit on errors inside parser
-        s_parse_error = 0; // reset parse error state
-        ast = parse_assign(&toks);
-        if (!ast && s_parse_error)
-        {
-            fprintf(stderr, "%s\n", s_parse_error_msg);
-            print_error_with_caret(line, s_parse_error_pos);
-            s_parse_error = 0;
-            tlist_free(&toks);
-            printf("expr> ");
-            continue;
-        }
-
-        Token after = tlist_peek(&toks);
-        if (after.type != T_EOF)
-        {
-            fprintf(stderr, "Syntax error: unexpected token at pos %d\n", after.pos);
-            print_error_with_caret(line, after.pos);
-            free_node(ast);
-            tlist_free(&toks);
-            printf("expr> ");
-            continue;
-        }
-
-        printf("AST:\n");
-        print_node(ast, "", 1);
-
-        // optimize
-        ast = optimize_node(ast);
-        printf("Optimized AST:\n");
-        print_node(ast, "", 1);
-
-        // evaluate
-        double res = eval_node(ast);
-        printf("Result: %g\n", res);
-        free_node(ast);
-        tlist_free(&toks);
-        printf("expr> ");
     }
 
-    rt_free();
+    if (invalid_idx >= 0)
+    {
+        debug_error("Lexical error at position %d\n", invalid_idx);
+        print_error_with_caret(arithmetic, invalid_idx);
+        tlist_free(&toks);
+        return NULL;
+    }
+
+    toks.idx = 0;
+
+    ASTNode_s *ast = parse_assign(&toks);
+    if(ast==NULL)
+    {
+        debug_error("--><%s><-- has Syntax errors", arithmetic);
+        tlist_free(&toks);
+        return NULL;
+    }
+
+    Token after = tlist_peek(&toks);
+    if (after.type != T_EOF)
+    {
+        debug_error("Syntax error: unexpected token at pos %d\n", after.pos);
+        print_error_with_caret(arithmetic, after.pos);
+        free_node(ast);
+        tlist_free(&toks);
+        return NULL;
+    }
+
+    tlist_free(&toks);
+
+    printf("AST:\n");
+    print_node(ast, "", 1);
+
+    // optimize
+    ast = optimize_node(ast);
+    printf("Optimized AST:\n");
+    print_node(ast, "", 1);
+
+    arithmeticEvaluator_s *evaluator = malloc(sizeof(arithmeticEvaluator_s));
+    if (evaluator == NULL)
+    {
+        debug_error("Memory error\n");
+        tlist_free(&toks);
+        free_node(ast);
+        return NULL;
+    }
+
+    evaluator->ast = ast;
+    evaluator->eval = eval_node;
+
+    return evaluator;
+}
+
+double get_result(void *evaluator)
+{
+    arithmeticEvaluator_s *ev = evaluator;
+
+    if (ev == NULL)
+    {
+        return NAN;
+    }
+
+    if (ev->ast == NULL || ev->eval == NULL)
+    {
+        return NAN;
+    }
+
+    return  ev->eval(ev->ast);
 }
